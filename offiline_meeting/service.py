@@ -32,13 +32,13 @@ class OmService:
 
     def join(self):
         try:
-            worksheet_id = self._get_worksheet_id()
+            worksheet_id, is_new = self._get_worksheet_id()
             self.member_service.submit_form(slack_unique_id=self.ea_event.slack_unique_id,
                                             worksheet_id=worksheet_id)
-            return True
+            return {'success': True, 'worksheet_created': worksheet_id if is_new else None}
         except Exception as e:
             logging.error(e)
-            return False
+            return {'success': False, 'worksheet_created': None}
 
     def _is_reply_in_thread(self):
         """
@@ -69,4 +69,4 @@ class OmService:
         worksheet_id = self._find_worksheet_id_in_thread()
         if worksheet_id is None:
             worksheet_id = self.member_service.create_worksheet()
-        return worksheet_id
+        return worksheet_id, True  # (id, is_new)

@@ -26,8 +26,10 @@ class OmHandler:
         ea_event, om_service, slack_client = self._inject_dependencies(event, say, web_client)
 
         if om_service.is_target():
-            success = om_service.join()
-            if success:
+            result = om_service.join()
+            if result.success:
+                if result.is_new:
+                    slack_client.send_msg(msg=f"새로운 시트를 만들었어! <@{result.worksheet_id}|구글스프레드 시트>", ts=ea_event.ts)
                 slack_client.send_msg(msg=f"<@{ea_event.slack_unique_id}>, 등록 완료!", ts=ea_event.ts)
             else:
                 slack_client.send_msg(msg=f"엇, <@{ea_event.slack_unique_id}>, 등록에 실패했어. 알아보고 연락줄게!", ts=ea_event.ts)
