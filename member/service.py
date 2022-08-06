@@ -88,6 +88,9 @@ class MemberService:
         members_worksheet = spreadsheet.get_worksheet_by_id(worksheet_id)
         return members_worksheet
 
+    def generate_spreadsheet_url(self, worksheet_id: int):
+        return f"https://docs.google.com/spreadsheets/d/{FORM_SPREADSHEET_ID}/edit#gid={worksheet_id}"
+
 
 if __name__ == '__main__':
     svc = MemberService()

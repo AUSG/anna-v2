@@ -35,10 +35,11 @@ class OmService:
             worksheet_id, is_new = self._get_worksheet_id()
             self.member_service.submit_form(slack_unique_id=self.ea_event.slack_unique_id,
                                             worksheet_id=worksheet_id)
-            return {'success': True, 'created_worksheet_id': worksheet_id if is_new else None}  # TODO [seonghyeok] 적절한 객체로 바꿔 전달하기
+            url = self.member_service.generate_spreadsheet_url(worksheet_id) if is_new else None
+            return {'success': True, 'created_spreadsheet_url': url}  # TODO [seonghyeok] 적절한 객체로 바꿔 전달하기
         except Exception as e:
             logging.error(e)
-            return {'success': False, 'created_worksheet_id': None}
+            return {'success': False, 'created_spreadsheet_url': None}
 
     def _is_reply_in_thread(self):
         """
