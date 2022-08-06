@@ -7,7 +7,7 @@ from slack_sdk import WebClient
 
 import env_bucket
 from event import EmojiAddedEvent
-from member import MemberService
+from member.service import MemberService
 from offiline_meeting.service import OmService
 from slack_client import SlackClient
 
