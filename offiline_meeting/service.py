@@ -63,7 +63,7 @@ class OmService:
             if message['user'] == ANNA_ID:
                 pat = re.search(SPREADSHEET_URL_PATTERN, message['text'])
                 if pat is not None and len(pat.groups()) > 0:
-                    return pat[0]
+                    return int(pat[0])
         return None
 
     def _get_worksheet_id(self):
