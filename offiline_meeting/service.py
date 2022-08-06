@@ -63,11 +63,12 @@ class OmService:
             if message['user'] == ANNA_ID:
                 pat = re.search(SPREADSHEET_URL_PATTERN, message['text'])
                 if pat is not None and len(pat.groups()) > 0:
-                    return int(pat[0])
+                    return int(pat.groups()[0])
         return None
 
     def _get_worksheet_id(self):
         worksheet_id = self._find_worksheet_id_in_thread()
-        if worksheet_id is None:
-            worksheet_id = self.member_service.create_worksheet()
-        return worksheet_id, True  # (id, is_new)
+        if worksheet_id is not None:
+            return worksheet_id, True  # (id, is_new)
+        else:
+            return self.member_service.create_worksheet(), False  # (id, is_new)
