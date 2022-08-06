@@ -3,7 +3,7 @@ import re
 
 import env_bucket
 from event import EmojiAddedEvent
-from member import MemberService
+from member.service import MemberService
 from slack_client import SlackClient
 
 logging.basicConfig(level=logging.DEBUG)

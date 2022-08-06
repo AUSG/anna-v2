@@ -13,6 +13,7 @@ logger = logging.getLogger("member.service")
 FORM_SPREADSHEET_ID = env_bucket.get('FORM_SPREADSHEET_ID')
 MEMBERS_INFO_WORKSHEET_ID = env_bucket.get('MEMBERS_INFO_WORKSHEET_ID_ID')
 
+
 # TODO[seonghyeok] MemberService 와 GoogleSpreadSheetClient 분리
 
 class MemberService:
@@ -79,6 +80,7 @@ class MemberService:
         spreadsheet = self.gs_client.open_by_key(FORM_SPREADSHEET_ID)  # 'AUSG_오프라인_모임_참가신청서'
         members_worksheet = spreadsheet.get_worksheet_by_id(worksheet_id)
         return members_worksheet
+
 
 if __name__ == '__main__':
     svc = MemberService()
