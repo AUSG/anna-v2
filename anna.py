@@ -1,17 +1,16 @@
 import logging
 import os
 
-from dotenv import load_dotenv
+import env_bucket
 from offiline_meeting.controller import OmHandler
 from slack_bolt import App
 
-load_dotenv()
 
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
-SLACK_BOT_TOKEN = os.environ.get('SLACK_BOT_TOKEN')
-SLACK_SIGNING_SECRET = os.environ.get('SLACK_SIGNING_SECRET')
+SLACK_BOT_TOKEN = env_bucket.get('SLACK_BOT_TOKEN')
+SLACK_SIGNING_SECRET = env_bucket.get('SLACK_SIGNING_SECRET')
 
 app = App(
     token=SLACK_BOT_TOKEN,

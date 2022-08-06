@@ -1,19 +1,17 @@
-import os
-import re
-from pprint import pformat
-import member
 import logging
+import re
 
+import env_bucket
 from event import EmojiAddedEvent
 from member import MemberService
 from slack_client import SlackClient
 
 logging.basicConfig(level=logging.DEBUG)
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("offline_meeting.service")
 
-ANNOUNCEMENT_CHANNEL_ID = os.environ.get('ANNOUNCEMENT_CHANNEL_ID')
-ANNA_ID = os.environ.get('ANNA_ID')
-SUBMIT_FORM_EMOJI = os.environ.get('SUBMIT_FORM_EMOJI')
+ANNOUNCEMENT_CHANNEL_ID = env_bucket.get('ANNOUNCEMENT_CHANNEL_ID')
+ANNA_ID = env_bucket.get('ANNA_ID')
+SUBMIT_FORM_EMOJI = env_bucket.get('SUBMIT_FORM_EMOJI')
 
 SPREADSHEET_URL_PATTERN = r'https:\/\/docs.google.com\/spreadsheets\/d\/.*\/edit#gid=(\d*)'
 
