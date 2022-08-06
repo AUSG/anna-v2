@@ -11,7 +11,7 @@ logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger("member.service")
 
 FORM_SPREADSHEET_ID = env_bucket.get('FORM_SPREADSHEET_ID')
-MEMBERS_INFO_WORKSHEET_ID = env_bucket.get('MEMBERS_INFO_WORKSHEET_ID_ID')
+MEMBERS_INFO_WORKSHEET_ID = env_bucket.get('MEMBERS_INFO_WORKSHEET_ID')
 
 
 # TODO[seonghyeok] MemberService 와 GoogleSpreadSheetClient 분리
