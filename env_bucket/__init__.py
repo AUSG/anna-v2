@@ -12,7 +12,7 @@ _bucket = {
     'SUBMIT_FORM_EMOJI': os.environ.get('SUBMIT_FORM_EMOJI'),
     'ADMIN_CHANNEL': os.environ.get('ADMIN_CHANNEL'),
     'FORM_SPREADSHEET_ID': os.environ.get('FORM_SPREADSHEET_ID'),
-    'MEMBERS_INFO_WORKSHEET_ID': os.environ.get('MEMBERS_INFO_WORKSHEET_ID_ID'),
+    'MEMBERS_INFO_WORKSHEET_ID': os.environ.get('MEMBERS_INFO_WORKSHEET_ID'),
 }
 
 
