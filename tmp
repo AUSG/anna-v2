@@ -1,0 +1,6 @@
+
+INSTANCE_ID: i-0b6a064d357dd73d7
+SECURITY_GROUP_ID: sg-025542d868dd566a3
+KEY_PAIR_NAME: onetime_keypair_B4C8DDDC-7B65-4A94-B231-924A18177228.pem
+
+ssh -i "$onetime_keypair_B4C8DDDC-7B65-4A94-B231-924A18177228.pem" "ec2-user@ec2-3-35-27-203.ap-northeast-2.compute.amazonaws.com"
