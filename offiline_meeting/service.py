@@ -33,8 +33,9 @@ class OmService:
     def join(self):
         try:
             worksheet_id = self._get_worksheet_id()
-            return self.member_service.submit_form(slack_unique_id=self.ea_event.slack_unique_id,
-                                                   worksheet_id=worksheet_id)
+            self.member_service.submit_form(slack_unique_id=self.ea_event.slack_unique_id,
+                                            worksheet_id=worksheet_id)
+            return True
         except Exception as e:
             logging.error(e)
             return False

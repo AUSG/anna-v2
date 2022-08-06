@@ -1,5 +1,5 @@
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
 
 import gspread
 from gspread_formatting import *
@@ -30,21 +30,28 @@ class MemberService:
     def create_worksheet(self):
         spreadsheet = self.gs_client.open_by_key(FORM_SPREADSHEET_ID)
 
-        now = datetime.now().strftime('%Y/%m/%d-%H%M%S')
+        now = self._get_now().strftime('%Y/%m/%d-%H%M%S')
         worksheet = spreadsheet.add_worksheet(f"[제목고쳐줘] {now}", rows=100, cols=30)
         worksheet.append_row(["타임스탬프", "이메일 주소", "이름", "영문 이름", "휴대폰 번호", "학교명 혹은 회사명"])
         set_column_width(worksheet, 'A:F', 220)
 
         return worksheet.id
 
+    def _get_now(self):
+        return datetime.now() + timedelta(hours=9)  # UTC+9
+
     def submit_form(self, slack_unique_id: str, worksheet_id: int):
         worksheet = self._get_worksheet(worksheet_id)
 
         member = self.members_info[slack_unique_id]
-        now = str(datetime.now())
+        now = str(self._get_now())
 
-        worksheet.append_row(
-            [now, member.email, member.kor_name, member.eng_name, member.phone, member.school_name_or_company_name])
+        worksheet.append_row([now,
+                              member.email,
+                              member.kor_name,
+                              member.eng_name,
+                              member.phone,
+                              member.school_name_or_company_name])
 
     def _all_field_filled(self, member_info):
         try:

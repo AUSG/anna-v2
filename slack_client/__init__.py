@@ -19,4 +19,4 @@ class SlackClient:
             self.client.chat_postMessage(text=msg, channel=channel)
 
     def get_replies(self, ts: str, channel: str):
-        self.client.conversations_replies(ts=ts, channel=channel)
+        return self.client.conversations_replies(ts=ts, channel=channel)
