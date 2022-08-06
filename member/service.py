@@ -1,20 +1,14 @@
 import logging
-from datetime import datetime, timedelta
-
-import gspread
-from gspread_formatting import *
 
 import env_bucket
+from google_spreadsheet_client import GsClient
 from member.member import Member
 
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger("member.service")
 
-FORM_SPREADSHEET_ID = env_bucket.get('FORM_SPREADSHEET_ID')
 MEMBERS_INFO_WORKSHEET_ID = env_bucket.get('MEMBERS_INFO_WORKSHEET_ID')
 
-
-# TODO[seonghyeok] MemberService 와 GoogleSpreadSheetClient 분리
 
 class MemberService:
     """
@@ -22,79 +16,49 @@ class MemberService:
     [CAVEAT] __init__ 을 override 해서 싱글턴 패턴을 구현하고 싶은데 방법을 잘 모르겠음. 개선 전까진 사용하는 client 쪽에서 싱글턴 적용
     """
 
-    def __init__(self):
-        self.gs_client = gspread.service_account(filename='./gcp_serviceaccount_secret.json')
-        self.members_info = {}  # AUSG 멤버들 전체에 대한 캐시 데이터. key: 슬랙 고유 id (ex. U01BN035Y6L)
-        self._cache_members_info()
-
-    def create_worksheet(self):
-        spreadsheet = self.gs_client.open_by_key(FORM_SPREADSHEET_ID)
-
-        now = self._get_now().strftime('%Y/%m/%d-%H%M%S')
-        worksheet = spreadsheet.add_worksheet(f"[제목고쳐줘] {now}", rows=100, cols=30)
-        worksheet.append_row(["타임스탬프", "이메일 주소", "이름", "영문 이름", "휴대폰 번호", "학교명 혹은 회사명"])
-        set_column_width(worksheet, 'A:F', 220)
-
-        return worksheet.id
-
-    def _get_now(self):
-        return datetime.now() + timedelta(hours=9)  # UTC+9
+    def __init__(self, gs_client: GsClient):
+        self.gs_client = gs_client
+        self.members = {}  # AUSG 멤버들 전체에 대한 캐시 데이터. key: 슬랙 고유 id (ex. U01BN035Y6L)
+        self._cache_members()
 
     def submit_form(self, slack_unique_id: str, worksheet_id: int):
-        worksheet = self._get_worksheet(worksheet_id)
+        member = self.members[slack_unique_id]
 
-        member = self.members_info[slack_unique_id]
-        now = str(self._get_now())
+        if not self._all_field_filled(member):
+            logging.error(f"모든 필드가 완벽하게 존재하지 않는 불완전한 멤버 정보입니다: {member}")
+            raise Exception()  # TODO [seonghyeok] 메시지를 받는 형태로 예외를 만들어 슬랙까지 전달
 
-        worksheet.append_row([now,
-                              member.email,
-                              member.kor_name,
-                              member.eng_name,
-                              member.phone,
-                              member.school_name_or_company_name])
+        self.gs_client.append_row(worksheet_id,
+                                  [member.email,
+                                   member.kor_name,
+                                   member.eng_name,
+                                   member.phone,
+                                   member.school_name_or_company_name])
 
-    def _all_field_filled(self, member_info):
+    def _cache_members(self):
+        if len(self.members) > 0:
+            return self.members
+
+        # 열 순서: userid, kor_name, eng_name, email, phone, school_name or company_name
+        members = self.gs_client.get_values(MEMBERS_INFO_WORKSHEET_ID, 'J:O')
+
+        for m in members:
+            self.members[m[0]] = Member(kor_name=m[1],
+                                        eng_name=m[2],
+                                        email=m[3],
+                                        phone=m[4],
+                                        school_name_or_company_name=m[5])
+
+    def _all_field_filled(self, member: Member) -> bool:
         try:
-            if (len(member_info['kor_name']) == 0 or
-                    len(member_info['eng_name']) == 0 or
-                    len(member_info['email']) == 0 or
-                    len(member_info['phone']) != 13 or
-                    len(member_info['school_name or company_name']) == 0):
+            if (len(member.kor_name) == 0 or
+                    len(member.eng_name) == 0 or
+                    len(member.email) == 0 or
+                    len(member.phone) != 13 or
+                    len(member.school_name_or_company_name) == 0):
                 return False
             else:
                 return True
         except Exception as e:
             logging.error(e)
             return False
-
-    def _cache_members_info(self, ):
-        if len(self.members_info) > 0:
-            return self.members_info
-
-        members_worksheet = self._get_worksheet(MEMBERS_INFO_WORKSHEET_ID)
-
-        # 순서: userid, kor_name, eng_name, email, phone, school_name or company_name
-        members = members_worksheet.get_values('J:O')
-
-        for m in members:
-            self.members_info[m[0]] = Member(kor_name=m[1],
-                                             eng_name=m[2],
-                                             email=m[3],
-                                             phone=m[4],
-                                             school_name_or_company_name=m[5])
-
-    def _get_worksheet(self, worksheet_id: int):
-        spreadsheet = self.gs_client.open_by_key(FORM_SPREADSHEET_ID)  # 'AUSG_오프라인_모임_참가신청서'
-        members_worksheet = spreadsheet.get_worksheet_by_id(worksheet_id)
-        return members_worksheet
-
-    def generate_spreadsheet_url(self, worksheet_id: int):
-        return f"https://docs.google.com/spreadsheets/d/{FORM_SPREADSHEET_ID}/edit#gid={worksheet_id}"
-
-
-if __name__ == '__main__':
-    svc = MemberService()
-    svc.submit_form('UQJ8HQJG5')  # TEST, 문성혁 id
-    # _id = create_worksheet()
-    # pprint(_id)
-    pass

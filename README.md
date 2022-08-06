@@ -2,7 +2,7 @@
 
 1. .venv
 2. 필수파일 세팅
-3. 배포 by github action
+3. git push --> deploy
 
 # 필수파일
 
@@ -43,6 +43,4 @@ ANNOUNCEMENT_CHANNEL_ID=CQJ9S88M6
 ANNA_ID=U01BN035Y6L
 # 신청서 제출에 사용되는 이모지 이름
 SUBMIT_FORM_EMOJI=gogo
-
-
 ```

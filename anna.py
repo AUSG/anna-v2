@@ -1,13 +1,12 @@
 import logging
-import os
 
 import env_bucket
-from offiline_meeting.controller import OmHandler
+from offiline_meeting.handler import OmHandler
 from slack_bolt import App
 
 
 logging.basicConfig(level=logging.DEBUG)
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("root")
 
 SLACK_BOT_TOKEN = env_bucket.get('SLACK_BOT_TOKEN')
 SLACK_SIGNING_SECRET = env_bucket.get('SLACK_SIGNING_SECRET')
@@ -42,4 +41,4 @@ def event_app_mention(ack, event, say):
 
 
 if __name__ == '__main__':
-    app.start(3000)
+    app.start(8080)
