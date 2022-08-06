@@ -69,6 +69,6 @@ class OmService:
     def _get_worksheet_id(self):
         worksheet_id = self._find_worksheet_id_in_thread()
         if worksheet_id is not None:
-            return worksheet_id, True  # (id, is_new)
+            return worksheet_id, False  # (id, is_new)
         else:
-            return self.member_service.create_worksheet(), False  # (id, is_new)
+            return self.member_service.create_worksheet(), True  # (id, is_new)
