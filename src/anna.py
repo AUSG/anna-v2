@@ -1,9 +1,9 @@
 import logging
 
-import env_bucket
-from offiline_meeting.handler import OmHandler
 from slack_bolt import App
 
+import env_bucket
+from offiline_meeting.handler import OmHandler
 
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger("root")

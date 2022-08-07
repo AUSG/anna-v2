@@ -1,7 +1,7 @@
 import logging
 
-from slack_sdk import WebClient
 from slack_bolt import Say
+from slack_sdk import WebClient
 
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger("slack_client.client")

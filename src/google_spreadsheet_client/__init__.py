@@ -2,11 +2,10 @@ import logging
 from datetime import datetime
 from typing import List
 
+import env_bucket
 import gspread
 from dateutil.tz import gettz
 from gspread_formatting import set_column_width
-
-import env_bucket
 
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger("google_spreadsheet_client")

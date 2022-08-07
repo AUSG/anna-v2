@@ -17,6 +17,6 @@ RUN pip install -r requirements.txt
 
 COPY . .
 
-EXPOSE 3000
+EXPOSE 8080
 
-CMD ["python3", "anna.py"]
+CMD ["python3", "src/anna.py"]

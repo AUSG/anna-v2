@@ -2,7 +2,9 @@ import logging
 
 import env_bucket
 from google_spreadsheet_client import GsClient
+from member.exceptions import *
 from member.member import Member
+from util.singleton import SingletonInstance
 
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger("member.service")
@@ -10,10 +12,10 @@ logger = logging.getLogger("member.service")
 MEMBERS_INFO_WORKSHEET_ID = env_bucket.get('MEMBERS_INFO_WORKSHEET_ID')
 
 
-class MemberService:
+class MemberService(SingletonInstance):
     """
     [CAVEAT] 처음 서버가 뜬 이후 멤버 정보를 최초 한 번만 캐싱하고 expire 하지 않음. 업데이트하려면 서버 다시 띄워야 됨.
-    [CAVEAT] __init__ 을 override 해서 싱글턴 패턴을 구현하고 싶은데 방법을 잘 모르겠음. 개선 전까진 사용하는 client 쪽에서 싱글턴 적용
+    [CAVEAT] 싱글턴 패턴을 적용했기 때문에 MemberService.instance() 형태로 호출해야 한다. 자세한 내용은 SingletonInstance 참고.
     """
 
     def __init__(self, gs_client: GsClient):
@@ -25,8 +27,7 @@ class MemberService:
         member = self.members[slack_unique_id]
 
         if not self._all_field_filled(member):
-            logging.error(f"모든 필드가 완벽하게 존재하지 않는 불완전한 멤버 정보입니다: {member}")
-            raise Exception()  # TODO [seonghyeok] 메시지를 받는 형태로 예외를 만들어 슬랙까지 전달
+            raise MemberInfoNotPerfectException(f"일부 필드가 존재하지 않는 불완전한 멤버 정보입니다: {member}")
 
         self.gs_client.append_row(worksheet_id,
                                   [member.email,

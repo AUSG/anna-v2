@@ -43,4 +43,8 @@ ANNOUNCEMENT_CHANNEL_ID=CQJ9S88M6
 ANNA_ID=U01BN035Y6L
 # 신청서 제출에 사용되는 이모지 이름
 SUBMIT_FORM_EMOJI=gogo
+# 신청서 제출에 사용되는 구글스프레드 id ('AUSG_오프라인_모임_참가신청서')
+FORM_SPREADSHEET_ID=1FtKRO4gmlVg-Si0_CHt-tkpVd3LDTXdsoZ0u98MYd0k
+# 위 구글스프레드 내에서 멤버들 정보가 있는 워크시트 id ('AUSG_오프라인_모임_참가신청서')
+MEMBERS_INFO_WORKSHEET_ID=307140510
 ```
