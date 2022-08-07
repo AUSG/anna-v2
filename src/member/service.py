@@ -14,8 +14,10 @@ MEMBERS_INFO_WORKSHEET_ID = env_bucket.get('MEMBERS_INFO_WORKSHEET_ID')
 
 class MemberService(SingletonInstance):
     """
-    [CAVEAT] 처음 서버가 뜬 이후 멤버 정보를 최초 한 번만 캐싱하고 expire 하지 않음. 업데이트하려면 서버 다시 띄워야 됨.
-    [CAVEAT] 싱글턴 패턴을 적용했기 때문에 MemberService.instance() 형태로 호출해야 한다. 자세한 내용은 SingletonInstance 참고.
+    [FIXME] 처음 서버가 뜬 이후 멤버 정보를 최초 한 번만 캐싱하고 expire 하지 않음. 업데이트하려면 서버 다시 띄워야 됨.
+            개선하려면 주기적으로 최신 데이터를 가져오는 등의 방법을 써야 하지만 오버엔지니어링이라고 판단함.
+    [CAVEAT] 싱글턴 패턴을 적용했기 때문에 MemberService.instance() 형태로 호출해야 함. 자세한 내용은 SingletonInstance 참고.
+             이걸 강제할 방법이 있는지 모르겠음
     """
 
     def __init__(self, gs_client: GsClient):

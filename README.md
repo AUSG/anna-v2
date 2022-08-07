@@ -1,7 +1,7 @@
 # 개발방법
 
 1. .venv
-2. 필수파일 세팅
+2. 필수파일 세팅 (아래 참고)
 3. git push --> deploy
 
 # 필수파일
@@ -30,7 +30,7 @@
 대략 아래와 같음
 
 ```text
-## slack_bolt 관련 1
+## slack_bolt 관련
 SLACK_SIGNING_SECRET=XXXXXXXXXXXX
 SLACK_BOT_TOKEN=xoxb-XXXXXXXXXXXXXXXXXXXX
 
