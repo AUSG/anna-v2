@@ -21,7 +21,7 @@ app = App(
 
 # handler 는 모두 check_and_run(client, say, event) 을 구현해야 한다.
 message_channels_event_handlers = [ArHandler()]
-@app.event('message.channels')
+@app.event('message')
 def handle_message_channels_event(ack, say, event, client):
     ack()
     for handler in reaction_added_event_handlers:
