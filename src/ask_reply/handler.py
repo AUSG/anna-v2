@@ -1,4 +1,3 @@
-import pprint
 from typing import Dict, Any
 
 from slack_bolt import Say
@@ -18,6 +17,6 @@ class ArHandler:
         msg = event.get('text', "")
         ts = event.get('thread_ts', None) or event['ts']
         event = MessageSentEvent(msg, ts)
-        ar_svc = ArService(say, msg, event)
+        ar_svc = ArService(say, event)
         return ar_svc
 
