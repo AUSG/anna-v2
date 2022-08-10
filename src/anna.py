@@ -1,6 +1,6 @@
 import logging
 
-from slack_bolt import App, Say
+from slack_bolt import App
 
 import env_bucket
 from ask_reply.handler import ArHandler
@@ -12,27 +12,18 @@ logger = logging.getLogger("root")
 SLACK_BOT_TOKEN = env_bucket.get('SLACK_BOT_TOKEN')
 SLACK_SIGNING_SECRET = env_bucket.get('SLACK_SIGNING_SECRET')
 
-
 app = App(
     token=SLACK_BOT_TOKEN,
     signing_secret=SLACK_SIGNING_SECRET
 )
 
-
 # handler 는 모두 check_and_run(client, say, event) 을 구현해야 한다.
 message_channels_event_handlers = [ArHandler()]
-# @app.event('message')
-# def handle_message_channels_event(ack, say, event, client):
-#     ack()
-#     for handler in reaction_added_event_handlers:
-#         handler.check_and_run(client, say, event)
-
-# @app.event({"type": "message", "subtype": None})
-# def reply_in_thread(body: dict, say: Say):
-#     event = body["event"]
-#     thread_ts = event.get("thread_ts", None) or event["ts"]
-#     print("hmm")
-#     say(text="Hey, what's up?", thread_ts=thread_ts)
+@app.event({"type": "message", "subtype": None})
+def reply_in_thread(ack, event, say, client):
+    ack()
+    for handler in message_channels_event_handlers:
+        handler.check_and_run(client, say, event)
 
 
 # handler 는 모두 check_and_run(client, say, event) 을 구현해야 한다.

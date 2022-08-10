@@ -34,6 +34,8 @@ class OmService:
             return True
 
     def join(self):
+        if not self.is_target():
+            return None, None
         is_new, worksheet_id = self._get_worksheet_id()
         self.member_service.submit_form(slack_unique_id=self.ea_event.slack_unique_id,
                                         worksheet_id=worksheet_id)

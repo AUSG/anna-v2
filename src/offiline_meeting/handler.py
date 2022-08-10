@@ -21,10 +21,13 @@ class OmHandler:
         ea_event, om_service, slack_client = self._inject_dependencies(event, say, web_client)
 
         try:
-            if om_service.is_target():
-                is_new, url = om_service.join()
-                if is_new:
-                    slack_client.send_msg(msg=f"새로운 시트를 만들었어! <{url}|구글스프레드 시트>", ts=ea_event.ts)
+            is_new, url = om_service.join()
+            if is_new is None:
+                return
+            elif is_new:
+                slack_client.send_msg(msg=f"새로운 시트를 만들었어! <{url}|구글스프레드 시트>", ts=ea_event.ts)
+                slack_client.send_msg(msg=f"<@{ea_event.slack_unique_id}>, 등록 완료!", ts=ea_event.ts)
+            else:
                 slack_client.send_msg(msg=f"<@{ea_event.slack_unique_id}>, 등록 완료!", ts=ea_event.ts)
         except Exception as ex:
             self._error_log(ex, ea_event, slack_client)

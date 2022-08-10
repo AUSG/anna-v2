@@ -1,1 +1,1 @@
-__all__ = ["handler"]
+__all__ = ["handler", "service"]
