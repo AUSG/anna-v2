@@ -30,7 +30,7 @@ class ArService:
         pass
 
     def _find_keyword(self):
-        for token in self.event.message:
+        for token in self.event.message.split(' '):
             if token.startswith("!") and len(token) > 2:
                 return token[1:]
 
