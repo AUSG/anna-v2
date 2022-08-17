@@ -36,7 +36,7 @@ class OmHandler:
         ea_event = EmojiAddedEvent(event['reaction'], event['item']['ts'], event['item']['channel'], event['user'])
         slack_client = SlackClient(web_client, say)
         gs_client = GsClient()
-        member_service = MemberService.instance(gs_client)
+        member_service = MemberService(gs_client)
         om_service = OmService(ea_event, slack_client, member_service, gs_client)
 
         return ea_event, om_service, slack_client
