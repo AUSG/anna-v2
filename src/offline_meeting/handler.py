@@ -5,7 +5,7 @@ import env_bucket
 from event import EmojiAddedEvent
 from google_spreadsheet_client import GsClient
 from member.service import MemberService
-from offiline_meeting.service import OmService
+from offline_meeting.service import OmService
 from slack_bolt import Say
 from slack_client import SlackClient
 from slack_sdk import WebClient
