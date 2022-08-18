@@ -4,7 +4,7 @@ from slack_bolt import App
 
 import env_bucket
 from ask_reply.handler import ArHandler
-from offiline_meeting.handler import OmHandler
+from offline_meeting.handler import OmHandler
 
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger("root")
