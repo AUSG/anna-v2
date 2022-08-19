@@ -6,8 +6,6 @@ from dateutil.tz import gettz
 from gspread import service_account_from_dict, Worksheet, Spreadsheet
 from gspread_formatting import set_column_width
 
-from configuration import init_env
-
 logger = logging.getLogger(__name__)
 
 GCP_type = os.environ.get('GCP_type')
@@ -98,8 +96,3 @@ def get_instance():
     if __singleton is None:
         __singleton = GoogleSpreadsheetClient()
     return __singleton
-
-
-if __name__ == '__main__':
-    init_env("../../")
-    instance = get_instance()

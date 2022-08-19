@@ -7,13 +7,14 @@ env:
   FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
   SERVICE_ENVS: ${{ secrets.SERVICE_ENVS }}
   GCP_SECRETS: ${{ secrets.GCP_SECRETS }}
+
 jobs:
   deploy:
-      name: Level Up ANNA
-      runs-on: ubuntu-latest
-      steps:
-        - uses: actions/checkout@v2
-        - name: add env files
-          run: echo "$SERVICE_ENVS" > .env.shared && echo "$GCP_SECRETS" > gcp_serviceaccount_secret.json
-        - uses: superfly/flyctl-actions/setup-flyctl@master
-        - run: flyctl deploy --remote-only
+    name: Level Up ANNA
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - name: add .env.secret
+        run: echo "$ENV_SECRET" > .env.secret
+      - uses: superfly/flyctl-actions/setup-flyctl@master
+      - run: flyctl deploy --remote-only

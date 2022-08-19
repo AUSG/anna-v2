@@ -20,7 +20,7 @@ def find_member(gs_client: GoogleSpreadsheetClient, slack_unique_id: str) -> Mem
 
 def fetch_members(gs_client: GoogleSpreadsheetClient) -> Dict[str, Member]:
     member_info_cols = 'J:O'  # 열 순서: user_id, kor_name, eng_name, email, phone, school_name or company_name # TODO [seonghyeok] 환경변수로 빼기
-    raw_members = gs_client.get_values(MEMBERS_INFO_WORKSHEET_ID, member_info_cols)
+    raw_members = gs_client.get_values(FORM_SPREADSHEET_ID, MEMBERS_INFO_WORKSHEET_ID, member_info_cols)
 
     members = {}
     for m in raw_members[1:]:  # [0] == header row

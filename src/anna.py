@@ -14,10 +14,7 @@ if __name__ == '__main__':
     init_log()
     init_env()
 
-    app = App(
-        token=SLACK_BOT_TOKEN,
-        signing_secret=SLACK_SIGNING_SECRET
-    )
+    app = App(token=SLACK_BOT_TOKEN, signing_secret=SLACK_SIGNING_SECRET)
 
     listen_event_with_services(app, _SERVICES)
 
