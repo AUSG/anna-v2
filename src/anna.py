@@ -1,53 +1,24 @@
-import logging
-
+import os
 from slack_bolt import App
 
-import env_bucket
-from ask_reply.handler import ArHandler
-from offline_meeting.handler import OmHandler
+from configuration import init_log, init_env
+from router import listen_event_with_services
+from service import reply_to_question, register_meeting
 
-logging.basicConfig(level=logging.DEBUG)
-logger = logging.getLogger("root")
+SLACK_BOT_TOKEN = os.environ.get('SLACK_BOT_TOKEN')
+SLACK_SIGNING_SECRET = os.environ.get('SLACK_SIGNING_SECRET')
 
-SLACK_BOT_TOKEN = env_bucket.get('SLACK_BOT_TOKEN')
-SLACK_SIGNING_SECRET = env_bucket.get('SLACK_SIGNING_SECRET')
-
-app = App(
-    token=SLACK_BOT_TOKEN,
-    signing_secret=SLACK_SIGNING_SECRET
-)
-
-# handler 는 모두 check_and_run(client, say, event) 을 구현해야 한다.
-message_channels_event_handlers = [ArHandler()]
-@app.event({"type": "message", "subtype": None})
-def reply_in_thread(ack, event, say, client):
-    ack()
-    for handler in message_channels_event_handlers:
-        handler.check_and_run(client, say, event)
-
-
-# handler 는 모두 check_and_run(client, say, event) 을 구현해야 한다.
-reaction_added_event_handlers = [OmHandler()]
-@app.event('reaction_added')
-def handle_reaction_added_event(ack, say, event, client):
-    ack()
-    for handler in reaction_added_event_handlers:
-        handler.check_and_run(client, say, event)
-
-
-# noop
-@app.event('reaction_removed')
-def handle_reaction_removed_event(ack, body, say):
-    ack()
-    pass
-
-
-# noop
-@app.event('app_mention')
-def event_app_mention(ack, event, say):
-    ack()
-    pass
-
+_SERVICES = [reply_to_question, register_meeting]
 
 if __name__ == '__main__':
+    init_log()
+    init_env()
+
+    app = App(
+        token=SLACK_BOT_TOKEN,
+        signing_secret=SLACK_SIGNING_SECRET
+    )
+
+    listen_event_with_services(app, _SERVICES)
+
     app.start(8080)

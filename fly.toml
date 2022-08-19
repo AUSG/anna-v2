@@ -2,7 +2,7 @@
 
 app = "small-frost-842"
 kill_signal = "SIGINT"
-kill_timeout = 5
+kill_timeout = 15
 processes = []
 
 [env]

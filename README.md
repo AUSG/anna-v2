@@ -1,8 +1,26 @@
-# 개발방법
+## 배포 과정 설명
 
+로컬에서 직접 또는 GithubAction을 통해 fly.io에 배포한다. 
+
+fly.io 배포 방식은, k8s 의 pod 띄우기를 간소화했다고 보면 된다. 내가 로컬에서 `fly deploy` 명령어를 수행하면, Dockerfile로 이미지를 굽고, fly.toml 와 같이 fly.io 서버에 업로드한다. 
+
+정확히 어느 서버에 배포하고 어느 포트를 개방하고 등등 정보는 다 fly.toml 에 있다.  
+
+## 루트폴더의 파일들 설명
+
+- .github/ : GithubAction
+- Dockerfile, .dockerignore, fly.toml : fly.io 배포할 때 사용
+- .gitignore, README.md, ARCHITECTURE.md : 설명 생략
+- src, .env. gcp_serviceaccount_secret.json, requirements.txt : 아래에서 설명
+
+## 로컬 개발환경 구축
+ 
 1. .venv
 2. 필수파일 세팅 (아래 참고)
 3. git push --> deploy
+
+TBD
+
 
 # 필수파일
 
@@ -48,3 +66,11 @@ FORM_SPREADSHEET_ID=1FtKRO4gmlVg-Si0_CHt-tkpVd3LDTXdsoZ0u98MYd0k
 # 위 구글스프레드 내에서 멤버들 정보가 있는 워크시트 id ('AUSG_오프라인_모임_참가신청서')
 MEMBERS_INFO_WORKSHEET_ID=307140510
 ```
+
+## 커밋 전 확인사항
+
+TBD
+
+## 참고문서
+
+이벤트 콜백 data 스펙: https://api.slack.com/apis/connections/events-api#the-events-api__receiving-events__callback-field-overview

@@ -1,6 +1,5 @@
 .venv
 .vscode
 __pycache__/
-.env
+.env.secret
 .idea/
-gcp_serviceaccount_secret.json
