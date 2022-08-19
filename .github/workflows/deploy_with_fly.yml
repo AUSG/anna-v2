@@ -5,8 +5,7 @@ on:
       - main
 env:
   FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
-  SERVICE_ENVS: ${{ secrets.SERVICE_ENVS }}
-  GCP_SECRETS: ${{ secrets.GCP_SECRETS }}
+  ENV_SECRET: ${{ secrets.ENV_SECRET }}
 
 jobs:
   deploy:
