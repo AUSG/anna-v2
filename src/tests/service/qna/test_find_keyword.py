@@ -1,13 +1,15 @@
 from _pytest.python_api import raises
 
-from exception import RuntimeException
+from tests.util import add_dummy_envs
+
+add_dummy_envs()
+
 from service.qna.qna_service import find_keyword
 
 
 def test_fail_when_keyword_prefix_is_None():
-    with raises(RuntimeException) as ex:
+    with raises(TypeError):
         find_keyword(None, '!random string')
-    assert ex.value.message == 'single_prefix가 필요해요'
 
 
 def test_fail_when_text_is_None():

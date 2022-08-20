@@ -80,7 +80,7 @@ class GoogleSpreadsheetClient:
 
     @staticmethod
     def _get_now(timezone: str = 'Asia/Seoul') -> str:
-        return datetime.now(gettz(timezone)).strftime('%Y-%m-%d %H:%M:%S')  # korean time
+        return datetime.now(gettz(timezone)).strftime('%Y%m%d %H%M%S')  # korean time
 
     def _get_spreadsheet(self, spreadsheet_id: str) -> Spreadsheet:
         return self.gs_client.open_by_key(spreadsheet_id)

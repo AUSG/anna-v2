@@ -1,4 +1,5 @@
 import logging
+import traceback
 from typing import List, Callable, Any, Dict
 
 from slack_bolt import App, Ack, Say
@@ -6,16 +7,23 @@ from slack_sdk import WebClient
 
 logger = logging.getLogger(__name__)
 
+_SERVICES = []
+
+
+def _call_services(ack: Ack, event: Dict[str, Any], say: Say, web_client: WebClient):
+    ack()
+    for service in _SERVICES:
+        try:
+            service(event, say, web_client)
+        except BaseException as ex:
+            tb = traceback.format_exc()
+            logger.error(f"{ex} ({tb})")
+            say(text=f"예상치 못한 에러가 발생했어! ({ex})")
+
 
 def listen_event_with_services(app: App, services: List[Callable]):
-    def _call_services(ack: Ack, event: Dict[str, Any], say: Say, web_client: WebClient):
-        ack()
-        for service in services:
-            try:
-                service(event, say, web_client)
-            except BaseException as ex:
-                logger.error(ex)
-                say(text=f"예상치 못한 에러가 발생했어! ({ex})")
+    global _SERVICES
+    _SERVICES = services
 
     @app.event('app_mention')
     def handler_app_mention_event(ack, event, say, client):

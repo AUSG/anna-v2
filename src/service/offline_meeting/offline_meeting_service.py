@@ -5,10 +5,11 @@ from typing import Any, Dict, Union, Tuple
 from slack_bolt import Say
 from slack_sdk import WebClient
 
+from exception import RuntimeException
 from implementation import google_spreadsheet_client, GoogleSpreadsheetClient
 from util import get_prop
 from .member import Member
-from .member_finder import find_member
+from .member_finder import find_member, validate_member_info
 
 ANNOUNCEMENT_CHANNEL_ID = os.environ.get('ANNOUNCEMENT_CHANNEL_ID')
 ANNA_ID = os.environ.get('ANNA_ID')
@@ -29,12 +30,17 @@ class EmojiAddedEvent:
 
 
 def register_meeting(event: Dict[str, Any], say: Say, web_client: WebClient):
-    if not is_target(event, web_client):
+    if not is_gogo_emoji_on_first_reply(event, web_client):
         return
 
     gs_client = google_spreadsheet_client.get_instance()
     event = EmojiAddedEvent(event['item']['ts'], event['item']['channel'], event['user'])
     member = find_member(gs_client, event.slack_unique_id)
+    if member is None:
+        raise RuntimeException(f"멤버 정보를 찾지 못했어요. (slack_unique_id: {event.slack_unique_id})", thread_ts=event.ts)
+    elif not validate_member_info(member):
+        raise RuntimeException(f"멤버 정보가 완벽하지 않아요. (slack_unique_id: {event.slack_unique_id}, member_info: {member})",
+                               thread_ts=event.ts)
 
     is_new, worksheet_id = get_worksheet_id(web_client, gs_client, event.ts, event.channel)
     if is_new:
@@ -45,12 +51,12 @@ def register_meeting(event: Dict[str, Any], say: Say, web_client: WebClient):
     say(text=f"<@{event.slack_unique_id}>, 등록 완료!", thread_ts=event.ts)
 
 
-def is_target(event: Dict[str, Any], web_client: WebClient) -> bool:
-    if get_prop(event, 'type') != 'emoji_changed':
+def is_gogo_emoji_on_first_reply(event: Dict[str, Any], web_client: WebClient) -> bool:
+    if get_prop(event, 'type') != 'reaction_added':
         return False
     elif get_prop(event, 'reaction') != SUBMIT_FORM_EMOJI:
         return False
-    elif get_prop(event, 'subtype') != 'add':
+    elif get_prop(event, 'subtype') is not None:
         return False
     elif get_prop(event, 'user') is None:
         return False

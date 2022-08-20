@@ -1,7 +1,6 @@
 import os
-from typing import Dict
+from typing import Dict, Union
 
-from exception import RuntimeException
 from implementation import GoogleSpreadsheetClient
 from .member import Member
 
@@ -9,13 +8,12 @@ FORM_SPREADSHEET_ID = os.environ.get('FORM_SPREADSHEET_ID')
 MEMBERS_INFO_WORKSHEET_ID = int(os.environ.get('MEMBERS_INFO_WORKSHEET_ID'))
 
 
-def find_member(gs_client: GoogleSpreadsheetClient, slack_unique_id: str) -> Member:
+def find_member(gs_client: GoogleSpreadsheetClient, slack_unique_id: str) -> Union[Member, None]:
     found_member = fetch_members(gs_client).get(slack_unique_id)
     if found_member is None:
-        raise RuntimeException(f"멤버 정보를 찾지 못했어요. (slack_unique_id: {slack_unique_id})")
-    elif not validate_member_info(found_member):
-        raise RuntimeException(f"멤버 정보가 완벽하지 않아요. (slack_unique_id: {slack_unique_id}, member_info: {found_member})")
-    return found_member
+        return None
+    else:
+        return found_member
 
 
 def fetch_members(gs_client: GoogleSpreadsheetClient) -> Dict[str, Member]:

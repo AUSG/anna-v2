@@ -2,7 +2,6 @@ from typing import Any, Dict, Union
 from slack_bolt import Say
 from slack_sdk import WebClient
 
-from exception.runtime_exception import RuntimeException
 from util import get_prop
 
 
@@ -16,7 +15,7 @@ def reply_to_question(event: Dict[str, Any], say: Say, _client: WebClient):
     if not is_message_sent_event(event):
         return
 
-    text = get_prop(event, 'text', '')
+    text = get_prop(event, 'text')
     thread_ts = get_prop(event, 'thread_ts') or get_prop(event, 'ts')
 
     keyword = find_keyword('!', text)
@@ -38,9 +37,9 @@ def is_message_sent_event(event: Dict[str, Any]):
 
 
 def find_keyword(keyword_prefix: str, text: str) -> Union[str, None]:
-    if keyword_prefix is None:
-        raise RuntimeException("single_prefix가 필요해요")
-    elif text is None or keyword_prefix not in text:
+    assert len(keyword_prefix) > 0
+
+    if text is None or keyword_prefix not in text:
         return None
 
     chunk = text.split(keyword_prefix)
