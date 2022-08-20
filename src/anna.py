@@ -4,7 +4,7 @@ from slack_bolt import App
 from configuration import init_log, init_env
 
 init_log()
-init_env("../")
+init_env()
 
 
 from router import listen_event_with_services
