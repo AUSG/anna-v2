@@ -1,4 +1,4 @@
 from .member import Member
-from .offline_meeting_service import register_meeting
+from .offline_meeting_participation_service import participate_offline_meeting
 
-__all__ = ['register_meeting', 'Member']
+__all__ = ['participate_offline_meeting', 'Member']

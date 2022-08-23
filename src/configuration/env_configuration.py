@@ -8,49 +8,44 @@ from exception.runtime_exception import RuntimeException
 logger = logging.getLogger(__name__)
 
 
+def _check(env_name: str, keys, invalidated_envs):
+    if env_name not in keys:
+        invalidated_envs.append(env_name)
+
+
 def _validate():
+    env_names = [
+        'SLACK_BOT_TOKEN',
+        'SLACK_SIGNING_SECRET',
+        'GCP_type',
+        'GCP_project_id',
+        'GCP_private_key_id',
+        'GCP_private_key',
+        'GCP_client_email',
+        'GCP_client_id',
+        'GCP_auth_uri',
+        'GCP_token_uri',
+        'GCP_auth_provider_x509_cert_url',
+        'GCP_client_x509_cert_url',
+        'ANNOUNCEMENT_CHANNEL_ID',
+        'ANNA_ID',
+        'ORGANIZER_ID',
+        'SUBMIT_FORM_EMOJI',
+        'SUSPEND_FORM_EMOJI',
+        'ADMIN_CHANNEL',
+        'FORM_SPREADSHEET_ID',
+        'MEMBERS_INFO_WORKSHEET_ID'
+    ]
+
     invalidated_envs = []
     keys = os.environ.keys()
 
-    # .env.secret
-    if 'SLACK_BOT_TOKEN' not in keys:
-        invalidated_envs.append('SLACK_BOT_TOKEN')
-    if 'SLACK_SIGNING_SECRET' not in keys:
-        invalidated_envs.append('SLACK_SIGNING_SECRET')
-    if 'GCP_type' not in keys:
-        invalidated_envs.append('GCP_type')
-    if 'GCP_project_id' not in keys:
-        invalidated_envs.append('GCP_project_id')
-    if 'GCP_private_key_id' not in keys:
-        invalidated_envs.append('GCP_private_key_id')
-    if 'GCP_private_key' not in keys:
-        invalidated_envs.append('GCP_private_key')
-    if 'GCP_client_email' not in keys:
-        invalidated_envs.append('GCP_client_email')
-    if 'GCP_client_id' not in keys:
-        invalidated_envs.append('GCP_client_id')
-    if 'GCP_auth_uri' not in keys:
-        invalidated_envs.append('GCP_auth_uri')
-    if 'GCP_token_uri' not in keys:
-        invalidated_envs.append('GCP_token_uri')
-    if 'GCP_auth_provider_x509_cert_url' not in keys:
-        invalidated_envs.append('GCP_auth_provider_x509_cert_url')
-    if 'GCP_client_x509_cert_url' not in keys:
-        invalidated_envs.append('GCP_client_x509_cert_url')
+    # exists check
+    for env_name in env_names:
+        _check(env_name, keys, invalidated_envs)
 
-    # .env.shared
-    if 'ANNOUNCEMENT_CHANNEL_ID' not in keys:
-        invalidated_envs.append('ANNOUNCEMENT_CHANNEL_ID')
-    if 'ANNA_ID' not in keys:
-        invalidated_envs.append('ANNA_ID')
-    if 'SUBMIT_FORM_EMOJI' not in keys:
-        invalidated_envs.append('SUBMIT_FORM_EMOJI')
-    if 'ADMIN_CHANNEL' not in keys:
-        invalidated_envs.append('ADMIN_CHANNEL')
-    if 'FORM_SPREADSHEET_ID' not in keys:
-        invalidated_envs.append('FORM_SPREADSHEET_ID')
-    if 'MEMBERS_INFO_WORKSHEET_ID' not in keys \
-            or not os.environ.get('MEMBERS_INFO_WORKSHEET_ID').isnumeric():
+    # other check
+    if not os.environ.get('MEMBERS_INFO_WORKSHEET_ID').isnumeric():
         invalidated_envs.append('MEMBERS_INFO_WORKSHEET_ID')
 
     if len(invalidated_envs) > 0:

@@ -4,7 +4,7 @@ from tests.util import add_dummy_envs
 
 add_dummy_envs()
 
-from service.offline_meeting.offline_meeting_service import get_worksheet_id
+from service.offline_meeting.offline_meeting_participation_service import get_worksheet_id
 
 
 def test_false_when_worksheet_id_found_in_thread():
