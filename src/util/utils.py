@@ -1,7 +1,7 @@
-from typing import Union
+from typing import Union, List
 
 
-def get_prop(obj, *keys: str) -> Union[str, None]:
+def get_prop(obj: object, *keys: str) -> Union[str, List[str], None]:
     _obj = obj
     try:
         for key in keys:

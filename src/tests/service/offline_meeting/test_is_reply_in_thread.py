@@ -4,7 +4,7 @@ from tests.util import add_dummy_envs
 
 add_dummy_envs()
 
-from service.offline_meeting.offline_meeting_service import is_reply_in_thread
+from service.offline_meeting.offline_meeting_participation_service import is_reply_in_thread
 
 
 def test_false_when_no_reply():

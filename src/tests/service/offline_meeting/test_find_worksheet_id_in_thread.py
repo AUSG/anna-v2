@@ -5,7 +5,7 @@ from tests.util import add_dummy_envs
 
 add_dummy_envs()
 
-from service.offline_meeting.offline_meeting_service import find_worksheet_id_in_thread
+from service.offline_meeting.offline_meeting_participation_service import find_worksheet_id_in_thread
 
 def test_none_with_empty_response():
     with patch('slack_sdk.web.WebClient') as mock_web_client:

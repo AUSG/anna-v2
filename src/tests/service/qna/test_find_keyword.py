@@ -2,7 +2,7 @@ from _pytest.python_api import raises
 
 from tests.util import add_dummy_envs
 
-add_dummy_envs()
+# add_dummy_envs()
 
 from service.qna.qna_service import find_keyword
 

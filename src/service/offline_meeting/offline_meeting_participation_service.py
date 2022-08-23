@@ -1,6 +1,6 @@
 import os
 import re
-from typing import Any, Dict, Union, Tuple
+from typing import Any, Dict, Union, Tuple, List
 
 from slack_bolt import Say
 from slack_sdk import WebClient
@@ -13,7 +13,9 @@ from .member_finder import find_member, validate_member_info
 
 ANNOUNCEMENT_CHANNEL_ID = os.environ.get('ANNOUNCEMENT_CHANNEL_ID')
 ANNA_ID = os.environ.get('ANNA_ID')
+ORGANIZER_ID = os.environ.get('ORGANIZER_ID')
 SUBMIT_FORM_EMOJI = os.environ.get('SUBMIT_FORM_EMOJI')
+SUSPEND_FORM_EMOJI = os.environ.get('SUSPEND_FORM_EMOJI')
 MEMBERS_INFO_WORKSHEET_ID = int(os.environ.get('MEMBERS_INFO_WORKSHEET_ID'))
 FORM_SPREADSHEET_ID = os.environ.get('FORM_SPREADSHEET_ID')
 
@@ -29,8 +31,12 @@ class EmojiAddedEvent:
         self.slack_unique_id = slack_unique_id
 
 
-def register_meeting(event: Dict[str, Any], say: Say, web_client: WebClient):
-    if not is_gogo_emoji_on_first_reply(event, web_client):
+def participate_offline_meeting(event: Dict[str, Any], say: Say, web_client: WebClient):
+    if not is_target_emoji_on_first_reply(event, web_client):
+        return
+
+    if organizer_put_suspend_emoji(event, web_client):
+        say(text=f"오거나이저가 :stop2: 이모지를 붙여놨기 때문에 <@{get_prop(event, 'user')}>의 요청을 들어줄 수가 없어.", thread_ts=get_prop(event, 'item', 'ts'))
         return
 
     gs_client = google_spreadsheet_client.get_instance()
@@ -51,7 +57,7 @@ def register_meeting(event: Dict[str, Any], say: Say, web_client: WebClient):
     say(text=f"<@{event.slack_unique_id}>, 등록 완료!", thread_ts=event.ts)
 
 
-def is_gogo_emoji_on_first_reply(event: Dict[str, Any], web_client: WebClient) -> bool:
+def is_target_emoji_on_first_reply(event: Dict[str, Any], web_client: WebClient) -> bool:
     if get_prop(event, 'type') != 'reaction_added':
         return False
     elif get_prop(event, 'reaction') != SUBMIT_FORM_EMOJI:
@@ -67,6 +73,26 @@ def is_gogo_emoji_on_first_reply(event: Dict[str, Any], web_client: WebClient) -
     elif is_reply_in_thread(web_client, get_prop(event, 'item', 'ts'), get_prop(event, 'item', 'channel')):
         return False
     return True
+
+
+def organizer_put_suspend_emoji(event: Dict[str, Any], web_client: WebClient) -> bool:
+    emoji_with_users_list = get_emojis_on_message(event, web_client)
+
+    for emoji_with_users in emoji_with_users_list:
+        if emoji_with_users['name'] == SUSPEND_FORM_EMOJI and ORGANIZER_ID in emoji_with_users['users']:
+            return True
+
+    return False
+
+
+def get_emojis_on_message(event, web_client):
+    resp = web_client.reactions_get(
+        channel=get_prop(event, 'item', 'channel'),
+        timestamp=get_prop(event, 'item', 'ts'),
+        full=True
+    )
+    emoji_with_users_list: List[object] = get_prop(resp, 'message', 'reactions')
+    return emoji_with_users_list
 
 
 def is_reply_in_thread(web_client: WebClient, ts: str, channel: str):
