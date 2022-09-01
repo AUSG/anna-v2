@@ -60,7 +60,7 @@ class GoogleSpreadsheetClient:
         worksheet = self._get_worksheet(spreadsheet_id, worksheet_id)
 
         if timestamp_on_first_row:
-            _values.append(self._get_now())
+            _values.insert(0, self._get_now())
 
         worksheet.append_row(_values)
 
