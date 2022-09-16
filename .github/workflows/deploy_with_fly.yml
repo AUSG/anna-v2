@@ -1,11 +1,12 @@
 name: Fly Deploy
-on:
+
+on: 
   push:
     branches:
       - main
+
 env:
   FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
-  ENV_SECRET: ${{ secrets.ENV_SECRET }}
 
 jobs:
   deploy:
@@ -13,7 +14,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
-      - name: add .env.secret
-        run: echo "$ENV_SECRET" > .env.secret
+        with:
+          token: ${{ secrets.ACCESS_TOKEN_FOR_CHECKOUT_SUBMODULE }}
+          submodules: true
       - uses: superfly/flyctl-actions/setup-flyctl@master
       - run: flyctl deploy --remote-only
