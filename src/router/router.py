@@ -1,11 +1,11 @@
 import logging
 import traceback
-from typing import List, Callable, Any, Dict
+from typing import List, Callable
 
 from slack_bolt import App, Ack, Say
 from slack_sdk import WebClient
 
-from util import get_prop
+from util import get_prop, SlackGeneralEvent
 
 logger = logging.getLogger(__name__)
 
@@ -19,7 +19,7 @@ def _get_ts(event):
         return get_prop(event, 'item', 'thread_ts')
 
 
-def _call_services(ack: Ack, event: Dict[str, Any], say: Say, web_client: WebClient):
+def _call_services(ack: Ack, event: SlackGeneralEvent, say: Say, web_client: WebClient):
     ack()
     for service in _SERVICES:
         try:

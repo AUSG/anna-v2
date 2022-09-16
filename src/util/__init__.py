@@ -1,3 +1,3 @@
-from .utils import get_prop
+from .utils import get_prop, SlackGeneralEvent
 
-__all__ = ['get_prop']
+__all__ = ['get_prop', 'SlackGeneralEvent']

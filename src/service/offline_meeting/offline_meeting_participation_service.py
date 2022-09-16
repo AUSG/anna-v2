@@ -1,13 +1,13 @@
 import os
 import re
-from typing import Any, Dict, Union, Tuple, List
+from typing import Union, Tuple, List
 
 from slack_bolt import Say
 from slack_sdk import WebClient
 
 from exception import RuntimeException
 from implementation import google_spreadsheet_client, GoogleSpreadsheetClient
-from util import get_prop
+from util import get_prop, SlackGeneralEvent
 from .member import Member
 from .member_finder import find_member, validate_member_info
 
@@ -31,7 +31,7 @@ class EmojiAddedEvent:
         self.slack_unique_id = slack_unique_id
 
 
-def participate_offline_meeting(event: Dict[str, Any], say: Say, web_client: WebClient):
+def participate_offline_meeting(event: SlackGeneralEvent, say: Say, web_client: WebClient):
     if not is_target_emoji_on_first_reply(event, web_client):
         return
 
@@ -57,7 +57,7 @@ def participate_offline_meeting(event: Dict[str, Any], say: Say, web_client: Web
     say(text=f"<@{event.slack_unique_id}>, 등록 완료!", thread_ts=event.ts)
 
 
-def is_target_emoji_on_first_reply(event: Dict[str, Any], web_client: WebClient) -> bool:
+def is_target_emoji_on_first_reply(event: SlackGeneralEvent, web_client: WebClient) -> bool:
     if get_prop(event, 'type') != 'reaction_added':
         return False
     elif get_prop(event, 'reaction') != SUBMIT_FORM_EMOJI:
@@ -75,7 +75,7 @@ def is_target_emoji_on_first_reply(event: Dict[str, Any], web_client: WebClient)
     return True
 
 
-def organizer_put_suspend_emoji(event: Dict[str, Any], web_client: WebClient) -> bool:
+def organizer_put_suspend_emoji(event: SlackGeneralEvent, web_client: WebClient) -> bool:
     emoji_with_users_list = get_emojis_on_message(event, web_client)
 
     for emoji_with_users in emoji_with_users_list:
