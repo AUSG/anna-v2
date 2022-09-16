@@ -1,25 +1,42 @@
 ## 배포 과정 설명
 
-로컬에서 직접 또는 GithubAction을 통해 fly.io에 배포한다. 
+로컬에서 직접 또는 Github Action를 통해 fly.io에 배포한다. 
 
 fly.io 배포 방식은, k8s 의 pod 띄우기를 간소화했다고 보면 된다. 내가 로컬에서 `fly deploy` 명령어를 수행하면, Dockerfile로 이미지를 굽고, fly.toml 와 같이 fly.io 서버에 업로드한다. 
 
 정확히 어느 서버에 배포하고 어느 포트를 개방하고 등등 정보는 다 fly.toml 에 있다.  
 
-## 루트폴더의 파일들 설명
+## 배포와 관련된 파일들
 
-- .github/ : GithubAction
+- .github/ : fly.io 에서 제공한 Github Action 을 트리거하는 workflow
 - Dockerfile, .dockerignore, fly.toml : fly.io 배포할 때 사용
-- .gitignore, README.md, ARCHITECTURE.md : 설명 생략
-- src, .env. gcp_serviceaccount_secret.json, requirements.txt : 아래에서 설명
 
 ## 로컬 개발환경 구축
  
-1. .venv
+1. 파이썬 가상환경 생성 및 활성화
+
+```sh
+python3 -m venv .venv # 가상환경 구축 (최초 1회)
+source ./.venv/bin/activate # 가상환경 활성화
+pip3 list # pip, setuptools 두 개만 나온다면 가상환경이 잘 세팅된 것
+```
+
+2. 의존성 설치
+
+```sh
+pip3 install -r requirements.txt
+pip3 list # 뭐가 많이 나온다면 잘 세팅된 것
+```
+
+작업 중 새로운 의존성이 추가된다면 아래와 같이 `requirements.txt`를 최신화하자.
+
+```sh
+pip3 freeze > requirements.txt
+```
+
 2. 필수파일 세팅 (아래 참고)
 3. git push --> deploy
 
-TBD
 
 
 # 필수파일
