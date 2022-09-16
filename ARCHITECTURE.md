@@ -26,8 +26,8 @@
 - router에서, slack으로부터 날라오는 event들을 모두 한 곳으로 모으고 이것을 service들에 넘긴다.
 - 각 service는 해당 이벤트가 본인이 액션을 취해야 하는지 판단한다.
   - 여러 service가 동일한 이벤트를 받아 서로 다른 액션을 취할 수도 있다. service는 개별 '기능'에 따라 만들기 때문. 
-    - 예를 들어 '메시지에 이모지가 달림' event를 처리하는 handler는, 특정 이모지에 대해서 SpreadSheetService와 ReplyService를 같이 실행할 수도 있다.
-- 각 service는 도메인 로직을 최대한 '말하듯이' 묘사하고, 실제 수행은 implentation 레이어로 위임한다.
+    - 예를 들어 ':고고: 이모지가 추가됨' 이라는 event 하나에, 두 개 이상의 service 가 반응하고 액션을 취할 수도 있다.
+- 각 service는 도메인 로직을 최대한 '말하듯이' 묘사하고, 실제 구체적인 수행은 implentation 레이어로 위임한다.
 
 그림으로 나타내면 다음과 같다:
 
@@ -59,6 +59,6 @@
 
 외부 연동되는 건 implementation 레이어로 빠지게 유도했지만, slack과 통신하는 부분(Say, WebClient)은 service 레이어에 두었다. 매번 리스터가 호출될 때마다 Say, WebClient 가 만들어지기 때문에 억지로 implementation 레이어로 끌어내리는게 번잡스러웠음.
 
-하지만 그렇다고 모든 로직을 service 메소드에 나열하는 건 이상하다고 생각되어, 각 로직의 덩치가 조금이라도 커지려고 하면 helper 메소드로 추출하였다. 그래서 결과적으로 테스트 코드는 이 helper 메소드들을 중심으로 짜게되었다.
+하지만 그렇다고 모든 로직을 service '메소드'에 나열하는 건 이상하다고 생각되어, 각 로직의 덩치가 조금이라도 커지려고 하면 개별 helper 메소드로 추출하였다. 그래서 결과적으로 테스트 코드는 이 helper 메소드들을 중심으로 짜게되었다.
 \
 예를 들어 qna 모듈은 `__init__.py` 에 나와있는 `reply_to_question()` 메소드만 외부로 노출되고, 나머지 `is_message_sent_event()`, `find_keyword()`, `find_reply()`는 helper 역할을 한다. 

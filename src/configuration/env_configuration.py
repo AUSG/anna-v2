@@ -53,8 +53,8 @@ def _validate():
 
 
 def init_env(base_path: str = "./"):
-    load_dotenv(base_path + '/.env.shared')
-    load_dotenv(base_path + '/.env.secret')
+    load_dotenv(base_path + 'env/.env.shared')
+    load_dotenv(base_path + 'env/.env.secret')
 
     _validate()
 

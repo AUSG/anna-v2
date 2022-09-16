@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+set -e
+
+echo "----------------------"
+echo "    pre-commit hook   "
+echo "----------------------"
+source .venv/bin/activate
+cd src
+py.test tests

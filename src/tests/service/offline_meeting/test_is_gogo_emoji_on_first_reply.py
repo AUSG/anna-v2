@@ -53,14 +53,14 @@ def test_false_when_channel_not_announcement_channel():
     assert is_target_emoji_on_first_reply(event, None) is False
 
 def test_false_when_event_is_in_reply_in_thread():
-    with patch('service.offline_meeting.offline_meeting_service.is_reply_in_thread') as mock_is_reply_in_thread:
+    with patch('service.offline_meeting.offline_meeting_participation_service.is_reply_in_thread') as mock_is_reply_in_thread:
         mock_is_reply_in_thread.return_value = True
         event = _create_event()
         assert is_target_emoji_on_first_reply(event, None) is False
 
 
 def test_true_when_event_is_in_reply_in_thread():
-    with patch('service.offline_meeting.offline_meeting_service.is_reply_in_thread') as mock_is_reply_in_thread:
+    with patch('service.offline_meeting.offline_meeting_participation_service.is_reply_in_thread') as mock_is_reply_in_thread:
         mock_is_reply_in_thread.return_value = False
         event = _create_event()
         assert is_target_emoji_on_first_reply(event, None) is True
