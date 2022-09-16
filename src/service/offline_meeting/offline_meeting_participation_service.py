@@ -32,7 +32,7 @@ class EmojiAddedEvent:
 
 
 def participate_offline_meeting(event: SlackGeneralEvent, say: Say, web_client: WebClient):
-    if not is_target_emoji_on_first_reply(event, web_client):
+    if not is_target_emoji(event, web_client):
         return
 
     if organizer_put_suspend_emoji(event, web_client):
@@ -57,7 +57,7 @@ def participate_offline_meeting(event: SlackGeneralEvent, say: Say, web_client: 
     say(text=f"<@{event.slack_unique_id}>, 등록 완료!", thread_ts=event.ts)
 
 
-def is_target_emoji_on_first_reply(event: SlackGeneralEvent, web_client: WebClient) -> bool:
+def is_target_emoji(event: SlackGeneralEvent, web_client: WebClient) -> bool:
     if get_prop(event, 'type') != 'reaction_added':
         return False
     elif get_prop(event, 'reaction') != SUBMIT_FORM_EMOJI:
