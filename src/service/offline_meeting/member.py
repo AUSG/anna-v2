@@ -1,3 +1,6 @@
+from typing import List
+
+
 class Member:
     def __init__(self, kor_name: str, eng_name: str, email: str, phone: str, school_name_or_company_name: str):
         self.kor_name = kor_name
@@ -16,3 +19,10 @@ class Member:
                self.email == obj.email and \
                self.phone == obj.phone and \
                self.school_name_or_company_name == obj.school_name_or_company_name
+
+    def to_list(self) -> List[str]:
+        return [self.email,
+                self.kor_name,
+                self.eng_name,
+                self.phone,
+                self.school_name_or_company_name]

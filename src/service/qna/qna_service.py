@@ -1,8 +1,9 @@
-from typing import Any, Dict, Union
+from typing import Union
+
 from slack_bolt import Say
 from slack_sdk import WebClient
 
-from util import get_prop
+from util import get_prop, SlackGeneralEvent
 
 
 class MessageSentEvent:
@@ -11,7 +12,7 @@ class MessageSentEvent:
         self.ts = ts
 
 
-def reply_to_question(event: Dict[str, Any], say: Say, _client: WebClient):
+def reply_to_question(event: SlackGeneralEvent, say: Say, _client: WebClient):
     if not is_message_sent_event(event):
         return
 
@@ -25,7 +26,7 @@ def reply_to_question(event: Dict[str, Any], say: Say, _client: WebClient):
         say(text=reply, thread_ts=thread_ts)
 
 
-def is_message_sent_event(event: Dict[str, Any]):
+def is_message_sent_event(event: SlackGeneralEvent):
     if get_prop(event, 'subtype') is not None:  # 'message_sent to channel' == non-subtype
         return False
     elif get_prop(event, 'type') != 'message':
