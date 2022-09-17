@@ -53,10 +53,14 @@ def _validate():
 
 
 def init_env():
-    src_directory = os.path.dirname(os.path.abspath("anna.py"))
-    load_dotenv(src_directory + '/../env/.env.shared')
-    load_dotenv(src_directory + '/../env/.env.secret')
+    root = _get_root()
+    load_dotenv(os.path.join(root, 'env', '.env.shared'))
+    load_dotenv(os.path.join(root, 'env', '.env.secret'))
 
     _validate()
 
     logger.info("env configuration initialized")
+
+
+def _get_root():
+    return os.path.join(os.path.dirname(__file__), '..', '..')
