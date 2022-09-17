@@ -30,7 +30,7 @@ def _call_services(ack: Ack, event: SlackGeneralEvent, say: Say, web_client: Web
         except BaseException as ex:
             tb = traceback.format_exc()
             logger.error(f"{ex} ({tb})")
-            say(text=f"예상치 못한 에러가 발생했어! ({ex})", thread_ts=_get_ts(ex, event))
+            say(text=f"예상치 못한 에러가 발생했어! ({ex} --> {tb})", thread_ts=_get_ts(ex, event))
 
 
 def listen_event_with_services(app: App, services: List[Callable]):

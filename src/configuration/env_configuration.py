@@ -52,9 +52,10 @@ def _validate():
         raise RuntimeException(f"환경변수가 누락되었어요. invalidated_envs: {invalidated_envs}")
 
 
-def init_env(base_path: str = "./"):
-    load_dotenv(base_path + 'env/.env.shared')
-    load_dotenv(base_path + 'env/.env.secret')
+def init_env():
+    src_directory = os.path.dirname(os.path.abspath("anna.py"))
+    load_dotenv(src_directory + '/../env/.env.shared')
+    load_dotenv(src_directory + '/../env/.env.secret')
 
     _validate()
 

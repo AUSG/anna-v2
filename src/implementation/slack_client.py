@@ -51,7 +51,7 @@ class SlackClient:
 
         emojis = []
         for reaction in resp["message"]["reactions"]:
-            for user in reaction["user"]:
+            for user in reaction["users"]:
                 emojis.append(Emoji(user, reaction["name"]))
 
         return emojis

@@ -2,9 +2,12 @@ import logging
 import os
 from datetime import datetime
 from typing import List
+
 from dateutil.tz import gettz
 from gspread import service_account_from_dict, Worksheet, Spreadsheet
 from gspread_formatting import set_column_width
+
+from .slack_client import SlackClient
 
 logger = logging.getLogger(__name__)
 
@@ -22,14 +25,14 @@ GCP_client_x509_cert_url = os.environ.get('GCP_client_x509_cert_url')
 __singleton = None
 
 
+# TODO [seonghyeok] : gs_client 부분만 싱글톤 구현할 수 있지 않을까 (캐시 느낌으로)
 class GoogleSpreadsheetClient:
-    """
-    싱글톤으로 사용하고 싶기 때문에, (강제하지는 않지만)
-    `google_spreadsheet_client.get_instance()`로 인스턴스를 호출하기를 강력하게 권고함
-    """
+    def __init__(self, slack_client: SlackClient):
+        self.slack_client = slack_client
+        self.gs_client = self._build_gs_client()
 
-    def __init__(self):
-        self.gs_client = service_account_from_dict({
+    def _build_gs_client(self):
+        return service_account_from_dict({
             'type': GCP_type,
             'project_id': GCP_project_id,
             'private_key_id': GCP_private_key_id,
@@ -89,10 +92,3 @@ class GoogleSpreadsheetClient:
         spreadsheet = self._get_spreadsheet(spreadsheet_id)
         worksheet = spreadsheet.get_worksheet_by_id(worksheet_id)
         return worksheet
-
-
-def get_instance():
-    global __singleton
-    if __singleton is None:
-        __singleton = GoogleSpreadsheetClient()
-    return __singleton
