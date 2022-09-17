@@ -31,7 +31,7 @@ class EmojiAddedEvent:
         self.slack_unique_id = slack_unique_id
 
 
-def participate_offline_meeting(event: SlackGeneralEvent, say: Say, web_client: WebClient):
+def main(event: SlackGeneralEvent, say: Say, web_client: WebClient, gs_client: GoogleSpreadsheetClient):
     if not is_target_emoji(event, web_client):
         return
 
@@ -39,7 +39,6 @@ def participate_offline_meeting(event: SlackGeneralEvent, say: Say, web_client: 
         say(text=f"오거나이저가 :stop2: 이모지를 붙여놨기 때문에 <@{get_prop(event, 'user')}>의 요청을 들어줄 수가 없어.", thread_ts=get_prop(event, 'item', 'ts'))
         return
 
-    gs_client = google_spreadsheet_client.get_instance()
     event = EmojiAddedEvent(event['item']['ts'], event['item']['channel'], event['user'])
     member = find_member(gs_client, event.slack_unique_id)
     if member is None:
@@ -55,6 +54,11 @@ def participate_offline_meeting(event: SlackGeneralEvent, say: Say, web_client: 
 
     submit_form(gs_client, FORM_SPREADSHEET_ID, worksheet_id, member)
     say(text=f"<@{event.slack_unique_id}>, 등록 완료!", thread_ts=event.ts)
+
+
+def participate_offline_meeting(event: SlackGeneralEvent, say: Say, web_client: WebClient):
+    gs_client = google_spreadsheet_client.get_instance()
+    main(event, say, web_client, gs_client)
 
 
 def is_target_emoji(event: SlackGeneralEvent, web_client: WebClient) -> bool:

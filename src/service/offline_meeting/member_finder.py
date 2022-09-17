@@ -9,7 +9,8 @@ MEMBERS_INFO_WORKSHEET_ID = int(os.environ.get('MEMBERS_INFO_WORKSHEET_ID'))
 
 
 def find_member(gs_client: GoogleSpreadsheetClient, slack_unique_id: str) -> Union[Member, None]:
-    found_member = fetch_members(gs_client).get(slack_unique_id)
+    members = fetch_members(gs_client)
+    found_member = members.get(slack_unique_id)
     if found_member is None:
         return None
     else:
