@@ -1,8 +1,8 @@
 from unittest.mock import patch
 
-from tests.util import add_dummy_envs
+from tests.util import enable_dummy_envs
 
-add_dummy_envs()
+enable_dummy_envs()
 
 from service.offline_meeting.offline_meeting_participation_service import get_worksheet_id
 
@@ -31,4 +31,3 @@ def test_true_when_worksheet_id_not_found_in_thread():
         assert is_new is True
         assert worksheet_id == "67890"
         assert mock_gs_client.create_worksheet.call_count == 1
-

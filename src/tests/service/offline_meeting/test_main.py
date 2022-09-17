@@ -1,11 +1,11 @@
-import unittest
-from unittest.mock import patch
+from unittest.mock import patch, Mock
 
-from tests.util import add_dummy_envs
+from service.offline_meeting.action_commander import ActionCommand
+from tests.util import enable_dummy_envs
 
-add_dummy_envs()
+enable_dummy_envs()
 
-from service.offline_meeting import Member
+from service.offline_meeting.member import Member
 from service.offline_meeting.offline_meeting_participation_service import main
 
 
@@ -25,20 +25,22 @@ def _dummy_member():
 
 def test_success():
     with patch("implementation.google_spreadsheet_client.GoogleSpreadsheetClient") as mock_gs_client, \
-            patch('slack_sdk.web.WebClient') as mock_web_client, \
-            patch('slack_bolt.Say') as mock_say, \
-            patch('service.offline_meeting.offline_meeting_participation_service.find_member') as mock_find_member:
-        mock_web_client.conversations_replies.return_value = {'messages': [{'user': 'U1234567890'}]}
-        mock_find_member.return_value = _dummy_member()
+            patch('implementation.slack_client.SlackClient') as mock_slack_client, \
+            patch('service.offline_meeting.action_commander.ActionCommander') as mock_action_commander:
+        mock_slack_client.say.return_value = None
+        mock_slack_client.conversations_replies.return_value = {'messages': [{'user': 'U1234567890'}]}
         mock_gs_client.create_worksheet.return_value = '123456789'
         mock_gs_client.append_row.return_value = None
-        mock_say.return_value = None
+        mock_action_commander.decide.return_value = ActionCommand.PARTICIPATE
+        mock_member_finder = Mock()
+        mock_member_finder.find.return_value = _dummy_member()
 
         event = _dummy_event()
-        main(event, mock_say, mock_web_client, mock_gs_client)
+        main(event, mock_action_commander, mock_slack_client, mock_gs_client, mock_member_finder)
 
-        mock_find_member.assert_called_once()
+        mock_action_commander.decide.assert_called_once()
         mock_gs_client.create_worksheet.assert_called_once()
         mock_gs_client.append_row.assert_called_once()
-        assert mock_web_client.conversations_replies.call_count == 2
-        assert mock_say.call_count == 2
+        assert mock_slack_client.conversations_replies.call_count == 1
+        assert mock_slack_client.tell.call_count == 2
+        mock_member_finder.find.assert_called_once()

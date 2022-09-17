@@ -1,15 +1,15 @@
 import os
 import re
-from typing import Union, Tuple, List
+from typing import Union, Tuple
 
 from slack_bolt import Say
 from slack_sdk import WebClient
 
-from exception import RuntimeException
-from implementation import google_spreadsheet_client, GoogleSpreadsheetClient
+from implementation import google_spreadsheet_client, GoogleSpreadsheetClient, SlackClient
 from util import get_prop, SlackGeneralEvent
+from .action_commander import ActionCommander, TargetEvent, RejectCondition, ActionCommand
 from .member import Member
-from .member_finder import find_member, validate_member_info
+from .member_finder import MemberFinder
 
 ANNOUNCEMENT_CHANNEL_ID = os.environ.get('ANNOUNCEMENT_CHANNEL_ID')
 ANNA_ID = os.environ.get('ANNA_ID')
@@ -21,47 +21,46 @@ FORM_SPREADSHEET_ID = os.environ.get('FORM_SPREADSHEET_ID')
 
 
 class EmojiAddedEvent:
-    """
-    data class
-    """
-
     def __init__(self, ts: str, channel: str, slack_unique_id: str):
         self.ts = ts
         self.channel = channel
         self.slack_unique_id = slack_unique_id
 
 
-def main(event: SlackGeneralEvent, say: Say, web_client: WebClient, gs_client: GoogleSpreadsheetClient):
-    if not is_target_emoji(event, web_client):
+def main(event: SlackGeneralEvent, action_commander: ActionCommander, slack_client: SlackClient, gs_client: GoogleSpreadsheetClient, member_finder: MemberFinder):
+    target_event = TargetEvent(SUBMIT_FORM_EMOJI, ANNOUNCEMENT_CHANNEL_ID)
+    reject_condition = RejectCondition(SUSPEND_FORM_EMOJI, ORGANIZER_ID)
+
+    command = action_commander.decide(target_event, reject_condition)
+    if command == ActionCommand.NOOP:
+        return
+    elif command == ActionCommand.REJECT:
+        slack_client.tell(msg=f"오거나이저가 :stop2: 이모지를 붙여놨기 때문에 <@{get_prop(event, 'user')}>의 요청을 들어줄 수가 없어.", ts=get_prop(event, 'item', 'ts'))
         return
 
-    if organizer_put_suspend_emoji(event, web_client):
-        say(text=f"오거나이저가 :stop2: 이모지를 붙여놨기 때문에 <@{get_prop(event, 'user')}>의 요청을 들어줄 수가 없어.", thread_ts=get_prop(event, 'item', 'ts'))
-        return
+    eae = EmojiAddedEvent(event['item']['ts'], event['item']['channel'], event['user'])
 
-    event = EmojiAddedEvent(event['item']['ts'], event['item']['channel'], event['user'])
-    member = find_member(gs_client, event.slack_unique_id)
-    if member is None:
-        raise RuntimeException(f"멤버 정보를 찾지 못했어요. (slack_unique_id: {event.slack_unique_id})", thread_ts=event.ts)
-    elif not validate_member_info(member):
-        raise RuntimeException(f"멤버 정보가 완벽하지 않아요. (slack_unique_id: {event.slack_unique_id}, member_info: {member})",
-                               thread_ts=event.ts)
+    member = member_finder.find(eae.slack_unique_id)
 
-    is_new, worksheet_id = get_worksheet_id(web_client, gs_client, event.ts, event.channel)
+    is_new, worksheet_id = get_worksheet_id(slack_client, gs_client, eae.ts, eae.channel)
     if is_new:
         url = gs_client.get_url(FORM_SPREADSHEET_ID, worksheet_id)
-        say(text=f"새로운 시트를 만들었어! <{url}|구글스프레드 시트>", thread_ts=event.ts)
+        slack_client.tell(msg=f"새로운 시트를 만들었어! <{url}|구글스프레드 시트>", thread_ts=eae.ts)
 
     submit_form(gs_client, FORM_SPREADSHEET_ID, worksheet_id, member)
-    say(text=f"<@{event.slack_unique_id}>, 등록 완료!", thread_ts=event.ts)
+    slack_client.tell(msg=f"<@{eae.slack_unique_id}>, 등록 완료!", thread_ts=eae.ts)
 
 
 def participate_offline_meeting(event: SlackGeneralEvent, say: Say, web_client: WebClient):
+    slack_client = SlackClient(say, web_client)
+    action_commander = ActionCommander(event, slack_client)
     gs_client = google_spreadsheet_client.get_instance()
-    main(event, say, web_client, gs_client)
+    member_finder = MemberFinder(gs_client)
+
+    main(event, action_commander, slack_client, member_finder)
 
 
-def is_target_emoji(event: SlackGeneralEvent, web_client: WebClient) -> bool:
+def is_target_event(event: SlackGeneralEvent, slack_client: SlackClient) -> bool:
     if get_prop(event, 'type') != 'reaction_added':
         return False
     elif get_prop(event, 'reaction') != SUBMIT_FORM_EMOJI:
@@ -74,36 +73,16 @@ def is_target_emoji(event: SlackGeneralEvent, web_client: WebClient) -> bool:
         return False
     elif get_prop(event, 'item', 'channel') != ANNOUNCEMENT_CHANNEL_ID:
         return False
-    elif is_reply_in_thread(web_client, get_prop(event, 'item', 'ts'), get_prop(event, 'item', 'channel')):
+    elif is_reply_in_thread(slack_client, get_prop(event, 'item', 'ts'), get_prop(event, 'item', 'channel')):
         return False
     return True
 
 
-def organizer_put_suspend_emoji(event: SlackGeneralEvent, web_client: WebClient) -> bool:
-    emoji_with_users_list = get_emojis_on_message(event, web_client)
-
-    for emoji_with_users in emoji_with_users_list:
-        if emoji_with_users['name'] == SUSPEND_FORM_EMOJI and ORGANIZER_ID in emoji_with_users['users']:
-            return True
-
-    return False
-
-
-def get_emojis_on_message(event, web_client):
-    resp = web_client.reactions_get(
-        channel=get_prop(event, 'item', 'channel'),
-        timestamp=get_prop(event, 'item', 'ts'),
-        full=True
-    )
-    emoji_with_users_list: List[object] = get_prop(resp, 'message', 'reactions')
-    return emoji_with_users_list
-
-
-def is_reply_in_thread(web_client: WebClient, ts: str, channel: str):
+def is_reply_in_thread(slack_client: SlackClient, ts: str, channel: str):
     # [FIXME] default 값이 해당 쓰레드의 메시지 1000 개를 가져오는 것인데,
     #     혹시라도 쓰레드의 댓글이 첫 글 포함 1000개가 넘을경우 먼저 작성된 1000개를 가져올지, 나중에 작성된 1000개를 가져올지에 대해 체크해보지 않음.
     #     만약 후자일 경우 이 코드가 쓰레드의 제일 첫번째 메시지를 가져올 수 있도록 수정해야 함
-    resp = web_client.conversations_replies(ts=ts, channel=channel)
+    resp = slack_client.conversations_replies(ts=ts, channel=channel)
     first_message = resp['messages'][0]
 
     if 'thread_ts' not in first_message:  # 아직 댓글이 하나도 없음
@@ -114,12 +93,12 @@ def is_reply_in_thread(web_client: WebClient, ts: str, channel: str):
         return True
 
 
-def get_worksheet_id(web_client: WebClient, gs_client: GoogleSpreadsheetClient, ts: str, channel: str) \
+def get_worksheet_id(slack_client: SlackClient, gs_client: GoogleSpreadsheetClient, ts: str, channel: str) \
         -> Tuple[bool, int]:
     """
     :return: (is_new, worksheet_id)
     """
-    worksheet_id = find_worksheet_id_in_thread(web_client, ts, channel)
+    worksheet_id = find_worksheet_id_in_thread(slack_client, ts, channel)
 
     if worksheet_id is not None:
         is_new = False
@@ -134,8 +113,8 @@ def get_worksheet_id(web_client: WebClient, gs_client: GoogleSpreadsheetClient, 
     return is_new, worksheet_id
 
 
-def find_worksheet_id_in_thread(web_client: WebClient, ts: str, channel: str) -> Union[int, None]:
-    response = web_client.conversations_replies(ts=ts, channel=channel)
+def find_worksheet_id_in_thread(slack_client: SlackClient, ts: str, channel: str) -> Union[int, None]:
+    response = slack_client.conversations_replies(ts=ts, channel=channel)
     spreadsheet_url_pattern = r'https:\/\/docs.google.com\/spreadsheets\/d\/.*\/edit#gid=(\d*)'
 
     for message in response['messages']:

@@ -1,5 +1,5 @@
 class RuntimeException(Exception):
-    def __init__(self, message: str, thread_ts: str = None):
+    def __init__(self, message: str, target_ts: str = None):
         super()
         self.message = message
-        self.thread_ts = thread_ts
+        self.target_ts = target_ts
