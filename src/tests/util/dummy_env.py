@@ -18,3 +18,5 @@ def enable_dummy_envs():
     os.environ['SUBMIT_FORM_EMOJI'] = 'submit_form_emoji'
     os.environ['FORM_SPREADSHEET_ID'] = 'xxx'
     os.environ['SUSPEND_FORM_EMOJI'] = 'reject_form_emoji'
+    os.environ['SLACK_BOT_TOKEN'] = 'token1234'
+    os.environ['SLACK_SIGNING_SECRET'] = 'secret1234'

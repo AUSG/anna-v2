@@ -5,15 +5,10 @@ from typing import List
 from implementation.ausg_db import AUSG_DB
 from implementation.slack_client import Message
 from slack_bolt import App
+
 import os
-
-app = App(
-    token=os.environ.get("SLACK_BOT_TOKEN"),
-    signing_secret=os.environ.get("SLACK_SIGNING_SECRET")
-)
-
-
 def background_tracking_job():
+
     db = AUSG_DB()
     app = _create_client()
     
