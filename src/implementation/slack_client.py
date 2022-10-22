@@ -50,7 +50,8 @@ class SlackClient:
         )
 
         emojis = []
-        for reaction in resp["message"]["reactions"]:
+        reactions = resp["message"]["reactions"] if resp["message"] is not None else []
+        for reaction in reactions:
             for user in reaction["users"]:
                 emojis.append(Emoji(user, reaction["name"]))
 
