@@ -64,3 +64,7 @@ def init_env():
 
 def _get_root():
     return os.path.join(os.path.dirname(__file__), '..', '..')
+
+def is_local():
+    return os.environ["LOCAL"] is not None
+

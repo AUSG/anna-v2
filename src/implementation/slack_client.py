@@ -39,7 +39,7 @@ class SlackClient:
         messages = [Message(msg['ts'], channel, msg['user'], msg['text']) for msg in resp["messages"]]
         return messages
 
-    def get_emojis(self, channel: str, ts: str):
+    def get_emojis(self, channel: str, ts: str) -> List[Emoji]:
         """
         res: https://api.slack.com/methods/reactions.get#examples
         """
