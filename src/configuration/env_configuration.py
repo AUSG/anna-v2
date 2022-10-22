@@ -66,5 +66,5 @@ def _get_root():
     return os.path.join(os.path.dirname(__file__), '..', '..')
 
 def is_local():
-    return os.environ["LOCAL"] is not None
+    return os.environ.get("LOCAL", None) is not None
 
