@@ -1,5 +1,5 @@
     
-import pickle
+import json
 from pprint import pprint
 from typing import List
 from implementation.ausg_db import AUSG_DB
@@ -17,8 +17,7 @@ def background_tracking_job():
         (channel, ts) = thread
         pprint("new thread: %s, %s" % (channel, ts))
         resp = _get_replies(app, ts=ts, channel=channel)
-        serialized_obj = pickle.dumps(resp, protocol=3)
-        db.update_tracking_thread(channel, ts, serialized_obj)
+        db.update_tracking_thread(channel, ts, json.dumps(resp))
 
 
 def _create_client():
