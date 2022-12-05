@@ -1,8 +1,11 @@
+import logging
 import os
 from dataclasses import dataclass
 
 from slack_bolt import Say
 from slack_sdk import WebClient
+
+from expiringdict import ExpiringDict
 
 from implementation import GoogleSpreadsheetClient, SlackClient
 from util import get_prop, SlackGeneralEvent
@@ -18,6 +21,7 @@ SUSPEND_FORM_EMOJI = os.environ.get('SUSPEND_FORM_EMOJI')
 MEMBERS_INFO_WORKSHEET_ID = int(os.environ.get('MEMBERS_INFO_WORKSHEET_ID'))
 FORM_SPREADSHEET_ID = os.environ.get('FORM_SPREADSHEET_ID')
 
+ONE_WEEK = 60 * 60 * 24 * 7
 
 @dataclass
 class EmojiAddedEvent:
@@ -45,6 +49,7 @@ class OfflineMeetingParticipationService:
         self.gs_client = gs_client
         self.member_finder = member_finder
         self.worksheet_maker = worksheet_maker
+        self.is_exist_worksheet_cache = ExpiringDict(max_len=100, max_age_seconds=ONE_WEEK)
 
     def run(self):
         if not self._is_target_event():
@@ -73,8 +78,20 @@ class OfflineMeetingParticipationService:
         return member
 
     def _participate(self, member):
-        is_new, worksheet_id = self.worksheet_maker.find_or_create_worksheet(ANNA_ID, self.event.ts, self.event.channel, FORM_SPREADSHEET_ID)
-        self.gs_client.append_row(FORM_SPREADSHEET_ID, worksheet_id, member.to_list())
-        if is_new:
-            self.slack_client.tell(msg=f"새로운 시트를 만들었어! <{self.gs_client.get_url(FORM_SPREADSHEET_ID, worksheet_id)}|구글스프레드 시트>", ts=self.event.ts)
-        self.slack_client.tell(msg=f"<@{self.event.user}>, 등록 완료!", ts=self.event.ts)
+        try:
+            is_new, worksheet_id = self.worksheet_maker.find_or_create_worksheet(
+                self.event.ts,
+                self.event.channel,
+                FORM_SPREADSHEET_ID,
+            )
+
+            self.gs_client.append_row(FORM_SPREADSHEET_ID, worksheet_id, member.to_list())
+            if is_new and not self.is_exist_worksheet_cache[worksheet_id]:
+                self.slack_client.tell(msg=f"새로운 시트를 만들었어! <{self.gs_client.get_url(FORM_SPREADSHEET_ID, worksheet_id)}|구글스프레드 시트>", ts=self.event.ts)
+
+                self.is_exist_worksheet_cache[worksheet_id] = True
+
+            self.slack_client.tell(msg=f"<@{self.event.user}>, 등록 완료!", ts=self.event.ts)
+        except Exception as e:
+            logging.error("fail OfflineMeetingParticipationService._participate()")
+            raise e
