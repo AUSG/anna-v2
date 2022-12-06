@@ -23,6 +23,7 @@ FORM_SPREADSHEET_ID = os.environ.get('FORM_SPREADSHEET_ID')
 ONE_WEEK = 60 * 60 * 24 * 7
 WORKSHEET_ID_CACHE = ExpiringDict(max_len=100, max_age_seconds=ONE_WEEK)
 
+
 @dataclass
 class EmojiAddedEvent:
     ts: str
