@@ -85,6 +85,7 @@ class OfflineMeetingParticipationService:
 
     def _participate(self, member):
         try:
+            print(self.event)
             is_new, worksheet_id = self.worksheet_maker.find_or_create_worksheet(
                 self.event.ts,
                 self.event.channel,
@@ -92,12 +93,12 @@ class OfflineMeetingParticipationService:
             )
 
             self.gs_client.append_row(FORM_SPREADSHEET_ID, worksheet_id, member.to_list())
-            if is_new and not self.is_exist_worksheet_cache.get(worksheet_id):
+            if is_new and not self.is_exist_worksheet_cache.get(self.event.channel):
                 self.slack_client.tell(
                     msg=f"새로운 시트를 만들었어! <{self.gs_client.get_url(FORM_SPREADSHEET_ID, worksheet_id)}|구글스프레드 시트>",
                     ts=self.event.ts)
 
-                self.is_exist_worksheet_cache[worksheet_id] = True
+                self.is_exist_worksheet_cache[self.event.channel] = True
 
             self.slack_client.tell(msg=f"<@{self.event.user}>, 등록 완료!", ts=self.event.ts)
 
