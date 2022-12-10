@@ -1,10 +1,11 @@
 from unittest.mock import patch, Mock
-
-from service.offline_meeting.action_commander import ActionCommand
 from tests.util import enable_dummy_envs
 
 enable_dummy_envs()
 
+from service.offline_meeting.action_commander import ActionCommand
+
+from expiringdict import ExpiringDict
 from service.offline_meeting.member import Member
 from service.offline_meeting.offline_meeting_participation_service import OfflineMeetingParticipationService
 
@@ -36,7 +37,9 @@ def test_success():
         mock_worksheet_maker.find_or_create_worksheet.return_value = True, 12345
 
         event = _dummy_event()
-        sut = OfflineMeetingParticipationService(event, mock_action_commander, mock_slack_client, mock_gs_client, mock_member_finder, mock_worksheet_maker)
+        sut = OfflineMeetingParticipationService(event, mock_action_commander, mock_slack_client, mock_gs_client,
+                                                 mock_member_finder, mock_worksheet_maker,
+                                                 ExpiringDict(max_len=100, max_age_seconds=60))
         sut.run()
 
         mock_action_commander.decide.assert_called_once()
