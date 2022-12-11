@@ -12,6 +12,42 @@ class MessageSentEvent:
         self.ts = ts
 
 
+def make_question(event):
+    """
+    Returns:
+        keyword, ts
+    """
+    event_type = get_prop(event, 'type')
+    ts = get_prop(event, 'thread_ts') or get_prop(event, 'ts')
+
+    if event_type != 'message' or ts is None:
+        return None, None
+
+    return find_keyword('!', get_prop(event, 'text')), ts
+
+
+def make_dictionary():
+    dictionary = {'wifi': '센터필드의 와이파이를 알려줄게. 이름은 `Guest`, 비밀번호는 `BrokenWires@@2019`야!'}
+    return dictionary
+
+
+def find_answer(dictionary, keyword):
+    return None if keyword is None else dictionary.get(keyword, None)
+
+
+def tell_answer(slack_client, text, ts):
+    if text is None or ts is None:
+        return
+    slack_client.tell(text=text, thread_ts=ts)
+
+
+def reply_to_question_v2(event, slack_client):
+    keyword, ts = make_question(event)
+    dictionary = make_dictionary()
+    answer = find_answer(dictionary, keyword)
+    tell_answer(slack_client, answer, ts)
+
+
 def reply_to_question(event: SlackGeneralEvent, say: Say, _client: WebClient):
     if not is_message_sent_event(event):
         return
