@@ -1,4 +1,5 @@
 import logging
+import os
 import traceback
 from typing import List, Callable, cast
 
@@ -9,6 +10,8 @@ from exception import RuntimeException
 from util import get_prop, SlackGeneralEvent
 
 logger = logging.getLogger(__name__)
+
+ADMIN_CHANNEL = os.environ.get('ADMIN_CHANNEL')
 
 _SERVICES = []
 
@@ -29,8 +32,9 @@ def _call_services(ack: Ack, event: SlackGeneralEvent, say: Say, web_client: Web
             service(event, say, web_client)
         except BaseException as ex:
             tb = traceback.format_exc()
-            logger.error(f"{ex} ({tb})")
-            say(text=f"예상치 못한 에러가 발생했어! ({ex} --> {tb})", thread_ts=_get_ts(ex, event))
+            err_msg = f"예상치 못한 에러가 발생했어!\n - thread_ts={_get_ts(ex, event)})\n - ex={ex}\n - tb={tb})"
+            logger.error(err_msg)
+            say(text=err_msg, channel=ADMIN_CHANNEL)
 
 
 def listen_event_with_services(app: App, services: List[Callable]):
