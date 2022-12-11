@@ -3,13 +3,8 @@ from typing import Union
 from slack_bolt import Say
 from slack_sdk import WebClient
 
+from implementation import SlackClient
 from util import get_prop, SlackGeneralEvent
-
-
-class MessageSentEvent:
-    def __init__(self, message: str, ts: str):
-        self.message = message
-        self.ts = ts
 
 
 def make_question(event):
@@ -48,31 +43,6 @@ def reply_to_question_v2(event, slack_client):
     tell_answer(slack_client, answer, ts)
 
 
-def reply_to_question(event: SlackGeneralEvent, say: Say, _client: WebClient):
-    if not is_message_sent_event(event):
-        return
-
-    text = get_prop(event, 'text')
-    thread_ts = get_prop(event, 'thread_ts') or get_prop(event, 'ts')
-
-    keyword = find_keyword('!', text)
-    reply = find_reply(keyword)
-
-    if reply is not None:
-        say(text=reply, thread_ts=thread_ts)
-
-
-def is_message_sent_event(event: SlackGeneralEvent):
-    if get_prop(event, 'subtype') is not None:  # 'message_sent to channel' == non-subtype
-        return False
-    elif get_prop(event, 'type') != 'message':
-        return False
-    elif (get_prop(event, 'thread_ts') or get_prop(event, 'ts')) is None:
-        return False
-
-    return True
-
-
 def find_keyword(keyword_prefix: str, text: str) -> Union[str, None]:
     assert len(keyword_prefix) > 0
 
@@ -90,6 +60,5 @@ def find_keyword(keyword_prefix: str, text: str) -> Union[str, None]:
     return keyword.rstrip()
 
 
-def find_reply(keyword: str) -> Union[str, None]:
-    dictionary = {'wifi': '센터필드의 와이파이를 알려줄게. 이름은 `Guest`, 비밀번호는 `BrokenWires@@2019`야!'}
-    return dictionary.get(keyword, None)
+def reply_to_question(event: SlackGeneralEvent, say: Say, client: WebClient):  # TODO: 시그니처 일괄 변경: say/client -> SlackClient (모든 services 한번에 바꿔야 함)
+    reply_to_question_v2(event, SlackClient(say, client))
