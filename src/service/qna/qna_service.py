@@ -9,6 +9,11 @@ from util import get_prop, SlackGeneralEvent
 
 def _make_question(event):
     """
+    Note:
+        thread_ts, ts 가 둘 다 제공되었다면 thread_ts 가 우선적으로 적용된다.
+
+        적절한 question을 추출하지 못한다면 (None, None)을 리턴한다.
+
     Returns:
         keyword, ts
     """
@@ -18,7 +23,11 @@ def _make_question(event):
     if event_type != 'message' or ts is None:
         return None, None
 
-    return _find_keyword('!', get_prop(event, 'text')), ts
+    keyword = _find_keyword('!', get_prop(event, 'text'))
+    if keyword and ts:
+        return keyword, ts
+    else:
+        return None, None
 
 
 def _find_keyword(keyword_prefix, text):
