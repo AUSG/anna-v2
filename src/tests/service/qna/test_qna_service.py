@@ -114,7 +114,7 @@ class Test__find_keyword:
 
 class Test__reply_to_question_v2:
     def success_with_perfect_condition(self):
-        event = {'type': 'message', 'thread_ts': '123.45', 'text': '!wifi'}
+        some_valid_event = {'type': 'message', 'thread_ts': '123.45', 'text': '!wifi'}
         slack_client = MockSlackClient()
         _reply_to_question_v2(event, slack_client)
         assert slack_client.is_tell_called is True
