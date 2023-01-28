@@ -86,26 +86,23 @@ class OfflineMeetingParticipationService:
         return member
 
     def _participate(self, member):
-        try:
-            # 워크시트 생성 동시성 이슈를 제어하기위해 thread lock
-            self.participate_single_lock.acquire()
+        # 워크시트 생성 동시성 이슈를 제어하기위해 thread lock
+        with self.participate_single_lock:
+            try:
+                is_new, worksheet_id = self.worksheet_maker.find_or_create_worksheet(
+                    self.event.ts,
+                    self.event.channel,
+                    FORM_SPREADSHEET_ID,
+                )
 
-            is_new, worksheet_id = self.worksheet_maker.find_or_create_worksheet(
-                self.event.ts,
-                self.event.channel,
-                FORM_SPREADSHEET_ID,
-            )
+                self.gs_client.append_row(FORM_SPREADSHEET_ID, worksheet_id, member.to_list())
+                if is_new:
+                    self.slack_client.tell(
+                        msg=f"새로운 시트를 만들었어! <{self.gs_client.get_url(FORM_SPREADSHEET_ID, worksheet_id)}|구글스프레드 시트>",
+                        ts=self.event.ts)
 
-            self.gs_client.append_row(FORM_SPREADSHEET_ID, worksheet_id, member.to_list())
-            if is_new:
-                self.slack_client.tell(
-                    msg=f"새로운 시트를 만들었어! <{self.gs_client.get_url(FORM_SPREADSHEET_ID, worksheet_id)}|구글스프레드 시트>",
-                    ts=self.event.ts)
+                self.slack_client.tell(msg=f"<@{self.event.user}>, 등록 완료!", ts=self.event.ts)
 
-            self.slack_client.tell(msg=f"<@{self.event.user}>, 등록 완료!", ts=self.event.ts)
-
-        except Exception as e:
-            logging.error("fail OfflineMeetingParticipationService._participate()")
-            raise e
-        finally:
-            self.participate_single_lock.release()
+            except Exception as e:
+                logging.error("fail OfflineMeetingParticipationService._participate()")
+                raise e
