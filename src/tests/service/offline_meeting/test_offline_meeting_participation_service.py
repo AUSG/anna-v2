@@ -34,8 +34,8 @@ class OfflineMeetingParticipationServiceTest(TestCase):
         mock_slack_client: SlackClient = Mock()
         mock_gs_client: GoogleSpreadsheetClient = Mock()
 
-        # 비동기적으로 시트를 생성하는 상황을 연출하기 위해 2초 sleep하게 함
-        time_for_sleep = 2
+        # 비동기적으로 시트를 생성하는 상황을 연출하기 위해 sleep하게 함
+        time_for_sleep = 1
         mock_worksheet_maker: WorksheetMaker = MockWorksheetMakerWithTimeSleep(
             slack_client=mock_slack_client,
             gs_client=mock_gs_client,
@@ -60,16 +60,64 @@ class OfflineMeetingParticipationServiceTest(TestCase):
         start_time = time.time()
 
         threads = []
-        t1 = threading.Thread(target=service._participate, args=(some_valid_member,))
-        t1.start()
-        threads.append(t1)
 
-        t2 = threading.Thread(target=service._participate, args=(some_valid_member,))
-        t2.start()
-        threads.append(t2)
+        for _ in range(2):
+            task_thread = threading.Thread(target=service._participate, args=(some_valid_member,))
+            task_thread.start()
+            threads.append(task_thread)
 
         for t in threads:
             t.join()
 
         # 각 스레드가 작업을 마쳤을 때 위에서 MockWorksheetMakerWithTimeSleep에 설정한 timeout의 2배라면 thread lock 잘 되는 것으로 판단
-        assert time_for_sleep * len(threads) <= time.time() - start_time
+        assert_process_time = time_for_sleep * len(threads) <= time.time() - start_time
+        assert assert_process_time is True
+
+    def test_sleep_apply_independently_to_each_thread(self):
+        """
+        thread_single_lock을 mocking 하여 실제로 lock이 걸리지 않도록해서
+        sleep이 각 thread에 독립적으로 적용되는지 확인하기 위한 테스트
+        이게 만족되면 sleep을 활용한 동시성 테스트가 성립됨
+        """
+        channel_id = "channel_id"
+        mock_slack_client: SlackClient = Mock()
+        mock_gs_client: GoogleSpreadsheetClient = Mock()
+
+        # 비동기적으로 시트를 생성하는 상황을 연출하기 위해 sleep하게 함
+        time_for_sleep = 1
+        mock_worksheet_maker: WorksheetMaker = MockWorksheetMakerWithTimeSleep(
+            slack_client=mock_slack_client,
+            gs_client=mock_gs_client,
+            time_for_sleep=time_for_sleep,
+        )
+
+        raw_event = {
+            "item": {"ts": "ts", "channel": channel_id},
+        }
+
+        participate_no_lock: threading.Lock = Mock()
+
+        service = OfflineMeetingParticipationService(
+            raw_event=raw_event, action_commander=Mock(), slack_client=mock_slack_client,
+            gs_client=mock_gs_client, member_finder=Mock(), worksheet_maker=mock_worksheet_maker,
+            participate_single_lock=participate_no_lock,
+        )
+
+        some_valid_member = Member(email="email", kor_name="kor_name", eng_name="eng_name", phone="phone",
+                                   school_name_or_company_name="school_name_or_company_name")
+
+        start_time = time.time()
+
+        threads = []
+
+        for _ in range(2):
+            task_thread = threading.Thread(target=service._participate, args=(some_valid_member,))
+            task_thread.start()
+            threads.append(task_thread)
+
+        for t in threads:
+            t.join()
+
+        # 각 스레드가 작업을 마쳤을 때 위에서 MockWorksheetMakerWithTimeSleep에 설정한 timeout의 2배라면 thread lock 잘 되는 것으로 판단
+        assert_process_time = time_for_sleep * len(threads) <= time.time() - start_time
+        assert assert_process_time is False
