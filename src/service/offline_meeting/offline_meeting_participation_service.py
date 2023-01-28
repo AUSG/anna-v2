@@ -1,11 +1,11 @@
 import logging
 import os
+import threading
 from dataclasses import dataclass
 
 from slack_bolt import Say
 from slack_sdk import WebClient
 
-from expiringdict import ExpiringDict
 from implementation import GoogleSpreadsheetClient, SlackClient
 from util import get_prop, SlackGeneralEvent
 from .action_commander import ActionCommander, TargetEvent, RejectCondition, ActionCommand
@@ -21,7 +21,8 @@ MEMBERS_INFO_WORKSHEET_ID = int(os.environ.get('MEMBERS_INFO_WORKSHEET_ID'))
 FORM_SPREADSHEET_ID = os.environ.get('FORM_SPREADSHEET_ID')
 
 ONE_WEEK = 60 * 60 * 24 * 7
-WORKSHEET_ID_CACHE = ExpiringDict(max_len=100, max_age_seconds=ONE_WEEK)
+
+PARTICIPATE_SINGLE_LOCK = threading.Lock()
 
 
 @dataclass
@@ -38,15 +39,14 @@ def participate_offline_meeting(event: SlackGeneralEvent, say: Say, web_client: 
     member_finder = MemberFinder(gs_client)
     worksheet_maker = WorksheetMaker(slack_client, gs_client)
     service = OfflineMeetingParticipationService(event, action_commander, slack_client, gs_client, member_finder,
-                                                 worksheet_maker, WORKSHEET_ID_CACHE)
+                                                 worksheet_maker)
 
     service.run()
 
 
 class OfflineMeetingParticipationService:
     def __init__(self, raw_event: SlackGeneralEvent, action_commander: ActionCommander, slack_client: SlackClient,
-                 gs_client: GoogleSpreadsheetClient, member_finder: MemberFinder, worksheet_maker: WorksheetMaker,
-                 is_exist_worksheet_cache: ExpiringDict):
+                 gs_client: GoogleSpreadsheetClient, member_finder: MemberFinder, worksheet_maker: WorksheetMaker):
         self.event = EmojiAddedEvent(get_prop(raw_event, 'item', 'ts'), get_prop(raw_event, 'item', 'channel'),
                                      get_prop(raw_event, 'user'))
         self.action_commander = action_commander
@@ -54,7 +54,6 @@ class OfflineMeetingParticipationService:
         self.gs_client = gs_client
         self.member_finder = member_finder
         self.worksheet_maker = worksheet_maker
-        self.is_exist_worksheet_cache = is_exist_worksheet_cache
 
     def run(self):
         if not self._is_target_event():
@@ -85,7 +84,9 @@ class OfflineMeetingParticipationService:
 
     def _participate(self, member):
         try:
-            print(self.event)
+            # 워크시트 생성 동시성 이슈를 제어하기위해 thread lock
+            PARTICIPATE_SINGLE_LOCK.acquire()
+
             is_new, worksheet_id = self.worksheet_maker.find_or_create_worksheet(
                 self.event.ts,
                 self.event.channel,
@@ -93,15 +94,15 @@ class OfflineMeetingParticipationService:
             )
 
             self.gs_client.append_row(FORM_SPREADSHEET_ID, worksheet_id, member.to_list())
-            if is_new and not self.is_exist_worksheet_cache.get(self.event.channel):
+            if is_new:
                 self.slack_client.tell(
                     msg=f"새로운 시트를 만들었어! <{self.gs_client.get_url(FORM_SPREADSHEET_ID, worksheet_id)}|구글스프레드 시트>",
                     ts=self.event.ts)
-
-                self.is_exist_worksheet_cache[self.event.channel] = True
 
             self.slack_client.tell(msg=f"<@{self.event.user}>, 등록 완료!", ts=self.event.ts)
 
         except Exception as e:
             logging.error("fail OfflineMeetingParticipationService._participate()")
             raise e
+        finally:
+            PARTICIPATE_SINGLE_LOCK.release()
