@@ -1,6 +1,6 @@
 import logging
 import os
-import threading
+from threading import Lock
 from dataclasses import dataclass
 
 from slack_bolt import Say
@@ -22,7 +22,7 @@ FORM_SPREADSHEET_ID = os.environ.get('FORM_SPREADSHEET_ID')
 
 ONE_WEEK = 60 * 60 * 24 * 7
 
-PARTICIPATE_SINGLE_LOCK = threading.Lock()
+PARTICIPATE_SINGLE_LOCK: Lock = Lock()
 
 
 @dataclass
@@ -39,14 +39,16 @@ def participate_offline_meeting(event: SlackGeneralEvent, say: Say, web_client: 
     member_finder = MemberFinder(gs_client)
     worksheet_maker = WorksheetMaker(slack_client, gs_client)
     service = OfflineMeetingParticipationService(event, action_commander, slack_client, gs_client, member_finder,
-                                                 worksheet_maker)
+                                                 worksheet_maker,
+                                                 PARTICIPATE_SINGLE_LOCK)
 
     service.run()
 
 
 class OfflineMeetingParticipationService:
     def __init__(self, raw_event: SlackGeneralEvent, action_commander: ActionCommander, slack_client: SlackClient,
-                 gs_client: GoogleSpreadsheetClient, member_finder: MemberFinder, worksheet_maker: WorksheetMaker):
+                 gs_client: GoogleSpreadsheetClient, member_finder: MemberFinder, worksheet_maker: WorksheetMaker,
+                 participate_single_lock: Lock):
         self.event = EmojiAddedEvent(get_prop(raw_event, 'item', 'ts'), get_prop(raw_event, 'item', 'channel'),
                                      get_prop(raw_event, 'user'))
         self.action_commander = action_commander
@@ -54,6 +56,7 @@ class OfflineMeetingParticipationService:
         self.gs_client = gs_client
         self.member_finder = member_finder
         self.worksheet_maker = worksheet_maker
+        self.participate_single_lock = participate_single_lock
 
     def run(self):
         if not self._is_target_event():
@@ -85,7 +88,7 @@ class OfflineMeetingParticipationService:
     def _participate(self, member):
         try:
             # 워크시트 생성 동시성 이슈를 제어하기위해 thread lock
-            PARTICIPATE_SINGLE_LOCK.acquire()
+            self.participate_single_lock.acquire()
 
             is_new, worksheet_id = self.worksheet_maker.find_or_create_worksheet(
                 self.event.ts,
@@ -105,4 +108,4 @@ class OfflineMeetingParticipationService:
             logging.error("fail OfflineMeetingParticipationService._participate()")
             raise e
         finally:
-            PARTICIPATE_SINGLE_LOCK.release()
+            self.participate_single_lock.release()

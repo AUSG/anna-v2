@@ -1,3 +1,4 @@
+import threading
 from unittest.mock import patch, Mock
 from tests.util import enable_dummy_envs
 
@@ -36,8 +37,11 @@ def test_success():
         mock_worksheet_maker.find_or_create_worksheet.return_value = True, 12345
 
         event = _dummy_event()
+        participate_single_lock: threading.Lock = threading.Lock()
+
         sut = OfflineMeetingParticipationService(event, mock_action_commander, mock_slack_client, mock_gs_client,
-                                                 mock_member_finder, mock_worksheet_maker)
+                                                 mock_member_finder, mock_worksheet_maker,
+                                                 participate_single_lock=participate_single_lock)
         sut.run()
 
         mock_action_commander.decide.assert_called_once()
