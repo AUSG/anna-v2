@@ -3,11 +3,12 @@ import re
 import logging
 from typing import Union, Optional
 
+from configuration import Configs
 from implementation import GoogleSpreadsheetClient, SlackClient
 
 logger = logging.getLogger(__name__)
 
-ANNA_ID = os.environ.get('ANNA_ID')
+ANNA_ID = Configs.ANNA_ID
 
 
 class WorksheetMaker:

@@ -1,70 +1,46 @@
-import logging
 import os
-
-from dotenv import load_dotenv
-
-from exception.runtime_exception import RuntimeException
-
-logger = logging.getLogger(__name__)
+from pydantic import BaseSettings
 
 
-def _check(env_name: str, keys, invalidated_envs):
-    if env_name not in keys:
-        invalidated_envs.append(env_name)
+## INFO: 공식문서에 따르면, 환경변수(`export A=B`)가 파일(`.env.XXX`)보다 우선순위가 높다.
+class Settings(BaseSettings):
+    # Slack bot API
+    SLACK_SIGNING_SECRET: str = None
+    SLACK_BOT_TOKEN: str = None
+
+    # Google spreasheet
+    ## GCP API secrets
+    GCP_type: str = None
+    GCP_project_id: str = None
+    GCP_private_key_id: str = None
+    GCP_private_key: str = None
+    GCP_client_email: str = None
+    GCP_client_id: str = None
+    GCP_auth_uri: str = None
+    GCP_token_uri: str = None
+    GCP_auth_provider_x509_cert_url: str = None
+    GCP_client_x509_cert_url: str = None
+    ## Spreadsheet info
+    FORM_SPREADSHEET_ID: str = None
+    MEMBERS_INFO_WORKSHEET_ID: int = None
+
+    # AUSG Slack channel info
+    ## channels
+    ADMIN_CHANNEL: str = None
+    ANNOUNCEMENT_CHANNEL_ID: str = None
+    ## Ids
+    ANNA_ID: str = None
+    ORGANIZER_ID: str = None
+    ## Emojis
+    SUBMIT_FORM_EMOJI: str = None
+    SUSPEND_FORM_EMOJI: str = None
+
+    # Development environment variables
+    LOCAL: bool = False
+
+    class Config:
+        env_file = 'env/.env.secret', 'env/.env.shared'
+        env_file_encoding = 'utf-8'
 
 
-def _validate():
-    env_names = [
-        'SLACK_BOT_TOKEN',
-        'SLACK_SIGNING_SECRET',
-        'GCP_type',
-        'GCP_project_id',
-        'GCP_private_key_id',
-        'GCP_private_key',
-        'GCP_client_email',
-        'GCP_client_id',
-        'GCP_auth_uri',
-        'GCP_token_uri',
-        'GCP_auth_provider_x509_cert_url',
-        'GCP_client_x509_cert_url',
-        'ANNOUNCEMENT_CHANNEL_ID',
-        'ANNA_ID',
-        'ORGANIZER_ID',
-        'SUBMIT_FORM_EMOJI',
-        'SUSPEND_FORM_EMOJI',
-        'ADMIN_CHANNEL',
-        'FORM_SPREADSHEET_ID',
-        'MEMBERS_INFO_WORKSHEET_ID'
-    ]
-
-    invalidated_envs = []
-    keys = os.environ.keys()
-
-    # exists check
-    for env_name in env_names:
-        _check(env_name, keys, invalidated_envs)
-
-    # other check
-    if not os.environ.get('MEMBERS_INFO_WORKSHEET_ID').isnumeric():
-        invalidated_envs.append('MEMBERS_INFO_WORKSHEET_ID')
-
-    if len(invalidated_envs) > 0:
-        raise RuntimeException(f"환경변수가 누락되었어요. invalidated_envs: {invalidated_envs}")
-
-
-def init_env():
-    root = _get_root()
-    load_dotenv(os.path.join(root, 'env', '.env.shared'))
-    load_dotenv(os.path.join(root, 'env', '.env.secret'))
-
-    _validate()
-
-    logger.info("env configuration initialized")
-
-
-def _get_root():
-    return os.path.join(os.path.dirname(__file__), '..', '..')
-
-def is_local():
-    return os.environ.get("LOCAL", None) is not None
-
+Configs = Settings() # Singleton

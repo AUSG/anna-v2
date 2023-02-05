@@ -1,11 +1,11 @@
 from datetime import datetime
 import psycopg2
 
-from configuration.env_configuration import is_local
+from configuration.env_configuration import Configs
 
 class DB():
     def __init__(self):
-        if is_local():
+        if Configs.LOCAL: # TODO: DB config to .env.secrets
             self.db = psycopg2.connect(host='localhost', dbname='ausg',user='postgres',password='2368a2c6a4d673af1821a21a048c77fc46af51b44e293023',port=5432)
         else:
             self.db = psycopg2.connect(host='cool-snowflake-1538.internal', dbname='ausg',user='postgres',password='2368a2c6a4d673af1821a21a048c77fc46af51b44e293023',port=5432)

@@ -2,6 +2,7 @@ import os
 from typing import Dict
 
 from exception import RuntimeException
+from configuration import Configs
 from implementation import GoogleSpreadsheetClient
 from .member import Member
 
@@ -10,8 +11,8 @@ from .member import Member
 class MemberFinder:
     def __init__(self, gs_client: GoogleSpreadsheetClient):
         self.gs_client = gs_client
-        self.spreadsheet_id = os.environ.get('FORM_SPREADSHEET_ID')
-        self.members_worksheet_id = int(os.environ.get('MEMBERS_INFO_WORKSHEET_ID'))
+        self.spreadsheet_id = Configs.FORM_SPREADSHEET_ID
+        self.members_worksheet_id = int(Configs.MEMBERS_INFO_WORKSHEET_ID)
 
     def find(self, slack_unique_id: str) -> Member:
         members = self._fetch_members()

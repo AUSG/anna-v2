@@ -1,10 +1,6 @@
 import unittest
 from unittest.mock import Mock
 
-from tests.util import enable_dummy_envs
-
-enable_dummy_envs()
-
 from exception import RuntimeException
 from service.offline_meeting.member_finder import MemberFinder
 from service.offline_meeting.member import Member

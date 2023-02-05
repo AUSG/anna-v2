@@ -1,9 +1,5 @@
 from unittest.mock import patch
 
-from tests.util import enable_dummy_envs
-
-enable_dummy_envs()
-
 from implementation import Message
 from service.offline_meeting.action_commander import ActionCommander, TargetEvent, RejectCondition, ActionCommand
 

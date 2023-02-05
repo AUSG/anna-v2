@@ -1,24 +1,24 @@
 import logging
-import os
 from threading import Lock
 from dataclasses import dataclass
 
 from slack_bolt import Say
 from slack_sdk import WebClient
 
+from configuration import Configs
 from implementation import GoogleSpreadsheetClient, SlackClient
 from util import get_prop, SlackGeneralEvent
 from .action_commander import ActionCommander, TargetEvent, RejectCondition, ActionCommand
 from .member_finder import MemberFinder
 from .worksheet_finder import WorksheetMaker
 
-ANNOUNCEMENT_CHANNEL_ID = os.environ.get('ANNOUNCEMENT_CHANNEL_ID')
-ANNA_ID = os.environ.get('ANNA_ID')
-ORGANIZER_ID = os.environ.get('ORGANIZER_ID')
-SUBMIT_FORM_EMOJI = os.environ.get('SUBMIT_FORM_EMOJI')
-SUSPEND_FORM_EMOJI = os.environ.get('SUSPEND_FORM_EMOJI')
-MEMBERS_INFO_WORKSHEET_ID = int(os.environ.get('MEMBERS_INFO_WORKSHEET_ID'))
-FORM_SPREADSHEET_ID = os.environ.get('FORM_SPREADSHEET_ID')
+ANNOUNCEMENT_CHANNEL_ID = Configs.ANNOUNCEMENT_CHANNEL_ID
+ANNA_ID = Configs.ANNA_ID
+ORGANIZER_ID = Configs.ORGANIZER_ID
+SUBMIT_FORM_EMOJI = Configs.SUBMIT_FORM_EMOJI
+SUSPEND_FORM_EMOJI = Configs.SUSPEND_FORM_EMOJI
+MEMBERS_INFO_WORKSHEET_ID = Configs.MEMBERS_INFO_WORKSHEET_ID
+FORM_SPREADSHEET_ID = Configs.FORM_SPREADSHEET_ID
 
 ONE_WEEK = 60 * 60 * 24 * 7
 

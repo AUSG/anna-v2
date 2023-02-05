@@ -6,12 +6,13 @@ from typing import List, Callable, cast
 from slack_bolt import App, Ack, Say
 from slack_sdk import WebClient
 
+from configuration import Configs
 from exception import RuntimeException
 from util import get_prop, SlackGeneralEvent
 
 logger = logging.getLogger(__name__)
 
-ADMIN_CHANNEL = os.environ.get('ADMIN_CHANNEL')
+ADMIN_CHANNEL = Configs.ADMIN_CHANNEL
 
 _SERVICES = []
 

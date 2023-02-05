@@ -1,11 +1,7 @@
 import threading
 from unittest.mock import patch, Mock
-from tests.util import enable_dummy_envs
-
-enable_dummy_envs()
 
 from service.offline_meeting.action_commander import ActionCommand
-
 from service.offline_meeting.member import Member
 from service.offline_meeting.offline_meeting_participation_service import OfflineMeetingParticipationService
 

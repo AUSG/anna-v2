@@ -3,6 +3,7 @@ import os
 from datetime import datetime
 from typing import List
 
+from configuration import Configs
 from dateutil.tz import gettz
 from gspread import service_account_from_dict, Worksheet, Spreadsheet
 from gspread_formatting import set_column_width
@@ -11,16 +12,16 @@ from .slack_client import SlackClient
 
 logger = logging.getLogger(__name__)
 
-GCP_type = os.environ.get('GCP_type')
-GCP_project_id = os.environ.get('GCP_project_id')
-GCP_private_key_id = os.environ.get('GCP_private_key_id')
-GCP_private_key = os.environ.get('GCP_private_key').replace("\\n", "\n")
-GCP_client_email = os.environ.get('GCP_client_email')
-GCP_client_id = os.environ.get('GCP_client_id')
-GCP_auth_uri = os.environ.get('GCP_auth_uri')
-GCP_token_uri = os.environ.get('GCP_token_uri')
-GCP_auth_provider_x509_cert_url = os.environ.get('GCP_auth_provider_x509_cert_url')
-GCP_client_x509_cert_url = os.environ.get('GCP_client_x509_cert_url')
+GCP_type = Configs.GCP_type
+GCP_project_id = Configs.GCP_project_id
+GCP_private_key_id = Configs.GCP_private_key_id
+GCP_private_key = Configs.GCP_private_key.replace("\\n", "\n")
+GCP_client_email = Configs.GCP_client_email
+GCP_client_id = Configs.GCP_client_id
+GCP_auth_uri = Configs.GCP_auth_uri
+GCP_token_uri = Configs.GCP_token_uri
+GCP_auth_provider_x509_cert_url = Configs.GCP_auth_provider_x509_cert_url
+GCP_client_x509_cert_url = Configs.GCP_client_x509_cert_url
 
 __singleton = None
 
