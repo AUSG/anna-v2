@@ -7,7 +7,7 @@ setup:
 run-local:
 	export LOCAL=True && python3 src/anna.py
 
-.PHONY: run
+.PHONY: run-prod
 run:
 	python3 src/anna.py
 
