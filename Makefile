@@ -10,3 +10,7 @@ run-local:
 .PHONY: run
 run:
 	python3 src/anna.py
+
+.PHONY: test
+test:
+	pytest --cov=./
