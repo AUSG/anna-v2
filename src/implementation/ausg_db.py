@@ -25,9 +25,6 @@ class DB():
 
 
 class AUSG_DB(DB):
-    def read_tracking_threads(self):
-        sql="SELECT channel, ts from public.tracking_thread WHERE enabled = true"
-        return self.execute_r(sql)
 
     def insert_tracking_thread(self, channel, ts):
         now = str(datetime.now())
@@ -37,7 +34,3 @@ class AUSG_DB(DB):
     def delete_tracking_thread(self, channel, ts):
         sql="DELETE FROM public.tracking_thread WHERE channel = %s AND ts = %s"
         self.execute_cud(sql, (channel, ts))
-
-    def update_tracking_thread(self, channel, ts, body):
-        sql="UPDATE public.tracking_thread SET body = %s WHERE channel = %s AND ts = %s"
-        self.execute_cud(sql, (body, channel, ts))
