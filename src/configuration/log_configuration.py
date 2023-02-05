@@ -1,11 +1,11 @@
 import logging
 
-from configuration.env_configuration import is_local
+from configuration import Configs
 
 logger = logging.getLogger(__name__)
 
 def init_log():
-    if is_local():
+    if Configs.LOCAL:
         logging.basicConfig(level=logging.INFO)
     else:
         logging.basicConfig(level=logging.INFO)

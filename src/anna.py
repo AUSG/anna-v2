@@ -1,13 +1,11 @@
 from datetime import datetime
 import logging
-import os
 from slack_bolt import App
 
-from configuration import init_log, init_env
+from configuration import init_log, Configs
 from apscheduler.schedulers.background import BackgroundScheduler
 
 init_log()
-init_env()
 
 from router import listen_event_with_services
 from service import reply_to_question, participate_offline_meeting
@@ -23,8 +21,8 @@ def enable_background_jobs():
     sched.start()
 
 
-SLACK_BOT_TOKEN = os.environ.get('SLACK_BOT_TOKEN')
-SLACK_SIGNING_SECRET = os.environ.get('SLACK_SIGNING_SECRET')
+SLACK_BOT_TOKEN = Configs.SLACK_BOT_TOKEN
+SLACK_SIGNING_SECRET = Configs.SLACK_SIGNING_SECRET
 
 _SERVICES = [reply_to_question, participate_offline_meeting]
 _JOBS = []
