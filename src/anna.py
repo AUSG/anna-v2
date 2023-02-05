@@ -10,7 +10,7 @@ init_log()
 init_env()
 
 from router import listen_event_with_services
-from service import reply_to_question, participate_offline_meeting, track_thread, background_tracking_job
+from service import reply_to_question, participate_offline_meeting
 
 logger = logging.getLogger(__name__)
 
@@ -26,8 +26,8 @@ def enable_background_jobs():
 SLACK_BOT_TOKEN = os.environ.get('SLACK_BOT_TOKEN')
 SLACK_SIGNING_SECRET = os.environ.get('SLACK_SIGNING_SECRET')
 
-_SERVICES = [reply_to_question, participate_offline_meeting, track_thread]
-_JOBS = [background_tracking_job]
+_SERVICES = [reply_to_question, participate_offline_meeting]
+_JOBS = []
 
 app = App(token=SLACK_BOT_TOKEN, signing_secret=SLACK_SIGNING_SECRET)
 
