@@ -5,7 +5,7 @@
 # 기본적인 개발환경 구축하기
 
 ```sh
-./setup_local_env.sh
+make setup
 ```
 
 위 스크립트는 아래 작업들을 수행한다:
@@ -18,8 +18,15 @@
 
 1. 안나 깨우기
 
+- 로컬 환경에서 실행
 ```sh
-python3 src/anna.py
+make run-local
+# INFO:slack_bolt.App:⚡️ Bolt app is running! 라는 메시지가 보이면 성공적으로 깨운 것이다.
+```
+
+- 로컬이 아닌 환경에서 실행
+```sh
+make run
 # INFO:slack_bolt.App:⚡️ Bolt app is running! 라는 메시지가 보이면 성공적으로 깨운 것이다.
 ```
 
