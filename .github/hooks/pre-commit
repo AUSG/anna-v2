@@ -9,7 +9,7 @@ print () {
 
 print "pre-commit hook started"
 source .venv/bin/activate
-pytest --cov=./
+make test
 
 print "freeze requirements.txt"
 pip3 freeze > requirements.txt
