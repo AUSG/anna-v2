@@ -19,6 +19,7 @@ print () {
 #              main
 ####################################
 
+print "Setup started"
 
 # venv
 if [[ ! -d "./.venv" ]]; then
@@ -26,16 +27,18 @@ if [[ ! -d "./.venv" ]]; then
     python3 -m venv .venv
 fi
 
-pip3 install -r requirements.txt
+print "Enable python virtual environment"
+source ./.venv/bin/activate
 
+print "Install python packages"
+pip3 install -r requirements.txt --quiet
+
+# git submodule
+print "Update submodules (repository for environment variables)"
+git submodule update --init --recursive
 
 # git hook
 print "Enable git hook for pre-commit"
 git config core.hooksPath .github/hooks
 
-
-#
-
-
-
-print "Done"
+print "Setup finished"
