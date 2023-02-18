@@ -21,6 +21,8 @@
 ```sh
 python3 src/anna.py
 # INFO:slack_bolt.App:⚡️ Bolt app is running! 라는 메시지가 보이면 성공적으로 깨운 것이다.
+
+LOCAL=True python3 src/anna.py # LOCAL 환경변수를 활성화하면서 실행하기. (활용 예시: https://github.com/AUSG/anna-v2/blob/main/src/configuration/log_configuration.py)
 ```
 
 2. 로컬에서 슬랙 이벤트 수신할 수 있도록 세팅
