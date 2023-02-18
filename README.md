@@ -5,7 +5,7 @@
 # 기본적인 개발환경 구축하기
 
 ```sh
-./setup_local_env.sh
+source ./setup_local_env.sh # 앞에 source 를 꼭 붙여야 가상환경 활성화가 정상적으로 완료된다
 ```
 
 위 스크립트는 아래 작업들을 수행한다:
