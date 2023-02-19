@@ -27,6 +27,9 @@ class SlackClient:
     def tell(self, msg: str, ts: str):
         self.say(msg, thread_ts=ts)
 
+    def send_only_visible_target_user_message_to_thread(self, msg: str, channel: str, thread_ts: str, user: str):
+        self.web_client.chat_postEphemeral(channel=channel, thread_ts=thread_ts, user=user, text=msg)
+
     def get_replies(self, ts: str, channel: str) -> List[Message]:
         """
         ref: https://api.slack.com/methods/conversations.replies#examples
