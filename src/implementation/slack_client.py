@@ -1,5 +1,5 @@
 from dataclasses import dataclass, field
-from typing import List
+from typing import List, Optional
 
 from slack_bolt import Say
 from slack_sdk import WebClient
@@ -27,7 +27,7 @@ class SlackClient:
     def tell(self, msg: str, ts: str):
         self.say(msg, thread_ts=ts)
 
-    def send_message_only_visible_to_user(self, msg: str, user: str, channel: str, thread_ts: str = None):
+    def send_message_only_visible_to_user(self, msg: str, user: str, channel: str, thread_ts: Optional[str] = None):
         self.web_client.chat_postEphemeral(text=msg, channel=channel, user=user, thread_ts=thread_ts)
 
     def get_replies(self, ts: str, channel: str) -> List[Message]:
