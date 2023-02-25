@@ -104,7 +104,15 @@ class OfflineMeetingParticipationService:
                 self.slack_client.tell(msg=f"<@{self.event.user}>, 등록 완료!", ts=self.event.ts)
 
                 self.slack_client.send_message_only_visible_to_user(
-                    msg=f"<@{self.event.user}> 네 신청 정보를 아래와 같이 입력했어. 바뀐 부분이 있다면 이 스레드에 남겨줘! ```{member.phone} / {member.email} / {member.school_name_or_company_name}``` 이 메시지는 개인에게만 보여지니 안심해 :)",
+                    msg=f'''
+                    <@{self.event.user}> 네 신청 정보를 아래와 같이 입력했어. 바뀐 부분이 있다면 이 스레드에 남겨줘!Z 
+                    ```
+                    핸드폰: {member.phone} \n 
+                    이메일: {member.email} \n 
+                    학교/회사: {member.school_name_or_company_name}
+                    ``` 
+                    이 메시지는 개인에게만 보여지니 안심해 :)
+                    ''',
                     channel=self.event.channel,
                     thread_ts=self.event.ts,
                     user=self.event.user,
