@@ -110,7 +110,6 @@ class OfflineMeetingParticipationService:
                     user=self.event.user,
                 )
 
-
             except Exception as e:
                 logging.error("fail OfflineMeetingParticipationService._participate()")
                 raise e
