@@ -104,13 +104,23 @@ class OfflineMeetingParticipationService:
                 self.slack_client.tell(msg=f"<@{self.event.user}>, 등록 완료!", ts=self.event.ts)
 
                 self.slack_client.send_message_only_visible_to_user(
-                    msg=f"<@{self.event.user}> 네 정보를 {member.phone} / {member.email} / {member.school_name_or_company_name} / 로 입력했어. 바뀐 부분이 있다면 이 스레드에 남겨줘!",
+                    msg=make_participation_info_private_message(user=self.event.user, member=member),
                     channel=self.event.channel,
                     thread_ts=self.event.ts,
                     user=self.event.user,
                 )
 
-
             except Exception as e:
                 logging.error("fail OfflineMeetingParticipationService._participate()")
                 raise e
+
+
+def make_participation_info_private_message(user: str, member):
+    return f'''
+<@{user}> 네 신청 정보를 아래와 같이 입력했어. 바뀐 부분이 있다면 이 스레드에 남겨줘!
+```
+핸드폰: {member.phone}
+이메일: {member.email}
+학교/회사: {member.school_name_or_company_name}
+```
+이 메시지는 개인에게만 보여지니 안심해 :)'''
