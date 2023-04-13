@@ -123,4 +123,4 @@ def make_participation_info_private_message(user: str, member):
 이메일: {member.email}
 학교/회사: {member.school_name_or_company_name}
 ```
-이 메시지는 개인에게만 보여지니 안심해 :)'''
+이 메시지는 본인만 볼 수 있으니 안심해 :)'''
