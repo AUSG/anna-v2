@@ -117,7 +117,7 @@ class OfflineMeetingParticipationService:
 
 def make_participation_info_private_message(user: str, member):
     return f'''
-<@{user}> 네 신청 정보를 아래와 같이 입력했어. 바뀐 부분이 있다면 이 스레드에 남겨줘!
+<@{user}> 네 신청 정보를 아래와 같이 입력했어. 바뀐 부분이 있다면 운영진에게 DM으로 알려줘!
 ```
 핸드폰: {member.phone}
 이메일: {member.email}
