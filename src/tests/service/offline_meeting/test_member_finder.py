@@ -97,7 +97,7 @@ class MemberFinderInfoValidationTest(unittest.TestCase):
 
         with self.assertRaises(RuntimeException) as ex:
             sut.find('U1234567890')
-        self.assertEqual(ex.exception.message, f"멤버 정보를 찾지 못했어요. (slack_unique_id: U1234567890)")
+        self.assertEqual(ex.exception.message, f"멤버 정보를 찾지 못했어. (slack_unique_id: U1234567890)")
 
     def test_fail_with_insufficient_member_info(self):
         mock_gs_client = Mock()
@@ -107,4 +107,4 @@ class MemberFinderInfoValidationTest(unittest.TestCase):
 
         with self.assertRaises(RuntimeException) as ex:
             sut.find('U1234567890')
-        self.assertEqual(ex.exception.message, f"멤버 정보를 찾지 못했어요. (slack_unique_id: U1234567890)")
+        self.assertEqual(ex.exception.message, f"멤버 정보를 찾지 못했어. (slack_unique_id: U1234567890)")

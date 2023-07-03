@@ -20,7 +20,7 @@ class MemberFinder:
         member = members.get(slack_unique_id)
 
         if not member:
-            raise RuntimeException(f"멤버 정보를 찾지 못했어요. (slack_unique_id: {slack_unique_id})")
+            raise RuntimeException(f"멤버 정보를 찾지 못했어. (slack_unique_id: {slack_unique_id})")
         elif not self._validate_member_info(member):
             raise RuntimeException(f"멤버 정보가 완벽하지 않아요. (slack_unique_id: {slack_unique_id}, member_info: {member})")
         else:
