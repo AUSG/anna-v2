@@ -18,12 +18,10 @@ _SERVICES = []
 
 
 def _get_ts(ex: BaseException, event: SlackGeneralEvent):
-    if type(ex) is RuntimeException and cast(ex, RuntimeException).target_ts is not None:
-        return cast(ex, RuntimeException).target_ts
-    elif get_prop(event, 'item', 'ts') is not None:
-        return get_prop(event, 'item', 'ts')
-    else:
+    if get_prop(event, 'item', 'thread_ts') is not None:
         return get_prop(event, 'item', 'thread_ts')
+    else:
+        return get_prop(event, 'item', 'ts')
 
 
 def _call_services(ack: Ack, event: SlackGeneralEvent, say: Say, web_client: WebClient):
