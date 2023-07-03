@@ -1,4 +1,4 @@
-name: Fly Deploy
+Zname: Fly Deploy
 
 on:
   push:
