@@ -24,7 +24,10 @@ def enable_background_jobs():
 SLACK_BOT_TOKEN = Configs.SLACK_BOT_TOKEN
 SLACK_SIGNING_SECRET = Configs.SLACK_SIGNING_SECRET
 
-_SERVICES = [reply_to_question, participate_offline_meeting]
+_SERVICES = [
+    # reply_to_question,
+    participate_offline_meeting,
+]
 _JOBS = []
 
 app = App(token=SLACK_BOT_TOKEN, signing_secret=SLACK_SIGNING_SECRET)
