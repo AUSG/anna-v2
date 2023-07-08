@@ -8,7 +8,7 @@ _print () {
     echo -e "${GREEN}$1$NO_COLOR"
 }
 
-source .venv/bin/activate
+source venv/bin/activate
 
 pytest --cov=./ -c .meta/develop/pytest.ini # TODO(seonghyeok): Use Makefile lint_fmt_test instead of this
 

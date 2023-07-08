@@ -49,4 +49,5 @@ _print "Setup finished..."
 
 _print ""
 _print "Run the following command to enable virtual environment:"
+_print ""
 _print "source venv/bin/activate"

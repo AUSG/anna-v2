@@ -1,22 +1,14 @@
-ARG PYTHON_VERSION=3.7
+FROM python:3.10
 
-FROM python:${PYTHON_VERSION}
-
-RUN apt-get update && apt-get install -y \
-    python3-pip \
-    python3-venv \
-    python3-dev \
-    python3-setuptools \
-    python3-wheel
-
-RUN mkdir -p /app
 WORKDIR /app
 
-COPY ../../requirements.txt .
-RUN pip install -r requirements.txt
+COPY ../../requirements.txt requirements.txt
+RUN ["pip", "install", "-r", "requirements.txt"]
 
-COPY ../.. .
+COPY ../../src src/
+COPY ../../env env/
+COPY ../../Makefile Makefile
 
 EXPOSE 8080
 
-CMD ["python3", "src/anna.py"]
+CMD ["make", "run-deploy"]
