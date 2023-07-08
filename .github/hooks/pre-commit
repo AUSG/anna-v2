@@ -10,7 +10,7 @@ _print () {
 
 source .venv/bin/activate
 
-pytest --cov=./ -c .meta/develop/pytest.ini
+pytest --cov=./ -c .meta/develop/pytest.ini # TODO(seonghyeok): Use Makefile lint_fmt_test instead of this
 
 _print "freeze requirements.txt"
 pip3 freeze > requirements.txt
