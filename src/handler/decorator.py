@@ -8,8 +8,8 @@ ADMIN_CHANNEL = envs.ADMIN_CHANNEL
 
 def catch_global_error(fn):
     def wrapped_fn(event, say, slack_client):
+        logger = get_logger(fn.__name__)
         try:
-            logger = get_logger(fn.__name__)
             logger.debug("event=%s", event)
             fn(event, say, slack_client)
         except BaseException as ex:
@@ -18,7 +18,6 @@ def catch_global_error(fn):
 - exception={ex}
 - traceback={traceback.format_exc()})
 """
-            logger = get_logger(fn.__name__)
             logger.error(err_msg)
             say(text=err_msg, channel=ADMIN_CHANNEL)
             say(

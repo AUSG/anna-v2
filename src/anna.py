@@ -5,8 +5,6 @@ from config.log_config import init_logger, get_logger
 from handler.bigchat import attend_bigchat, abandon_bigchat
 
 init_logger()
-logger = get_logger()
-
 app = App(token=envs.SLACK_BOT_TOKEN, signing_secret=envs.SLACK_SIGNING_SECRET)
 
 
@@ -27,9 +25,9 @@ def handle_message_events(ack, event, say, client):
     ack()
 
 
-logger.info("All listeners are registered")
+get_logger().info("All listeners are registered")
 
 if __name__ == "__main__":
     PORT = 8080
-    logger.info("Anna wakes up at room %d", PORT)
+    get_logger().info("Anna wakes up at room %d", PORT)
     app.start(PORT)

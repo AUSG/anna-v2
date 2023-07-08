@@ -11,8 +11,6 @@ from wrapt import synchronized
 from config.env_config import envs
 from config.log_config import get_logger
 
-logger = get_logger(__name__)
-
 GCP_type = envs.GCP_type
 GCP_project_id = envs.GCP_project_id
 GCP_private_key_id = envs.GCP_private_key_id
@@ -28,6 +26,7 @@ ANNA_ID = envs.ANNA_ID
 
 class GoogleSpreadsheetClient:
     def __init__(self):
+        self.logger = get_logger()
         self.gs_client = self._build_gs_client()
 
     @staticmethod
@@ -86,7 +85,7 @@ class GoogleSpreadsheetClient:
         worksheet.append_row(_values)
 
     def get_values(
-        self, spreadsheet_id: str, worksheet_id: int, cell_range: str = "A1:A1"
+        self, spreadsheet_id: str, worksheet_id: int, cell_range=None
     ) -> List[List[str]]:
         worksheet = self._get_worksheet(spreadsheet_id, worksheet_id)
         return worksheet.get_values(cell_range)
@@ -125,23 +124,26 @@ class GoogleSpreadsheetClient:
         ts: str,
         channel: str,
         spreadsheet_id: str,
-        callback_for_new_worksheet,
     ):
+        """
+
+        Returns:
+            is_new, worksheet_id
+
+        """
+
         try:
             worksheet_id: Optional[int] = self.find_worksheet_id_in_thread(
                 slack_client, ts, channel
             )
-
             if worksheet_id:
-                return worksheet_id
+                return False, worksheet_id
 
             worksheet_id = self.create_worksheet_in_spread_sheet(spreadsheet_id)
-
-            callback_for_new_worksheet(worksheet_id)
-            return worksheet_id
+            return True, worksheet_id
 
         except Exception as ex:
-            logger.error(ex)
+            self.logger.error(ex)
             raise ex
 
     def create_worksheet_in_spread_sheet(self, spreadsheet_id: str) -> Optional[int]:
@@ -152,6 +154,19 @@ class GoogleSpreadsheetClient:
         )
 
         return worksheet_id
+
+    def add_strikethrough_on_row(
+        self, spreadsheet_id: str, worksheet_id: int, row_num: int
+    ):
+        ws = self._get_worksheet(spreadsheet_id, worksheet_id)
+        ws.format(
+            f"{row_num}:{row_num}",
+            {
+                "textFormat": {
+                    "strikethrough": True,
+                }
+            },
+        )
 
     @staticmethod
     def find_worksheet_id_in_thread(

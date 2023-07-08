@@ -2,7 +2,7 @@
 jobs = 0
 [tool.pylint.basic]
 no-docstring-rgx = ".*\\.py"
-good-names = ["ts", "ex", "m", "fn"]
+good-names = ["ts", "ex", "m", "fn", "ws"]
 good-names-rgx = "^GCP_"
 [tool.pylint.format]
 max-line-length = 120

@@ -7,8 +7,6 @@ from config.env_config import envs
 from config.log_config import get_logger
 from implementation.google_spreadsheet_client import GoogleSpreadsheetClient
 
-logger = get_logger(__name__)
-
 
 class Member(BaseModel):
     kor_name: str
@@ -27,11 +25,12 @@ class Member(BaseModel):
         ]
 
 
-class MemberFinder:
-    def __init__(self):
-        self.gs_client = GoogleSpreadsheetClient()
+class MemberManager:
+    def __init__(self, gs_client: GoogleSpreadsheetClient):
+        self.gs_client = gs_client
         self.spreadsheet_id = envs.FORM_SPREADSHEET_ID
         self.members_worksheet_id = int(envs.MEMBERS_INFO_WORKSHEET_ID)
+        self.logger = get_logger(__name__)
 
     @ttl_cache(
         maxsize=30, ttl=600
@@ -47,7 +46,7 @@ class MemberFinder:
             raise BaseException(
                 f"멤버 정보가 완벽하지 않아. (slack_unique_id: {slack_unique_id}, member_info: {member})"
             )
-        logger.debug(member)
+        self.logger.debug(member)
         return member
 
     def _fetch_members(self) -> Dict[str, Member]:
@@ -91,3 +90,65 @@ class MemberFinder:
             and len(m.phone) == 13
             and len(m.school_name_or_company_name) > 0
         )
+
+    @staticmethod
+    def _is_member_in_worksheet(ws_rows, member):
+        for num, row in enumerate(ws_rows, start=1):
+            if member.email in row:
+                return num
+        return None
+
+    def add_member_to_bigchat_worksheet(
+        self, member, slack_client, event_ts, event_channel, spreadsheet_id
+    ):
+        """
+
+        Returns:
+            is_added
+
+        """
+        is_new, worksheet_id = self.gs_client.find_or_create_worksheet(
+            slack_client,
+            event_ts,
+            event_channel,
+            spreadsheet_id,
+        )
+        if is_new:
+            slack_client.send_message(
+                msg=f"새로운 시트를 만들었어! <{self.gs_client.get_url(spreadsheet_id, worksheet_id)}|구글스프레드 시트>",
+                ts=event_ts,
+            )
+            return True
+
+        rows = self.gs_client.get_values(spreadsheet_id, worksheet_id)
+        row_num = self._is_member_in_worksheet(rows, member)
+        if row_num:
+            return False
+
+        self.gs_client.append_row(spreadsheet_id, worksheet_id, member.to_list())
+        return True
+
+    def remove_member_from_bigchat_worksheet(
+        self, event_user, slack_client, event_ts, event_channel, spreadsheet_id
+    ):
+        """
+
+        Returns:
+            is_removed
+
+        """
+        worksheet_id = self.gs_client.find_worksheet_id_in_thread(
+            slack_client, event_ts, event_channel
+        )
+        if not worksheet_id:
+            return False
+
+        member = self.find(event_user)
+
+        rows = self.gs_client.get_values(spreadsheet_id, worksheet_id)
+        row_num = self._is_member_in_worksheet(rows, member)
+        if not row_num:
+            return False
+
+        self.gs_client.add_strikethrough_on_row(spreadsheet_id, worksheet_id, row_num)
+        return True
