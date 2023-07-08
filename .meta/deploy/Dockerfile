@@ -11,4 +11,4 @@ COPY ../../Makefile Makefile
 
 EXPOSE 8080
 
-CMD ["make", "run-deploy"]
+CMD ["make", "run_deploy"]

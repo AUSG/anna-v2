@@ -8,9 +8,13 @@ fly.io 배포 방식은, k8s 의 pod 띄우기를 간소화했다고 보면 된�
 
 ## 배포 과정
 
-1. 배포
+코드를 main 브랜치에 머지하거나 푸시하면 fly.io 에 배포된다.
 
-코드를 main 브랜치에 올리면 fly.io 에 배포된다.
+로컬에서 직접 배포할 때는 아래 커맨드를 사용한다. 
+
+```sh
+make deploy
+```
 
 ## 환경변수 수정
 
@@ -19,8 +23,3 @@ https://github.com/AUSG/anna-v2-secret 레포지토리에 커밋하면 된다.
 ## 코드 푸시 전 확인사항
 
 충분히 테스트 코드를 추가해보자
-
-## 배포와 관련된 파일들
-
-- .github/ : fly.io 에서 제공한 Github Action 을 트리거하는 workflow
-- Dockerfile, .dockerignore, fly.toml : fly.io 배포할 때 사용
