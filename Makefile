@@ -8,4 +8,5 @@ lint_fmt_test:
 
 .PHONY: deploy
 deploy: lint_fmt_test
-	fly deploy --config .meta/deploy/fly.toml
+	fly deploy --config .meta/deploy/fly.toml --dockerfile .meta/deploy/Dockerfile --ignorefile .meta/deploy/.dockerignore
+

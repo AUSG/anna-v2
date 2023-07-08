@@ -1,6 +1,6 @@
 # AUSG Notoriously Nerdy Assistant
 
-![anna screenshot](./static/anna_screenshot.png)
+![anna screenshot](.meta/docs/images/anna_screenshot.png)
 
 # 기본적인 개발환경 구축하기
 
