@@ -1,28 +1,35 @@
-from datetime import datetime
-import logging
 from slack_bolt import App
 
-from configuration import init_log, Configs
-from apscheduler.schedulers.background import BackgroundScheduler
+from config.env_config import envs
+from config.log_config import init_logger, get_logger
+from handler.bigchat import attend_bigchat, abandon_bigchat
 
-init_log()
+init_logger()
+logger = get_logger()
 
-from router import listen_event_with_services
-from service import reply_to_question, participate_offline_meeting
+app = App(token=envs.SLACK_BOT_TOKEN, signing_secret=envs.SLACK_SIGNING_SECRET)
 
-logger = logging.getLogger(__name__)
 
-SLACK_BOT_TOKEN = Configs.SLACK_BOT_TOKEN
-SLACK_SIGNING_SECRET = Configs.SLACK_SIGNING_SECRET
+@app.event("reaction_added")
+def handle_reaction_added_event(ack, event, say, client):
+    ack()
+    attend_bigchat(event, say, client)
 
-_SERVICES = [
-    # reply_to_question,
-    participate_offline_meeting,
-]
 
-app = App(token=SLACK_BOT_TOKEN, signing_secret=SLACK_SIGNING_SECRET)
+@app.event("reaction_removed")
+def handle_reaction_removed_event(ack, event, say, client):
+    ack()
+    abandon_bigchat(event, say, client)
 
-listen_event_with_services(app, _SERVICES)
+
+@app.event("message")
+def handle_message_events(ack, event, say, client):
+    ack()
+
+
+logger.info("All listeners are registered")
 
 if __name__ == "__main__":
-    app.start(8080)
+    PORT = 8080
+    logger.info("Anna wakes up at room %d", PORT)
+    app.start(PORT)

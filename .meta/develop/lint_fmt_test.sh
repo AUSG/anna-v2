@@ -2,4 +2,6 @@
 set -e # exit on first error
 set -x # print commands
 
-pytest -c .meta/develop/pytest.ini --cov=./
+black src
+pylint --rcfile .meta/develop/pylint.toml src
+PYTHONPATH=src pytest --rootdir=./src --cov=./test -c .meta/develop/pytest.ini

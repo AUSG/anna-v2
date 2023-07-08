@@ -24,7 +24,7 @@ class SlackClient:
         self.say = say
         self.web_client = web_client
 
-    def tell(self, msg: str, ts: str):
+    def send_message(self, msg: str, ts: str):
         self.say(msg, thread_ts=ts)
 
     def send_message_only_visible_to_user(
@@ -57,9 +57,7 @@ class SlackClient:
 
         emojis = []
         reactions = (
-            resp["message"]["reactions"]
-            if "reactions" in resp["message"] is not None
-            else []
+            resp["message"]["reactions"] if "reactions" in resp["message"] else []
         )
         for reaction in reactions:
             for user in reaction["users"]:

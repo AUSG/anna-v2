@@ -4,20 +4,24 @@ setup_local_env:
 
 .PHONY: lint_fmt_test
 lint_fmt_test:
-	. .meta/develop/lint_fmt_test.sh
+	source venv/bin/activate && .meta/develop/lint_fmt_test.sh
+
+.PHONY: update_submodule
+update_submodule:
+	git submodule update --recursive --remote
 
 .PHONY: run_local
 run_local:
-	source venv/bin/activate && python src/anna.py
+	source venv/bin/activate && cd src && python anna.py
 
 .PHONY: open_port
 open_port:
 	npx tunnelmole 8080
 
 .PHONY: deploy
-deploy: lint_fmt_test
+deploy: update_submodule lint_fmt_test
 	fly deploy --config .meta/deploy/fly.toml --dockerfile .meta/deploy/Dockerfile --ignorefile .meta/deploy/.dockerignore
 
 .PHONY: run_deploy
 run_deploy:
-	python src/anna.py
+	cd src && python anna.py
