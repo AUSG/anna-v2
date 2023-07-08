@@ -1,20 +1,12 @@
-# AUSG 의 친구, ANNA!
+# AUSG Notoriously Nerdy Assistant
 
 ![anna screenshot](./static/anna_screenshot.png)
-
-> 참고로 ANNA의 풀네임은 AUSG Notoriously Nerdy Assistant 이다.
 
 # 기본적인 개발환경 구축하기
 
 ```sh
-source ./setup_local_env.sh # 앞에 source 를 꼭 붙여야 가상환경 활성화가 정상적으로 완료된다
+make setup_local_env
 ```
-
-위 스크립트는 아래 작업들을 수행한다:
-
-- 파이썬 가상환경 생성 및 활성화, 깃헙 훅 활성화
-- 의존성 설치
-- 환경변수 세팅
 
 # 실제 AUSG 슬랙과 로컬의 안나를 연동해서 테스트하기
 
