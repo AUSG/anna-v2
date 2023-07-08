@@ -1,17 +1,18 @@
 #!/usr/bin/env bash
-set -e
+set -e # exit on first error
+set -x # print commands
 
-print () {
+_print () {
     GREEN='\033[0;32m'
     NO_COLOR='\033[0m'
     echo -e "${GREEN}$1$NO_COLOR"
 }
 
-print "pre-commit hook started"
 source .venv/bin/activate
-pytest --cov=./
 
-print "freeze requirements.txt"
+pytest --cov=./ -c .meta/develop/pytest.ini
+
+_print "freeze requirements.txt"
 pip3 freeze > requirements.txt
 
-print "pre-commit hook finished"
+_print "pre-commit hook finished"
