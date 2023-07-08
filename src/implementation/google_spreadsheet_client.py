@@ -33,33 +33,51 @@ class GoogleSpreadsheetClient:
         self.gs_client = self._build_gs_client()
 
     def _build_gs_client(self):
-        return service_account_from_dict({
-            'type': GCP_type,
-            'project_id': GCP_project_id,
-            'private_key_id': GCP_private_key_id,
-            'private_key': GCP_private_key,
-            'client_email': GCP_client_email,
-            'client_id': GCP_client_id,
-            'auth_uri': GCP_auth_uri,
-            'token_uri': GCP_token_uri,
-            'auth_provider_x509_cert_url': GCP_auth_provider_x509_cert_url,
-            'client_x509_cert_url': GCP_client_x509_cert_url
-        })
+        return service_account_from_dict(
+            {
+                "type": GCP_type,
+                "project_id": GCP_project_id,
+                "private_key_id": GCP_private_key_id,
+                "private_key": GCP_private_key,
+                "client_email": GCP_client_email,
+                "client_id": GCP_client_id,
+                "auth_uri": GCP_auth_uri,
+                "token_uri": GCP_token_uri,
+                "auth_provider_x509_cert_url": GCP_auth_provider_x509_cert_url,
+                "client_x509_cert_url": GCP_client_x509_cert_url,
+            }
+        )
 
-    def create_worksheet(self, spreadsheet_id: str, title_prefix: str, header_values: List[str] = None,
-                         row_size: int = 100, col_size: int = 30, col_width: int = 220) -> int:
+    def create_worksheet(
+        self,
+        spreadsheet_id: str,
+        title_prefix: str,
+        header_values: List[str] = None,
+        row_size: int = 100,
+        col_size: int = 30,
+        col_width: int = 220,
+    ) -> int:
         if header_values is None:
             header_values = []
         spreadsheet = self._get_spreadsheet(spreadsheet_id)
 
-        worksheet = spreadsheet.add_worksheet(f"{title_prefix} {self._get_now()}", rows=row_size, cols=col_size)
+        worksheet = spreadsheet.add_worksheet(
+            f"{title_prefix} {self._get_now()}", rows=row_size, cols=col_size
+        )
         worksheet.append_row(header_values)
-        set_column_width(worksheet, self._convert_list_to_sheet_range(len(header_values)), col_width)
+        set_column_width(
+            worksheet, self._convert_list_to_sheet_range(len(header_values)), col_width
+        )
 
         return worksheet.id
 
-    def append_row(self, spreadsheet_id: str, worksheet_id: int, values: List[str],
-                   timestamp_on_first_row: bool = True):
+    def append_row(
+        self,
+        spreadsheet_id: str,
+        worksheet_id: int,
+        values: List[str],
+        timestamp_on_first_row: bool = True,
+    ):
         _values = list(values)
         worksheet = self._get_worksheet(spreadsheet_id, worksheet_id)
 
@@ -68,7 +86,9 @@ class GoogleSpreadsheetClient:
 
         worksheet.append_row(_values)
 
-    def get_values(self, spreadsheet_id: str, worksheet_id: int, cell_range: str = 'A1:A1') -> List[List[str]]:
+    def get_values(
+        self, spreadsheet_id: str, worksheet_id: int, cell_range: str = "A1:A1"
+    ) -> List[List[str]]:
         worksheet = self._get_worksheet(spreadsheet_id, worksheet_id)
         return worksheet.get_values(cell_range)
 
@@ -83,8 +103,8 @@ class GoogleSpreadsheetClient:
         return f'A:{chr(ord("A") + size - 1)}'
 
     @staticmethod
-    def _get_now(timezone: str = 'Asia/Seoul') -> str:
-        return datetime.now(gettz(timezone)).strftime('%Y%m%d %H%M%S')  # korean time
+    def _get_now(timezone: str = "Asia/Seoul") -> str:
+        return datetime.now(gettz(timezone)).strftime("%Y%m%d %H%M%S")  # korean time
 
     def _get_spreadsheet(self, spreadsheet_id: str) -> Spreadsheet:
         return self.gs_client.open_by_key(spreadsheet_id)

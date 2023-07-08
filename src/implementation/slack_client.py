@@ -27,8 +27,12 @@ class SlackClient:
     def tell(self, msg: str, ts: str):
         self.say(msg, thread_ts=ts)
 
-    def send_message_only_visible_to_user(self, msg: str, user: str, channel: str, thread_ts: Optional[str] = None):
-        self.web_client.chat_postEphemeral(text=msg, channel=channel, user=user, thread_ts=thread_ts)
+    def send_message_only_visible_to_user(
+        self, msg: str, user: str, channel: str, thread_ts: Optional[str] = None
+    ):
+        self.web_client.chat_postEphemeral(
+            text=msg, channel=channel, user=user, thread_ts=thread_ts
+        )
 
     def get_replies(self, ts: str, channel: str) -> List[Message]:
         """
@@ -39,21 +43,24 @@ class SlackClient:
         #     만약 후자일 경우 이 코드가 쓰레드의 제일 첫번째 메시지를 가져올 수 있도록 수정해야 함
         resp = self.web_client.conversations_replies(ts=ts, channel=channel)
 
-        messages = [Message(msg['ts'], channel, msg['user'], msg['text']) for msg in resp["messages"]]
+        messages = [
+            Message(msg["ts"], channel, msg["user"], msg["text"])
+            for msg in resp["messages"]
+        ]
         return messages
 
     def get_emojis(self, channel: str, ts: str) -> List[Emoji]:
         """
         res: https://api.slack.com/methods/reactions.get#examples
         """
-        resp = self.web_client.reactions_get(
-            channel=channel,
-            timestamp=ts,
-            full=True
-        )
+        resp = self.web_client.reactions_get(channel=channel, timestamp=ts, full=True)
 
         emojis = []
-        reactions = resp["message"]["reactions"] if "reactions" in resp["message"] is not None else []
+        reactions = (
+            resp["message"]["reactions"]
+            if "reactions" in resp["message"] is not None
+            else []
+        )
         for reaction in reactions:
             for user in reaction["users"]:
                 emojis.append(Emoji(user, reaction["name"]))

@@ -4,14 +4,21 @@ from unittest.mock import Mock
 
 from implementation import GoogleSpreadsheetClient, SlackClient
 from service.offline_meeting.member import Member
-from service.offline_meeting.offline_meeting_participation_service import OfflineMeetingParticipationService
+from service.offline_meeting.offline_meeting_participation_service import (
+    OfflineMeetingParticipationService,
+)
 from service.offline_meeting.worksheet_finder import WorksheetMaker
 
 from unittest import TestCase
 
 
 class MockWorksheetMakerWithTimeSleep(WorksheetMaker):
-    def __init__(self, slack_client: SlackClient, gs_client: GoogleSpreadsheetClient, time_for_sleep: int):
+    def __init__(
+        self,
+        slack_client: SlackClient,
+        gs_client: GoogleSpreadsheetClient,
+        time_for_sleep: int,
+    ):
         super().__init__(slack_client, gs_client)
         self.time_for_sleep = time_for_sleep
 
@@ -20,7 +27,9 @@ class MockWorksheetMakerWithTimeSleep(WorksheetMaker):
 
 
 class OfflineMeetingParticipationServiceTest(TestCase):
-    def test_success_participate_at_same_time_then_wait_until_other_participation_is_finished(self):
+    def test_success_participate_at_same_time_then_wait_until_other_participation_is_finished(
+        self,
+    ):
         """
         동시에 참여 요청 시 다른 참여 요청에 대한 task가 종료될 때까지 대기한다
         """
@@ -43,20 +52,31 @@ class OfflineMeetingParticipationServiceTest(TestCase):
         participate_single_lock: threading.Lock = threading.Lock()
 
         service = OfflineMeetingParticipationService(
-            raw_event=raw_event, action_commander=Mock(), slack_client=mock_slack_client,
-            gs_client=mock_gs_client, member_finder=Mock(), worksheet_maker=mock_worksheet_maker,
+            raw_event=raw_event,
+            action_commander=Mock(),
+            slack_client=mock_slack_client,
+            gs_client=mock_gs_client,
+            member_finder=Mock(),
+            worksheet_maker=mock_worksheet_maker,
             participate_single_lock=participate_single_lock,
         )
 
-        some_valid_member = Member(email="email", kor_name="kor_name", eng_name="eng_name", phone="phone",
-                                   school_name_or_company_name="school_name_or_company_name")
+        some_valid_member = Member(
+            email="email",
+            kor_name="kor_name",
+            eng_name="eng_name",
+            phone="phone",
+            school_name_or_company_name="school_name_or_company_name",
+        )
 
         start_time = time.time()
 
         threads = []
 
         for _ in range(2):
-            task_thread = threading.Thread(target=service._participate, args=(some_valid_member,))
+            task_thread = threading.Thread(
+                target=service._participate, args=(some_valid_member,)
+            )
             task_thread.start()
             threads.append(task_thread)
 
@@ -92,20 +112,31 @@ class OfflineMeetingParticipationServiceTest(TestCase):
         participate_no_lock: threading.Lock = Mock()
 
         service = OfflineMeetingParticipationService(
-            raw_event=raw_event, action_commander=Mock(), slack_client=mock_slack_client,
-            gs_client=mock_gs_client, member_finder=Mock(), worksheet_maker=mock_worksheet_maker,
+            raw_event=raw_event,
+            action_commander=Mock(),
+            slack_client=mock_slack_client,
+            gs_client=mock_gs_client,
+            member_finder=Mock(),
+            worksheet_maker=mock_worksheet_maker,
             participate_single_lock=participate_no_lock,
         )
 
-        some_valid_member = Member(email="email", kor_name="kor_name", eng_name="eng_name", phone="phone",
-                                   school_name_or_company_name="school_name_or_company_name")
+        some_valid_member = Member(
+            email="email",
+            kor_name="kor_name",
+            eng_name="eng_name",
+            phone="phone",
+            school_name_or_company_name="school_name_or_company_name",
+        )
 
         start_time = time.time()
 
         threads = []
 
         for _ in range(2):
-            task_thread = threading.Thread(target=service._participate, args=(some_valid_member,))
+            task_thread = threading.Thread(
+                target=service._participate, args=(some_valid_member,)
+            )
             task_thread.start()
             threads.append(task_thread)
 

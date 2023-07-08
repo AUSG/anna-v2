@@ -12,15 +12,6 @@ from service import reply_to_question, participate_offline_meeting
 
 logger = logging.getLogger(__name__)
 
-
-def enable_background_jobs():
-    sched = BackgroundScheduler()
-    for job in _JOBS:
-        logger.info("새 job 등록: " + str(job.__name__))
-        sched.add_job(job, 'cron', hour='0', id=str(job.__name__), next_run_time=datetime.now())
-    sched.start()
-
-
 SLACK_BOT_TOKEN = Configs.SLACK_BOT_TOKEN
 SLACK_SIGNING_SECRET = Configs.SLACK_SIGNING_SECRET
 
@@ -28,12 +19,10 @@ _SERVICES = [
     # reply_to_question,
     participate_offline_meeting,
 ]
-_JOBS = []
 
 app = App(token=SLACK_BOT_TOKEN, signing_secret=SLACK_SIGNING_SECRET)
 
 listen_event_with_services(app, _SERVICES)
-enable_background_jobs()
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     app.start(8080)

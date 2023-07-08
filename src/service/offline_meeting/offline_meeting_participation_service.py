@@ -8,7 +8,12 @@ from slack_sdk import WebClient
 from configuration import Configs
 from implementation import GoogleSpreadsheetClient, SlackClient
 from util import get_prop, SlackGeneralEvent
-from .action_commander import ActionCommander, TargetEvent, RejectCondition, ActionCommand
+from .action_commander import (
+    ActionCommander,
+    TargetEvent,
+    RejectCondition,
+    ActionCommand,
+)
 from .member_finder import MemberFinder
 from .worksheet_finder import WorksheetMaker
 
@@ -32,25 +37,43 @@ class EmojiAddedEvent:
     user: str
 
 
-def participate_offline_meeting(event: SlackGeneralEvent, say: Say, web_client: WebClient):
+def participate_offline_meeting(
+    event: SlackGeneralEvent, say: Say, web_client: WebClient
+):
     slack_client = SlackClient(say, web_client)
     action_commander = ActionCommander(event, slack_client)
     gs_client = GoogleSpreadsheetClient(slack_client)
     member_finder = MemberFinder(gs_client)
     worksheet_maker = WorksheetMaker(slack_client, gs_client)
-    service = OfflineMeetingParticipationService(event, action_commander, slack_client, gs_client, member_finder,
-                                                 worksheet_maker,
-                                                 PARTICIPATE_SINGLE_LOCK)
+    service = OfflineMeetingParticipationService(
+        event,
+        action_commander,
+        slack_client,
+        gs_client,
+        member_finder,
+        worksheet_maker,
+        PARTICIPATE_SINGLE_LOCK,
+    )
 
     service.run()
 
 
 class OfflineMeetingParticipationService:
-    def __init__(self, raw_event: SlackGeneralEvent, action_commander: ActionCommander, slack_client: SlackClient,
-                 gs_client: GoogleSpreadsheetClient, member_finder: MemberFinder, worksheet_maker: WorksheetMaker,
-                 participate_single_lock: Lock):
-        self.event = EmojiAddedEvent(get_prop(raw_event, 'item', 'ts'), get_prop(raw_event, 'item', 'channel'),
-                                     get_prop(raw_event, 'user'))
+    def __init__(
+        self,
+        raw_event: SlackGeneralEvent,
+        action_commander: ActionCommander,
+        slack_client: SlackClient,
+        gs_client: GoogleSpreadsheetClient,
+        member_finder: MemberFinder,
+        worksheet_maker: WorksheetMaker,
+        participate_single_lock: Lock,
+    ):
+        self.event = EmojiAddedEvent(
+            get_prop(raw_event, "item", "ts"),
+            get_prop(raw_event, "item", "channel"),
+            get_prop(raw_event, "user"),
+        )
         self.action_commander = action_commander
         self.slack_client = slack_client
         self.gs_client = gs_client
@@ -75,8 +98,10 @@ class OfflineMeetingParticipationService:
         if command == ActionCommand.NOOP:
             return False
         elif command == ActionCommand.REJECT:
-            self.slack_client.tell(msg=f"오거나이저가 :stop2: 이모지를 붙여놨기 때문에 <@{self.event.user}>의 요청을 들어줄 수가 없어.",
-                                   ts=self.event.ts)
+            self.slack_client.tell(
+                msg=f"오거나이저가 :stop2: 이모지를 붙여놨기 때문에 <@{self.event.user}>의 요청을 들어줄 수가 없어.",
+                ts=self.event.ts,
+            )
             return False
         else:
             return True
@@ -95,16 +120,23 @@ class OfflineMeetingParticipationService:
                     FORM_SPREADSHEET_ID,
                 )
 
-                self.gs_client.append_row(FORM_SPREADSHEET_ID, worksheet_id, member.to_list())
+                self.gs_client.append_row(
+                    FORM_SPREADSHEET_ID, worksheet_id, member.to_list()
+                )
                 if is_new:
                     self.slack_client.tell(
                         msg=f"새로운 시트를 만들었어! <{self.gs_client.get_url(FORM_SPREADSHEET_ID, worksheet_id)}|구글스프레드 시트>",
-                        ts=self.event.ts)
+                        ts=self.event.ts,
+                    )
 
-                self.slack_client.tell(msg=f"<@{self.event.user}>, 등록 완료!", ts=self.event.ts)
+                self.slack_client.tell(
+                    msg=f"<@{self.event.user}>, 등록 완료!", ts=self.event.ts
+                )
 
                 self.slack_client.send_message_only_visible_to_user(
-                    msg=make_participation_info_private_message(user=self.event.user, member=member),
+                    msg=make_participation_info_private_message(
+                        user=self.event.user, member=member
+                    ),
                     channel=self.event.channel,
                     thread_ts=self.event.ts,
                     user=self.event.user,
@@ -116,11 +148,11 @@ class OfflineMeetingParticipationService:
 
 
 def make_participation_info_private_message(user: str, member):
-    return f'''
+    return f"""
 <@{user}> 네 신청 정보를 아래와 같이 입력했어. 바뀐 부분이 있다면 운영진에게 DM으로 알려줘!
 ```
 핸드폰: {member.phone}
 이메일: {member.email}
 학교/회사: {member.school_name_or_company_name}
 ```
-이 메시지는 본인만 볼 수 있으니 안심해 :)'''
+이 메시지는 본인만 볼 수 있으니 안심해 :)"""

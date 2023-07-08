@@ -35,13 +35,15 @@ class WorksheetMaker:
         worksheet_id: Optional[int] = self.gs_client.create_worksheet(
             spreadsheet_id=spreadsheet_id,
             title_prefix="[제목바꿔줘]",
-            header_values=["타임스탬프", "이메일 주소", "이름", "영문 이름", "휴대폰 번호", "학교명 혹은 회사명"]
+            header_values=["타임스탬프", "이메일 주소", "이름", "영문 이름", "휴대폰 번호", "학교명 혹은 회사명"],
         )
 
         return worksheet_id
 
     def find_worksheet_id_in_thread(self, ts: str, channel: str) -> Union[int, None]:
-        SPREADSHEET_URL_PATTERN = r'https:\/\/docs.google.com\/spreadsheets\/d\/.*\/edit#gid=(\d*)'
+        SPREADSHEET_URL_PATTERN = (
+            r"https:\/\/docs.google.com\/spreadsheets\/d\/.*\/edit#gid=(\d*)"
+        )
 
         messages = self.slack_client.get_replies(ts, channel)
 

@@ -17,13 +17,13 @@ def _make_question(event):
     Returns:
         keyword, ts
     """
-    event_type = get_prop(event, 'type')
-    ts = get_prop(event, 'thread_ts') or get_prop(event, 'ts')
+    event_type = get_prop(event, "type")
+    ts = get_prop(event, "thread_ts") or get_prop(event, "ts")
 
-    if event_type != 'message' or ts is None:
+    if event_type != "message" or ts is None:
         return None, None
 
-    keyword = _find_keyword('!', get_prop(event, 'text'))
+    keyword = _find_keyword("!", get_prop(event, "text"))
     if keyword and ts:
         return keyword, ts
     else:
@@ -41,14 +41,14 @@ def _find_keyword(keyword_prefix, text):
         return None
 
     keyword = chunk[1].split(" ")[0]
-    if len(keyword) == 0 or keyword[0] == ' ':
+    if len(keyword) == 0 or keyword[0] == " ":
         return None
 
     return keyword.rstrip()
 
 
 def _make_dictionary():
-    dictionary = {'wifi': '센터필드의 와이파이를 알려줄게. 이름은 `Guest`, 비밀번호는 `BrokenWires@@2019`야!'}
+    dictionary = {"wifi": "센터필드의 와이파이를 알려줄게. 이름은 `Guest`, 비밀번호는 `BrokenWires@@2019`야!"}
     return dictionary
 
 
@@ -69,5 +69,7 @@ def _reply_to_question_v2(event, slack_client):
     _tell_answer(slack_client, answer, ts)
 
 
-def reply_to_question(event: SlackGeneralEvent, say: Say, client: WebClient):  # TODO: 시그니처 일괄 변경: say/client -> SlackClient (모든 services 한번에 바꿔야 함)
+def reply_to_question(
+    event: SlackGeneralEvent, say: Say, client: WebClient
+):  # TODO: 시그니처 일괄 변경: say/client -> SlackClient (모든 services 한번에 바꿔야 함)
     _reply_to_question_v2(event, SlackClient(say, client))

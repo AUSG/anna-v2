@@ -39,8 +39,8 @@ class Settings(BaseSettings):
     LOCAL: bool = False
 
     class Config:
-        env_file = 'env/.env.secret', 'env/.env.shared'
-        env_file_encoding = 'utf-8'
+        env_file = "env/.env.secret", "env/.env.shared"
+        env_file_encoding = "utf-8"
 
 
-Configs = Settings() # Singleton
+Configs = Settings()  # Singleton

@@ -36,14 +36,16 @@ class ActionCommander:
     def __init__(self, event: SlackGeneralEvent, slack_client: SlackClient):
         self.slack_client = slack_client
         self.event = Event(
-            type=get_prop(event, 'type'),
-            reaction=get_prop(event, 'reaction'),
-            subtype=get_prop(event, 'subtype'),
-            ts=get_prop(event, 'item', 'ts'),
-            channel=get_prop(event, 'item', 'channel'),
+            type=get_prop(event, "type"),
+            reaction=get_prop(event, "reaction"),
+            subtype=get_prop(event, "subtype"),
+            ts=get_prop(event, "item", "ts"),
+            channel=get_prop(event, "item", "channel"),
         )
 
-    def decide(self, target_event: TargetEvent, reject_condition: RejectCondition) -> ActionCommand:
+    def decide(
+        self, target_event: TargetEvent, reject_condition: RejectCondition
+    ) -> ActionCommand:
         if not self._is_target_event(target_event):
             return ActionCommand.NOOP
         elif self._is_reject_target(reject_condition):
@@ -52,10 +54,12 @@ class ActionCommander:
             return ActionCommand.PARTICIPATE
 
     def _is_target_event(self, target_event: TargetEvent):
-        return (self._is_newly_added_emoji() and
-                self._is_target_emoji(target_event.emoji) and
-                self._is_target_channel(target_event.channel) and
-                self._is_first_message_on_thread())
+        return (
+            self._is_newly_added_emoji()
+            and self._is_target_emoji(target_event.emoji)
+            and self._is_target_channel(target_event.channel)
+            and self._is_first_message_on_thread()
+        )
 
     def _is_target_channel(self, target_channel):
         return self.event.channel == target_channel
@@ -69,7 +73,9 @@ class ActionCommander:
     def _is_first_message_on_thread(self):
         msg = Message(self.event.ts, self.event.channel)
 
-        messages = self.slack_client.get_replies(ts=self.event.ts, channel=self.event.channel)
+        messages = self.slack_client.get_replies(
+            ts=self.event.ts, channel=self.event.channel
+        )
         first_message = messages[0]
 
         return msg == first_message

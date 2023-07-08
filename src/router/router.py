@@ -18,10 +18,10 @@ _SERVICES = []
 
 
 def _get_ts(ex: BaseException, event: SlackGeneralEvent):
-    if get_prop(event, 'item', 'thread_ts') is not None:
-        return get_prop(event, 'item', 'thread_ts')
+    if get_prop(event, "item", "thread_ts") is not None:
+        return get_prop(event, "item", "thread_ts")
     else:
-        return get_prop(event, 'item', 'ts')
+        return get_prop(event, "item", "ts")
 
 
 def _call_services(ack: Ack, event: SlackGeneralEvent, say: Say, web_client: WebClient):
@@ -40,15 +40,15 @@ def listen_event_with_services(app: App, services: List[Callable]):
     global _SERVICES
     _SERVICES = services
 
-    @app.event('app_mention')
+    @app.event("app_mention")
     def handler_app_mention_event(ack, event, say, client):
         _call_services(ack, event, say, client)
 
-    @app.event('reaction_added')
+    @app.event("reaction_added")
     def handle_reaction_added_event(ack, event, say, client):
         _call_services(ack, event, say, client)
 
-    @app.event('reaction_removed')
+    @app.event("reaction_removed")
     def handle_reaction_removed_event(ack, event, say, client):
         _call_services(ack, event, say, client)
 
