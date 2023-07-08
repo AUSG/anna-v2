@@ -1,0 +1,8 @@
+.venv/
+venv/
+.meta/
+.github/
+.pytest_cache/
+.coverage/
+.gitignore
+README.md

@@ -12,10 +12,10 @@ RUN apt-get update && apt-get install -y \
 RUN mkdir -p /app
 WORKDIR /app
 
-COPY requirements.txt .
+COPY ../../requirements.txt .
 RUN pip install -r requirements.txt
 
-COPY . .
+COPY ../.. .
 
 EXPOSE 8080
 
