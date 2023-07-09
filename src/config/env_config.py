@@ -1,4 +1,4 @@
-from pydantic import BaseSettings
+from pydantic_settings import BaseSettings
 
 
 class Settings(BaseSettings):
@@ -31,8 +31,6 @@ class Settings(BaseSettings):
     ORGANIZER_ID: str = None
     # Emojis
     JOIN_BIGCHAT_EMOJI: str = None
-    ABANDON_BIGCHAT_EMOJI: str = None
-    SUSPEND_FORM_EMOJI: str = None
 
     # Development environment variables
     LOGLEVEL: str = "DEBUG"
