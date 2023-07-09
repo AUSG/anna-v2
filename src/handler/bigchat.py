@@ -99,7 +99,7 @@ def abandon_bigchat(event, say, client):
     )
     if not is_removed:
         slack_client.send_message_only_visible_to_user(
-            f"""<@{event_user}>, 네 이름을 지울 수가 없었어. 정상적으로 등록이 안 된 것 않은데... 
+            f"""<@{event_user}>, 네 이름을 지울 수가 없었어. 정상적으로 등록이 안 된 것 같은데... 
 만약 등록을 취소해야 한다면 운영진에게 연락해줘!""",
             event_user,
             event_channel,
