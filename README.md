@@ -44,6 +44,10 @@ see [HOW_TO_DEPLOY.md](.meta/develop/HOW_TO_DEPLOY.md).
 
 # Misc
 
+## .meta 디렉토리
+
+실제 소스코드와 관련성이 적은 파일들은 [.meta](.meta) 디렉토리를 참고해주세요. 관련한 아이디어는 https://news.hada.io/topic?id=9504 를 보시면 됩니다. 
+
 ## 참고자료
 
 이벤트 콜백 data 스펙: https://api.slack.com/apis/connections/events-api#the-events-api__receiving-events__callback-field-overview
