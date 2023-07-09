@@ -6,7 +6,6 @@ COPY ../../requirements.txt requirements.txt
 RUN ["pip", "install", "-r", "requirements.txt"]
 
 COPY ../../src src/
-COPY ../../env env/
 COPY ../../Makefile Makefile
 
 EXPOSE 8080
