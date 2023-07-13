@@ -14,7 +14,9 @@ from config.log_config import get_logger
 GCP_type = envs.GCP_type
 GCP_project_id = envs.GCP_project_id
 GCP_private_key_id = envs.GCP_private_key_id
-GCP_private_key = envs.GCP_private_key.replace("\\n", "\n")
+GCP_private_key = envs.GCP_private_key.replace(
+    "\\n", "\n"
+)  # TODO(seonghyeok): env_config 쪽에서 처리하도록 수정
 GCP_client_email = envs.GCP_client_email
 GCP_client_id = envs.GCP_client_id
 GCP_auth_uri = envs.GCP_auth_uri
@@ -150,7 +152,14 @@ class GoogleSpreadsheetClient:
         worksheet_id: Optional[int] = self.create_worksheet(
             spreadsheet_id=spreadsheet_id,
             title_prefix="[빅챗]",
-            header_values=["타임스탬프", "이메일 주소", "이름", "영문 이름", "휴대폰 번호", "학교명 혹은 회사명"],
+            header_values=[
+                "FirstName",
+                "LastName",
+                "FullName",
+                "Email",
+                "SchoolOrCompany",
+                "Phone",
+            ],  # 이 포맷이 제출하기 쉽다고 함
         )
 
         return worksheet_id

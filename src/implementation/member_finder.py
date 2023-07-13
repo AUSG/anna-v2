@@ -15,13 +15,14 @@ class Member(BaseModel):
     phone: str
     school_name_or_company_name: str
 
-    def to_list(self) -> List[str]:
+    def transform_for_spreadsheet(self) -> List[str]:
         return [
-            self.email,
-            self.kor_name,
-            self.eng_name,
-            self.phone,
-            self.school_name_or_company_name,
+            self.eng_name.split(" ", 1)[0],  # first name
+            self.eng_name.split(" ", 1)[1],  # last name
+            self.eng_name,  # full name
+            self.email,  # email
+            self.school_name_or_company_name,  # school or company
+            self.phone,  # phone
         ]
 
 
@@ -125,7 +126,9 @@ class MemberManager:
         if row_num:
             return False
 
-        self.gs_client.append_row(spreadsheet_id, worksheet_id, member.to_list())
+        self.gs_client.append_row(
+            spreadsheet_id, worksheet_id, member.transform_for_spreadsheet()
+        )
         return True
 
     def remove_member_from_bigchat_worksheet(
