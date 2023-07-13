@@ -1,4 +1,3 @@
-import inspect
 import logging
 
 from config.env_config import envs
@@ -11,13 +10,4 @@ def init_logger():
         level=envs.LOGLEVEL,
     )
 
-    get_logger().info("log config initialized")
-
-
-def get_logger(module_name=""):
-    if module_name == "":
-        frm = inspect.stack()[1]
-        mod = inspect.getmodule(frm[0])
-        module_name = mod.__name__
-
-    return logging.getLogger(module_name)
+    logging.getLogger(__name__).info("log config initialized")

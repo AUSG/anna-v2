@@ -1,10 +1,10 @@
+import logging
 from typing import Dict, List
 
 from cachetools.func import ttl_cache
 from pydantic import BaseModel
 
 from config.env_config import envs
-from config.log_config import get_logger
 from implementation.google_spreadsheet_client import GoogleSpreadsheetClient
 
 
@@ -15,22 +15,30 @@ class Member(BaseModel):
     phone: str
     school_name_or_company_name: str
 
-    def to_list(self) -> List[str]:
+    def transform_for_spreadsheet(self) -> List[str]:
         return [
-            self.email,
-            self.kor_name,
-            self.eng_name,
-            self.phone,
-            self.school_name_or_company_name,
+            self.eng_name.split(" ", 1)[0],  # first name
+            self.eng_name.split(" ", 1)[1],  # last name
+            self.eng_name,  # full name
+            self.email,  # email
+            self.school_name_or_company_name,  # school or company
+            self.phone,  # phone
         ]
+
+
+class MemberNotFound(Exception):
+    pass
+
+
+class MemberLackInfo(Exception):
+    pass
 
 
 class MemberManager:
     def __init__(self, gs_client: GoogleSpreadsheetClient):
         self.gs_client = gs_client
-        self.spreadsheet_id = envs.FORM_SPREADSHEET_ID
         self.members_worksheet_id = int(envs.MEMBERS_INFO_WORKSHEET_ID)
-        self.logger = get_logger(__name__)
+        self.logger = logging.getLogger(__name__)
 
     @ttl_cache(
         maxsize=30, ttl=600
@@ -41,18 +49,16 @@ class MemberManager:
         member = members.get(slack_unique_id)
 
         if not member:
-            raise BaseException(f"멤버 정보를 찾지 못했어. (slack_unique_id: {slack_unique_id})")
+            raise MemberNotFound()
         if not self._validate_member_info(member):
-            raise BaseException(
-                f"멤버 정보가 완벽하지 않아. (slack_unique_id: {slack_unique_id}, member_info: {member})"
-            )
+            raise MemberLackInfo()
         self.logger.debug(member)
         return member
 
     def _fetch_members(self) -> Dict[str, Member]:
         member_info_cols = "J:O"  # 열 순서: user_id, kor_name, eng_name, email, phone, school_name or company_name
         raw_members = self.gs_client.get_values(
-            self.spreadsheet_id, self.members_worksheet_id, member_info_cols
+            self.members_worksheet_id, member_info_cols
         )
 
         members = self._build_members_info(raw_members)
@@ -99,56 +105,8 @@ class MemberManager:
         return None
 
     def add_member_to_bigchat_worksheet(
-        self, member, slack_client, event_ts, event_channel, spreadsheet_id
+        self,
+        member,
+        worksheet_id,
     ):
-        """
-
-        Returns:
-            is_added
-
-        """
-        is_new, worksheet_id = self.gs_client.find_or_create_worksheet(
-            slack_client,
-            event_ts,
-            event_channel,
-            spreadsheet_id,
-        )
-        if is_new:
-            slack_client.send_message(
-                msg=f"새로운 시트를 만들었어! <{self.gs_client.get_url(spreadsheet_id, worksheet_id)}|구글스프레드 시트>",
-                ts=event_ts,
-            )
-            return True
-
-        rows = self.gs_client.get_values(spreadsheet_id, worksheet_id)
-        row_num = self._is_member_in_worksheet(rows, member)
-        if row_num:
-            return False
-
-        self.gs_client.append_row(spreadsheet_id, worksheet_id, member.to_list())
-        return True
-
-    def remove_member_from_bigchat_worksheet(
-        self, event_user, slack_client, event_ts, event_channel, spreadsheet_id
-    ):
-        """
-
-        Returns:
-            is_removed
-
-        """
-        worksheet_id = self.gs_client.find_worksheet_id_in_thread(
-            slack_client, event_ts, event_channel
-        )
-        if not worksheet_id:
-            return False
-
-        member = self.find(event_user)
-
-        rows = self.gs_client.get_values(spreadsheet_id, worksheet_id)
-        row_num = self._is_member_in_worksheet(rows, member)
-        if not row_num:
-            return False
-
-        self.gs_client.add_strikethrough_on_row(spreadsheet_id, worksheet_id, row_num)
-        return True
+        self.gs_client.append_row(worksheet_id, member.transform_for_spreadsheet())

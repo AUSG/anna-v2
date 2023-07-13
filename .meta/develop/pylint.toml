@@ -2,12 +2,14 @@
 jobs = 0
 [tool.pylint.basic]
 no-docstring-rgx = ".*\\.py"
-good-names = ["ts", "ex", "m", "fn", "ws"]
+good-names = ["ts", "ex", "m", "fn", "ws", "i", "j", "l", "k", "v", "d", "f"]
 good-names-rgx = "^GCP_"
 [tool.pylint.format]
 max-line-length = 120
 [tool.pylint."messages control"]
-disable = ["missing-module-docstring",
+disable = [
+    "global-statement",
+    "missing-module-docstring",
     "missing-class-docstring",
     "missing-function-docstring",
     "import-error",
@@ -19,6 +21,7 @@ disable = ["missing-module-docstring",
 ]
 [tool.pylint.design]
 max-args = 7
+max-attributes = 10
 [tool.pylint.variables]
 ignored-argument-names = "_.*|^ignored_|^unused_|event|say|client"
 
