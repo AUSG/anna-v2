@@ -96,17 +96,3 @@ class MemberManager:
             and len(m.phone) == 13
             and len(m.school_name_or_company_name) > 0
         )
-
-    @staticmethod
-    def _is_member_in_worksheet(ws_rows, member):
-        for num, row in enumerate(ws_rows, start=1):
-            if member.email in row:
-                return num
-        return None
-
-    def add_member_to_bigchat_worksheet(
-        self,
-        member,
-        worksheet_id,
-    ):
-        self.gs_client.append_row(worksheet_id, member.transform_for_spreadsheet())

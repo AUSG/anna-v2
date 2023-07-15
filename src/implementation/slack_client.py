@@ -34,7 +34,8 @@ class SlackClient:
             text=msg, channel=channel, user=user_id, thread_ts=thread_ts
         )
 
-    def _messages_to_members(self, messages, channel):
+    @staticmethod
+    def _messages_to_members(messages, channel):
         return [
             Message(
                 ts=msg["ts"],
@@ -71,86 +72,3 @@ class SlackClient:
             raise Exception(f"Failed to get message, ts={thread_ts}, channel={channel}")
 
         return self._messages_to_members(resp["messages"], channel)
-
-    def get_emojis(self, channel: str, ts: str) -> List[Emoji]:
-        """
-        res: https://api.slack.com/methods/reactions.get#examples
-        """
-        resp = self.web_client.reactions_get(channel=channel, timestamp=ts, full=True)
-
-        emojis = []
-        reactions = (
-            resp["message"]["reactions"] if "reactions" in resp["message"] else []
-        )
-        for reaction in reactions:
-            for user in reaction["users"]:
-                emojis.append(Emoji(user=user, name=reaction["name"]))
-
-        return emojis
-
-    def open_view_for_create_bigchat_sheet(self, trigger_id):
-        self.web_client.views_open(
-            trigger_id=trigger_id,
-            view={
-                "type": "modal",
-                "callback_id": "CREATE_BIGCHAT_SHEET_FORM_SUBMIT",  # Used when calling view_closed
-                "title": {"type": "plain_text", "text": "새로운 빅챗 시트를 만들 시간이야?"},
-                "submit": {
-                    "type": "plain_text",
-                    "text": "생성",
-                },
-                "close": {
-                    "type": "plain_text",
-                    "text": "취소",
-                },
-                "notify_on_close": False,
-                "blocks": [
-                    {
-                        "type": "context",
-                        "elements": [
-                            {
-                                "type": "plain_text",
-                                "text": "(스레드 안에서 만드는 걸 추천해!)",
-                                "emoji": True,
-                            }
-                        ],
-                    },
-                    {
-                        "dispatch_action": False,
-                        "type": "input",
-                        "element": {
-                            "type": "plain_text_input",
-                            "action_id": "SHEET_NAME",
-                        },
-                        "label": {
-                            "type": "plain_text",
-                            "text": "시트 이름을 알려줘.",
-                            "emoji": True,
-                        },
-                    },
-                ],
-            },
-        )
-
-    def open_view_for_notify_reqeust_fail(self, msg, trigger_id):
-        self.web_client.views_open(
-            trigger_id=trigger_id,
-            view={
-                "type": "modal",
-                "callback_id": "NOOP",
-                "title": {"type": "plain_text", "text": "이런!"},
-                "close": {
-                    "type": "plain_text",
-                    "text": "취소",
-                },
-                "notify_on_close": False,
-                "blocks": [
-                    {
-                        "type": "context",
-                        "elements": [
-                            {"type": "plain_text", "text": msg, "emoji": True}
-                        ],
-                    }
-                ],
-            },
-        )

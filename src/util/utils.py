@@ -5,6 +5,7 @@ def search_value(d, key):
     XXX: 자세한 용례는 테스트 코드를 참고할 것.
     """
 
+    # noinspection PyShadowingNames
     def _search_value(d, key):
         for k, v in d.items():
             if k == key:

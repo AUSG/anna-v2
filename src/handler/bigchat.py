@@ -22,8 +22,7 @@ def _get_member_manager():  # TODO(seonghyeok): we need better singleton
 
 
 class AttendBigchat:
-    def __init__(self, event, anna, target_emoji, slack_client, member_manager):
-        self.anna = anna
+    def __init__(self, event, target_emoji, slack_client, gs_client, member_manager):
         self.type = event["type"]
         self.reaction = event["reaction"]
         self.channel = event["item"]["channel"]
@@ -32,9 +31,11 @@ class AttendBigchat:
         self.user = event["user"]
         self.target_emoji = target_emoji
         self.slack_client = slack_client
+        self.gs_client = gs_client
         self.member_manager = member_manager
 
-    def _extract_worksheet_id(self, messages: List[Message]):
+    @staticmethod
+    def _extract_worksheet_id(messages: List[Message]):
         """
         return 0 if not found
         """
@@ -69,7 +70,7 @@ class AttendBigchat:
             )
             return False
 
-        self.member_manager.add_member_to_bigchat_worksheet(member, worksheet_id)
+        self.gs_client.append_row(worksheet_id, member.transform_for_spreadsheet())
 
         self.slack_client.send_message(msg=f"<@{self.user}>, 등록 완료!", ts=self.ts)
         self.slack_client.send_message_only_visible_to_user(
@@ -90,7 +91,7 @@ class AttendBigchat:
         return True
 
 
-## reaction_added event sample:
+# reaction_added event sample:
 # {
 #   'type': 'reaction_added',
 #   'user': 'UQJ8HQJG5',
@@ -107,9 +108,9 @@ class AttendBigchat:
 def attend_bigchat(event, say, client):
     AttendBigchat(
         event,
-        envs.ANNA_ID,
         envs.JOIN_BIGCHAT_EMOJI,
         SlackClient(say, client),
+        GoogleSpreadsheetClient(),
         _get_member_manager(),
     ).run()
 
@@ -208,7 +209,7 @@ class CreateBigchatSheet:
         return True
 
 
-## app_mention event sample:
+# app_mention event sample:
 # {
 #     'client_msg_id': '8fb50d48-f93d-4cca-b9ca-6965479e9a93',
 #     'type': 'app_mention',
