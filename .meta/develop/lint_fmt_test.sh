@@ -9,5 +9,5 @@ if [[ "$1" == "--test-only" ]]; then
 fi
 
 black src
-pylint --rcfile .meta/develop/pylint.toml src
+ruff src
 PYTHONPATH=src pytest --rootdir=./test --cov=./src --cov-report=html -c .meta/develop/pytest.ini

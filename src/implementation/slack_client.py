@@ -59,8 +59,9 @@ class SlackClient:
         ref: https://api.slack.com/methods/conversations.replies#examples
         """
         # [FIXME] default 값이 해당 쓰레드의 메시지 1000 개를 가져오는 것인데,
-        #     혹시라도 쓰레드의 댓글이 첫 글 포함 1000개가 넘을경우 먼저 작성된 1000개를 가져올지, 나중에 작성된 1000개를 가져올지에 대해 체크해보지 않음.
-        #     만약 후자일 경우 이 코드가 쓰레드의 제일 첫번째 메시지를 가져올 수 있도록 수정해야 함
+        #     혹시라도 쓰레드의 댓글이 첫 글 포함 1000개가 넘을경우 먼저 작성된 1000개를 가져올지,
+        #     아니면 나중에 작성된 1000개를 가져올지에 대해 체크해보지 않음.
+        #     만약 후자일 경우 이 코드가 쓰레드의 제일 첫번째 메시지를 가져올 수 있도록 수정해야 함.
 
         if ts:
             msg = self.get_replies(thread_ts=ts, channel=channel)[0]
