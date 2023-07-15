@@ -47,7 +47,9 @@ class GoogleSpreadsheetClient:
 
         spreadsheet = self._get_spreadsheet()
 
-        worksheet = spreadsheet.add_worksheet(title, rows=row_size, cols=col_size)
+        worksheet = spreadsheet.add_worksheet(
+            title, rows=row_size, cols=col_size, index=3
+        )  # index is 0-based
         worksheet.append_row(header_values)
         set_column_width(
             worksheet, self._convert_list_to_sheet_range(len(header_values)), col_width
