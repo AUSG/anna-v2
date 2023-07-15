@@ -10,6 +10,10 @@ lint_fmt_test:
 test:
 	source venv/bin/activate && .meta/develop/lint_fmt_test.sh --test-only
 
+.PHONY: tmp
+tmp:
+	.meta/develop/lint_fmt_test.sh --test-only
+
 .PHONY: update_submodule
 update_submodule:
 	git submodule update --recursive --remote
