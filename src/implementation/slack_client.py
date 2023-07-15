@@ -3,6 +3,7 @@ from typing import List, Optional
 from pydantic import BaseModel
 from slack_bolt import Say
 from slack_sdk import WebClient
+from slack_sdk.errors import SlackApiError
 
 
 class Message(BaseModel):
@@ -72,3 +73,23 @@ class SlackClient:
             raise Exception(f"Failed to get message, ts={thread_ts}, channel={channel}")
 
         return self._messages_to_members(resp["messages"], channel)
+
+    def add_emoji(self, channel, ts, emoji_name):
+        try:
+            self.web_client.reactions_add(
+                channel=channel, name=emoji_name, timestamp=ts
+            )
+        except SlackApiError as ex:
+            if ex.response.data["error"] == "already_reacted":
+                return
+            raise ex
+
+    def remove_emoji(self, channel, ts, emoji_name):
+        try:
+            self.web_client.reactions_remove(
+                channel=channel, name=emoji_name, timestamp=ts
+            )
+        except SlackApiError as ex:
+            if ex.response.data["error"] == "no_reaction":
+                return
+            raise ex

@@ -2,7 +2,7 @@ import re
 from typing import List
 
 from config.env_config import envs
-from handler.decorator import catch_global_error
+from handler.decorator import catch_global_error, loading_emoji_while_processing
 from implementation.google_spreadsheet_client import GoogleSpreadsheetClient
 from implementation.member_finder import MemberManager, MemberNotFound, MemberLackInfo
 from implementation.slack_client import SlackClient, Message
@@ -105,6 +105,7 @@ class AttendBigchat:
 #   'event_ts': '1688833113.003600'
 # }
 @catch_global_error()
+@loading_emoji_while_processing()
 def attend_bigchat(event, say, client):
     AttendBigchat(
         event,
@@ -172,6 +173,7 @@ class AbandonBigchat:
 
 
 @catch_global_error()
+@loading_emoji_while_processing()
 def abandon_bigchat(event, say, client):
     AbandonBigchat(
         event,
@@ -224,6 +226,7 @@ class CreateBigchatSheet:
 #     'event_ts': '1689403771.805849'
 # }
 @catch_global_error()
+@loading_emoji_while_processing()
 def create_bigchat_sheet(event, say, client):
     CreateBigchatSheet(event, SlackClient(say, client), GoogleSpreadsheetClient()).run()
 
@@ -244,5 +247,6 @@ class SimpleResponse:
 
 
 @catch_global_error()
+@loading_emoji_while_processing()
 def simple_response(event, say, client):
     SimpleResponse(event, SlackClient(say, client)).run()
