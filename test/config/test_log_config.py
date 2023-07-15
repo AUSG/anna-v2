@@ -1,7 +1,6 @@
 import logging
 import unittest
 from importlib import reload
-from unittest.mock import patch
 
 from config import log_config
 
