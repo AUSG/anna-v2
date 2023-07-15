@@ -1,4 +1,3 @@
-from dataclasses import field
 from typing import List, Optional
 
 from pydantic import BaseModel
@@ -10,8 +9,8 @@ class Message(BaseModel):
     ts: str
     thread_ts: str
     channel: str
-    user: str = field(compare=False, default="")
-    text: str = field(compare=False, default="")
+    user: str
+    text: str
 
 
 class Emoji(BaseModel):
