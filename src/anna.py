@@ -5,7 +5,7 @@ from slack_bolt import App
 from config.env_config import envs
 from config.log_config import init_logger
 from handler.bigchat import (
-    attend_bigchat,
+    join_bigchat,
     simple_response,
     abandon_bigchat,
     create_bigchat_sheet,
@@ -19,7 +19,7 @@ app = App(token=envs.SLACK_BOT_TOKEN, signing_secret=envs.SLACK_SIGNING_SECRET)
 @app.event("reaction_added")
 def handle_reaction_added_event(ack, event, say, client):
     ack()
-    attend_bigchat(event=event, say=say, client=client)
+    join_bigchat(event=event, say=say, client=client)
 
 
 @app.event("reaction_removed")
