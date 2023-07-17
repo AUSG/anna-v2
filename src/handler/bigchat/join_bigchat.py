@@ -50,12 +50,12 @@ class JoinBigchat:
             member = self.member_manager.find(self.user)
         except MemberNotFound:
             self.slack_client.send_message(
-                msg=f"<@{self.user}>, 네 정보를 찾지 못했어.", ts=self.ts
+                msg=f"<@{self.user}>, 네 정보를 찾지 못했어. 운영진에게 연락해줘!", ts=self.ts
             )
             return False
         except MemberLackInfo:
             self.slack_client.send_message(
-                msg=f"<@{self.user}>, 네 정보에 누락된 값이 있어.", ts=self.ts
+                msg=f"<@{self.user}>, 네 정보에 누락된 값이 있어. 운영진에게 연락해줘!", ts=self.ts
             )
             return False
 
