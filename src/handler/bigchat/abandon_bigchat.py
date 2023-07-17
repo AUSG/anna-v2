@@ -24,15 +24,13 @@ class AbandonBigchat:
         self.member_manager = member_manager
         self.gs_client = gs_client
 
-    def _extract_worksheet_id(self, messages: List[Message]):
-        """
-        return 0 if not found
-        """
+    @staticmethod
+    def _extract_worksheet_id(messages: List[Message]):
         for message in messages:
             pat = SPREADSHEET_PAT.search(message.text)
             if pat is not None and len(pat.groups()) > 0:
                 return int(pat.groups()[0])
-        return 0
+        return None
 
     def run(self):
         if self.type != "reaction_removed" or self.reaction != self.target_emoji:
