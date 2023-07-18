@@ -5,7 +5,11 @@ from handler.decorator import loading_emoji_while_processing
 
 
 class TestDecorator(unittest.TestCase):
-    def test_loading_emoji_while_processing(self):
+    def test_loading_emoji_while_processing_add_and_remove_emoji(self):
+        """
+            function 동작 이전에 loading 이모지를 추가하고
+            function 동작이 마무리되면 loading 이모지를 제거해야만 함.
+        """
         mock_f = MagicMock()
         mock_client = MagicMock()
         event = {'client_msg_id': '59d1dbd3-245d-40ec-8898-ec5e32dae2ed', 'type': 'app_mention',
