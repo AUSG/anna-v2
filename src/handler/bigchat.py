@@ -3,7 +3,7 @@ from handler.bigchat.abandon_bigchat import AbandonBigchat
 from handler.bigchat.create_bigchat_sheet import CreateBigchatSheet
 from handler.bigchat.join_bigchat import JoinBigchat
 from handler.bigchat.simple_response import SimpleResponse
-from handler.decorator import catch_global_error
+from handler.decorator import catch_global_error, loading_emoji_while_processing
 from implementation.google_spreadsheet_client import GoogleSpreadsheetClient
 from implementation.member_finder import MemberManager
 from implementation.slack_client import SlackClient
@@ -43,6 +43,7 @@ def join_bigchat(event, say, client):
 
 
 @catch_global_error()
+@loading_emoji_while_processing()
 def abandon_bigchat(event, say, client):
     AbandonBigchat(
         event,
@@ -69,10 +70,12 @@ def abandon_bigchat(event, say, client):
 #     'event_ts': '1689403771.805849'
 # }
 @catch_global_error()
+@loading_emoji_while_processing()
 def create_bigchat_sheet(event, say, client):
     CreateBigchatSheet(event, SlackClient(say, client), GoogleSpreadsheetClient()).run()
 
 
 @catch_global_error()
+@loading_emoji_while_processing()
 def simple_response(event, say, client):
     SimpleResponse(event, SlackClient(say, client)).run()
