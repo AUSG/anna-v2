@@ -3,7 +3,7 @@ from handler.bigchat.abandon_bigchat import AbandonBigchat
 from handler.bigchat.create_bigchat_sheet import CreateBigchatSheet
 from handler.bigchat.join_bigchat import JoinBigchat
 from handler.bigchat.simple_response import SimpleResponse
-from handler.decorator import catch_global_error
+from handler.decorator import catch_global_error, loading_emoji_while_processing
 from implementation.google_spreadsheet_client import GoogleSpreadsheetClient
 from implementation.member_finder import MemberManager
 from implementation.slack_client import SlackClient
