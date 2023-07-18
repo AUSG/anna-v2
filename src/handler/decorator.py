@@ -72,8 +72,6 @@ def loading_emoji_while_processing():
             channel = search_value(kwargs["event"], "channel")
             ts = search_value(kwargs["event"], "ts")
 
-            ex = None
-
             try:
                 slack_client.add_emoji(channel, ts, "loading")
             except Exception:
@@ -81,17 +79,10 @@ def loading_emoji_while_processing():
 
             try:
                 f(*args, **kwargs)
-            except Exception as ex2:
-                ex = ex2
-                pass
-
-            try:
-                slack_client.remove_emoji(channel, ts, "loading")
-            except Exception:
-                pass
-
-            if ex:
+            except Exception as ex:
                 raise ex
+            finally:
+                slack_client.remove_emoji(channel, ts, "loading")
 
         return wrapper
 
