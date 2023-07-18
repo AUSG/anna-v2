@@ -6,6 +6,14 @@ setup_local_env:
 lint_fmt_test:
 	source venv/bin/activate && .meta/develop/lint_fmt_test.sh
 
+.PHONY: test
+test:
+	source venv/bin/activate && .meta/develop/lint_fmt_test.sh --test-only
+
+.PHONY: tmp
+tmp:
+	.meta/develop/lint_fmt_test.sh --test-only
+
 .PHONY: update_submodule
 update_submodule:
 	git submodule update --recursive --remote

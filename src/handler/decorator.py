@@ -1,30 +1,67 @@
+import logging
 import traceback
+from functools import wraps
 
 from config.env_config import envs
-from config.log_config import get_logger
+from util.utils import search_value, strip_multiline
 
 ADMIN_CHANNEL = envs.ADMIN_CHANNEL
 
 
-def catch_global_error(fn):
-    def wrapped_fn(event, say, slack_client):
-        logger = get_logger(fn.__name__)
-        try:
-            logger.debug("event=%s", event)
-            fn(event, say, slack_client)
-        except BaseException as ex:
-            err_msg = f"""예상치 못한 에러가 발생했어!
-- event={event}
-- exception={ex}
-- traceback={traceback.format_exc()})
-"""
-            logger.error(err_msg)
-            say(text=err_msg, channel=ADMIN_CHANNEL)
-            say(
-                text="이 메시지가 보인다면 ANNA에 뭔가 문제가 생겼단 뜻이야. 운영진에게 알려줘!",
-                channel=event["item"]["channel"],
-                user=event["user"],
-                thread_ts=event["item"]["ts"],
+def catch_global_error():
+    def decorator(f):
+        @wraps(f)
+        def wrapper(*args, **kwargs):
+            logger = logging.getLogger(f.__name__)
+            event, say, respond = (
+                kwargs.get("event", None) or kwargs.get("body", None),
+                kwargs.get("say", None),
+                kwargs.get("respond", None),
             )
 
-    return wrapped_fn
+            try:
+                logger.debug("event=%s", event)
+                f(*args, **kwargs)
+            except BaseException as ex:
+                err_msg = strip_multiline(
+                    """
+                    :blob-fearful: 예상치 못한 에러가 발생했어!
+                    :point_right: event:
+                    ```
+                    {}
+                    ```
+                    
+                    :point_right: exception:
+                    ```
+                    {}
+                    
+                    ```
+                    :point_right: traceback:
+                    ```
+                    {}
+                    ```""",
+                    str(event),
+                    str(ex),
+                    str(traceback.format_exc()),
+                )
+                logger.error(err_msg)
+                logger.error(event)
+                say(
+                    text=err_msg, channel=ADMIN_CHANNEL
+                )  # send full log to admin channel
+
+                # notify user that something is wrong.
+                msg = ":blob-fearful: 요청이 정상적으로 처리되지 않았어. 운영진에게 알려줘!"
+                if respond:
+                    respond(msg)
+                else:
+                    say(
+                        text=msg,
+                        channel=search_value(event, "channel_id")
+                        or search_value(event, "channel_id")
+                        or ADMIN_CHANNEL,
+                    )
+
+        return wrapper
+
+    return decorator

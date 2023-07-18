@@ -1,7 +1,11 @@
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
+    model_config = SettingsConfigDict(
+        env_file=["env/.env.secret", "env/.env.shared"], env_file_encoding="utf-8"
+    )
+
     # Slack bot API
     SLACK_SIGNING_SECRET: str = ""
     SLACK_BOT_TOKEN: str = ""
@@ -34,10 +38,6 @@ class Settings(BaseSettings):
 
     # Development environment variables
     LOGLEVEL: str = "DEBUG"
-
-    class Config:
-        env_file = "env/.env.secret", "env/.env.shared"
-        env_file_encoding = "utf-8"
 
 
 envs = Settings()  # Singleton
