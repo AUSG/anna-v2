@@ -32,6 +32,7 @@ def _get_member_manager():  # TODO(seonghyeok): we need better singleton
 #   'event_ts': '1688833113.003600'
 # }
 @catch_global_error()
+@loading_emoji_while_processing()
 def join_bigchat(event, say, client):
     JoinBigchat(
         event,

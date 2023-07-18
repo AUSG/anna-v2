@@ -4,7 +4,7 @@ from slack_bolt import App
 
 from config.env_config import envs
 from config.log_config import init_logger
-from handler.bigchat import (
+from handler.controller import (
     join_bigchat,
     simple_response,
     abandon_bigchat,
