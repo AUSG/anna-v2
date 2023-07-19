@@ -5,15 +5,20 @@
 # 기본적인 개발환경 구축하기
 
 ```sh
+poetry shell
 make setup_local_env
+# virtual env sub-shell 접속
+poetry install --with ci
 ```
+
+이후의 명령어들은 모두 poetry 를 통해 의존성을 설치했다는 가정으로 설명한다.
 
 # 실제 AUSG 슬랙과 로컬의 안나를 연동해서 테스트하기
 
 1. 안나 깨우기
 
 ```sh
-make run_local
+make wakeup_anna
 ```
 
 2. 로컬에서 슬랙 이벤트를 수신할 수 있도록 포트 개방
@@ -25,6 +30,7 @@ make run_local
 > 왜인지는 모르겠지만, ngrok 을 쓰면 슬랙의 검증 API 가 정상적으로 들어오지 않는다.
 
 ```sh
+# 별도의 shell 에서 진행
 make open_port
 ```
 
@@ -40,7 +46,7 @@ make open_port
 
 # 배포 방법
 
-see [HOW_TO_DEPLOY.md](.meta/develop/HOW_TO_DEPLOY.md).
+see [HOW_TO_DEPLOY.md](.meta/docs/HOW_TO_DEPLOY.md).
 
 # Misc
 

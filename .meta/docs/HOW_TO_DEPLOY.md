@@ -13,7 +13,7 @@ fly.io 배포 방식은, k8s 의 pod 띄우기를 간소화했다고 보면 된�
 로컬에서 직접 배포할 때는 아래 커맨드를 사용한다. 
 
 ```sh
-make deploy
+make deploy_local
 ```
 
 ## 환경변수 수정

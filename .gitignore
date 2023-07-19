@@ -8,3 +8,6 @@ __pycache__/
 .DS_Store
 .coverage
 htmlcov/
+
+poetry-convert.py
+dist/
