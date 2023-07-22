@@ -1,9 +1,19 @@
+from pathlib import Path
+
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+def _get_project_root() -> Path:
+    return Path(__file__).parent.parent
 
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
-        env_file=["env/.env.secret", "env/.env.shared"], env_file_encoding="utf-8"
+        env_file=[
+            f"{_get_project_root()}/env/.env.secret",
+            f"{_get_project_root()}/env/.env.shared"
+        ],
+        env_file_encoding="utf-8"
     )
 
     # Slack bot API

@@ -10,11 +10,13 @@ _update_submodule:
 
 .PHONY: setup_local_env
 setup_local_env: _set_hooks _update_submodule
-	pip install poetry
+
 
 .PHONY: wakeup_anna
 wakeup_anna:
-	poetry install && cd src && poetry run python anna.py
+	pip install poetry
+	poetry install
+	poetry run python src/anna.py
 
 .PHONY: open_port
 open_port:
