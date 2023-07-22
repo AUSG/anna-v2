@@ -42,14 +42,9 @@ ci: _lintfmt _test
 
 .PHONY: deploy_local
 deploy_local: _update_submodule ci
-	poetry export -f requirements.txt --without-hashes -o requirements.txt
-	fly deploy --config .meta/deploy/fly.toml --dockerfile .meta/deploy/Dockerfile --ignorefile .meta/deploy/.dockerignore
+	fly version update
+	fly deploy --config .meta/deploy/fly.toml --dockerfile .meta/deploy/Dockerfile
 
 .PHONY: deploy_remote
 deploy_remote: ci
-	fly deploy --config .meta/deploy/fly.toml --dockerfile .meta/deploy/Dockerfile --ignorefile .meta/deploy/.dockerignore
-
-.PHONY: wakeup_remote_anna
-wakeup_remote_anna:
-	cd src && python anna.py
-
+	fly deploy --config .meta/deploy/fly.toml --dockerfile .meta/deploy/Dockerfile --remote-only
