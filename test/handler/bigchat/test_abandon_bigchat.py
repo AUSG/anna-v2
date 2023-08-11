@@ -38,6 +38,6 @@ class TestAbandonBigchat(unittest.TestCase):
         mock_slack_client.get_replies.assert_called_once()
         mock_member_manager.find.assert_called_once()
         mock_gs_client.delete_row.assert_called_once()
-        mock_slack_client.send_message.assert_called_once()
+        mock_slack_client.send_message_only_visible_to_user.assert_called_once()
         assert result is True
-        assert "등록을 취소했어." in mock_slack_client.send_message.call_args.kwargs["msg"]
+        assert "등록을 취소했어." in mock_slack_client.send_message_only_visible_to_user.call_args.kwargs["msg"]
