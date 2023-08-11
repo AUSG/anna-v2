@@ -27,3 +27,36 @@ class TestDecorator(unittest.TestCase):
         mock_f.assert_called()
         mock_client.reactions_add.assert_called_once()
         mock_client.reactions_remove.assert_called_once()
+
+    def test_loading_emoji_triggerd_if_target_emoji(self):
+        mock_f = MagicMock()
+        mock_client = MagicMock()
+        event = {'type': 'reaction_added', 'user': 'UQJ8HQJG5', 'reaction': 'thinking',
+                 'item': {'type': 'message', 'channel': 'C03SZTDEDK3', 'ts': '1688801145.307229'},
+                 'item_user': 'UQJ8HQJG5', 'event_ts': '1688833113.003600'}
+        mock_ack = MagicMock()
+        mock_say = MagicMock()
+        sut = loading_emoji_while_processing(["thinking"])(mock_f)
+
+        sut(client=mock_client, event=event, ack=mock_ack, say=mock_say)
+
+        mock_f.assert_called()
+        mock_client.reactions_add.assert_called()
+        mock_client.reactions_remove.assert_called()
+
+
+    def test_loading_emoji_not_triggerd_if_not_target_emoji(self):
+        mock_f = MagicMock()
+        mock_client = MagicMock()
+        event = {'type': 'reaction_added', 'user': 'UQJ8HQJG5', 'reaction': 'thinking',
+                 'item': {'type': 'message', 'channel': 'C03SZTDEDK3', 'ts': '1688801145.307229'},
+                 'item_user': 'UQJ8HQJG5', 'event_ts': '1688833113.003600'}
+        mock_ack = MagicMock()
+        mock_say = MagicMock()
+        sut = loading_emoji_while_processing(["wink"])(mock_f)
+
+        sut(client=mock_client, event=event, ack=mock_ack, say=mock_say)
+
+        mock_f.assert_called()
+        mock_client.reactions_add.assert_not_called()
+        mock_client.reactions_remove.assert_not_called()
