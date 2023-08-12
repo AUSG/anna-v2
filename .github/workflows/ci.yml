@@ -1,0 +1,21 @@
+name: ANNA get physical fitness test
+
+on: pull_request
+
+jobs:
+  ci:
+    name: ANNA get physical fitness test
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/setup-python@v4
+        with:
+          python-version: "3.11"
+      - name: Run image
+        uses: abatilo/actions-poetry@v2
+        with:
+          poetry-version: 1.5.1
+      - name: ready
+        run: poetry install --with ci
+      - name: go
+        run: make ci
