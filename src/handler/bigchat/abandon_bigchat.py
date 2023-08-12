@@ -1,5 +1,5 @@
-from typing import List
 import re
+from typing import List
 
 from implementation.member_finder import MemberNotFound, MemberLackInfo
 from implementation.slack_client import Message
@@ -59,5 +59,10 @@ class AbandonBigchat:
 
         self.gs_client.delete_row(worksheet_id, member.email)
 
-        self.slack_client.send_message(msg=f"<@{self.user}>, 등록을 취소했어.", ts=self.ts)
+        self.slack_client.send_message_only_visible_to_user(
+            msg=f"<@{self.user}>, 등록을 취소했어.",
+            channel=self.channel,
+            ts=self.ts,
+            user_id=self.user,
+        )
         return True

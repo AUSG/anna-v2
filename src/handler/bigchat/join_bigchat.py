@@ -72,7 +72,7 @@ class JoinBigchat:
                 (참고로 이 메시지는 너만 볼 수 있어!)"""
             ),
             channel=self.channel,
-            thread_ts=self.ts,
+            ts=self.ts,
             user_id=self.user,
         )
         return True
