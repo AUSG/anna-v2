@@ -64,7 +64,7 @@ def catch_global_error():
     return decorator
 
 
-def loading_emoji_while_processing():
+def loading_emoji_while_processing(target_emojis=None):
     def decorator(f):
         @wraps(f)
         def wrapper(*args, **kwargs):
@@ -72,17 +72,25 @@ def loading_emoji_while_processing():
             channel = search_value(kwargs["event"], "channel")
             ts = search_value(kwargs["event"], "ts")
 
-            try:
-                slack_client.add_emoji(channel, ts, "loading")
-            except Exception:
-                pass
-
-            try:
-                f(*args, **kwargs)
-            except Exception as ex:
-                raise ex
-            finally:
-                slack_client.remove_emoji(channel, ts, "loading")
+            if (
+                target_emojis is None
+                or kwargs.get("event", {}).get("reaction") in target_emojis
+            ):
+                try:
+                    slack_client.add_emoji(channel, ts, "loading")
+                except Exception:
+                    pass
+                try:
+                    f(*args, **kwargs)
+                except Exception as ex:
+                    raise ex
+                finally:
+                    slack_client.remove_emoji(channel, ts, "loading")
+            else:
+                try:
+                    f(*args, **kwargs)
+                except Exception as ex:
+                    raise ex
 
         return wrapper
 
