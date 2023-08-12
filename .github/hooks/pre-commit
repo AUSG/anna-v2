@@ -2,17 +2,4 @@
 set -e # exit on first error
 set -x # print commands
 
-_print () {
-    GREEN='\033[0;32m'
-    NO_COLOR='\033[0m'
-    echo -e "${GREEN}$1$NO_COLOR"
-}
-
-source venv/bin/activate
-
-make lint_fmt_test
-
-_print "freeze requirements.txt"
-pip3 freeze > requirements.txt
-
-_print "pre-commit hook finished"
+make ci

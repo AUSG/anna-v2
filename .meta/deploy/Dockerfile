@@ -1,13 +1,19 @@
-FROM python:3.10
-
+FROM python:3.11
+EXPOSE 8080
 WORKDIR /app
 
-COPY ../../requirements.txt requirements.txt
-RUN ["pip", "install", "-r", "requirements.txt"]
+# install poetry
+RUN ["pip", "install", "poetry"]
 
+# install dependencies with poetry
+COPY ../../pyproject.toml .
+COPY ../../poetry.lock .
+RUN ["poetry", "install"]
+
+# copy source code
 COPY ../../src src/
 COPY ../../Makefile Makefile
+COPY ../../README.md .
 
-EXPOSE 8080
-
-CMD ["make", "run_deploy"]
+# run the app
+CMD ["make", "wakeup_anna"]
