@@ -39,7 +39,7 @@ class SlackClient:
         return [
             Message(
                 ts=msg["ts"],
-                thread_ts=msg["thread_ts"],
+                thread_ts=msg.get("thread_ts"),
                 channel=channel,
                 user=msg["user"],
                 text=msg["text"],
@@ -57,6 +57,7 @@ class SlackClient:
           가져온 후, 그 message 에 포함된 thread_ts 를 이용해 다시 조회해온다.
 
         ref: https://api.slack.com/methods/conversations.replies#examples
+        XXX: 대댓글이 하나도 없을 경우 thread_ts 값이 비어있을 수 있음
         """
         # [FIXME] default 값이 해당 쓰레드의 메시지 1000 개를 가져오는 것인데,
         #     혹시라도 쓰레드의 댓글이 첫 글 포함 1000개가 넘을경우 먼저 작성된 1000개를 가져올지,
