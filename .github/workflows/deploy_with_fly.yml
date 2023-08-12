@@ -18,4 +18,8 @@ jobs:
           token: ${{ secrets.ACCESS_TOKEN_FOR_CHECKOUT_SUBMODULE }}
           submodules: true
       - uses: superfly/flyctl-actions/setup-flyctl@master
+      - name: install poetry
+        uses: abatilo/actions-poetry@v2
+        with:
+          poetry-version: 1.5.1
       - run: make deploy_remote
