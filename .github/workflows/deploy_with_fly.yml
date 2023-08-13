@@ -24,5 +24,7 @@ jobs:
         uses: abatilo/actions-poetry@v2
         with:
           poetry-version: 1.5.1
+      - name: ready
+        run: poetry install --with ci
       - uses: superfly/flyctl-actions/setup-flyctl@master
       - run: make deploy_remote
