@@ -27,4 +27,4 @@ jobs:
       - name: ready
         run: poetry install --with ci
       - uses: superfly/flyctl-actions/setup-flyctl@master
-      - run: make deploy_remote
+      - run: fly deploy --config .meta/deploy/fly.toml --dockerfile .meta/deploy/Dockerfile --remote-only # make deploy_remote # fly not found 발생해서 그냥 script 를 Makefile 로부터 복붙함
