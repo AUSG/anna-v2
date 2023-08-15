@@ -20,11 +20,10 @@ jobs:
       - uses: actions/setup-python@v4
         with:
           python-version: "3.11"
-      - name: install poetry
-        uses: abatilo/actions-poetry@v2
+      - uses: abatilo/actions-poetry@v2
         with:
           poetry-version: 1.5.1
       - name: ready
         run: poetry install --with ci
       - uses: superfly/flyctl-actions/setup-flyctl@master
-      - run: fly deploy --config .meta/deploy/fly.toml --dockerfile .meta/deploy/Dockerfile --remote-only # make deploy_remote # fly not found 발생해서 그냥 script 를 Makefile 로부터 복붙함
+      - run: flyctl deploy --config .meta/deploy/fly.toml --dockerfile .meta/deploy/Dockerfile --remote-only
