@@ -39,7 +39,7 @@ class SlackClient:
         return [
             Message(
                 ts=msg["ts"],
-                thread_ts=msg.get("thread_ts"),
+                thread_ts=msg.get("thread_ts") or msg.get("ts"),
                 channel=channel,
                 user=msg["user"],
                 text=msg["text"],
