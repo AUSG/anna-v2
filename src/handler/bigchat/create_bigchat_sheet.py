@@ -6,11 +6,10 @@ class CreateBigchatSheet:
         self.gs_client = gs_client
 
     def run(self):
-        text = self.text.replace("<@U01BN035Y6L> ", "").strip()
-        if "새로운 빅챗" not in text:
+        if "새로운 빅챗" not in self.text:
             return False
 
-        sheet_name = text.split("새로운 빅챗", maxsplit=1)[1].split("\n")[0].strip()
+        sheet_name = self.text.split("새로운 빅챗", maxsplit=1)[1].split("\n")[0].strip()
         if not sheet_name:
             self.slack_client.send_message(msg="시트 이름이 입력되지 않았어. 다시 입력해줘!", ts=self.ts)
             return False
