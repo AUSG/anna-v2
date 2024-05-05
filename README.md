@@ -2,6 +2,21 @@
 
 ![anna screenshot](.meta/docs/images/anna_screenshot.png)
 
+# 특수 커맨드
+
+1. 새로운 빅챗 시트 만들기
+
+```sh
+@ANNA 새로운 빅챗 $SHEET_NAME
+# 예시:
+#   @ANNA 새로운 빅챗 빅챗 24-05-05
+#   => 빅챗 24-05-05 라는 시트 생성
+```
+
+스레드에 위와 같이 입력하면 [구글 스프레드 시트](https://docs.google.com/spreadsheets/d/1FtKRO4gmlVg-Si0_CHt-tkpVd3LDTXdsoZ0u98MYd0k)에 $SHEET_NAME 이름으로 시트가 생성된다.
+
+이렇게 시트가 생성된 이후엔, 해당 스레드의 첫 글에 :gogo: 이모지를 달아서 각자의 이름을 해당 시트에 추가할 수 있다.
+
 # 기본적인 개발환경 구축하기
 
 ```sh
@@ -52,7 +67,7 @@ see [HOW_TO_DEPLOY.md](.meta/docs/HOW_TO_DEPLOY.md).
 
 ## .meta 디렉토리
 
-실제 소스코드와 관련성이 적은 파일들은 [.meta](.meta) 디렉토리를 참고해주세요. 관련한 아이디어는 https://news.hada.io/topic?id=9504 를 보시면 됩니다. 
+실제 소스코드와 관련성이 적은 파일들은 [.meta](.meta) 디렉토리를 참고해주세요. 관련한 아이디어는 https://news.hada.io/topic?id=9504 를 보시면 됩니다.
 
 ## 참고자료
 
