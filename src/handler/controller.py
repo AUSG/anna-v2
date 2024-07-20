@@ -1,5 +1,6 @@
 from config.env_config import envs
 from handler.bigchat.abandon_bigchat import AbandonBigchat
+from handler.bigchat.announce_new_channel_created import AnnounceNewChannelCreated
 from handler.bigchat.create_bigchat_sheet import CreateBigchatSheet
 from handler.bigchat.join_bigchat import JoinBigchat
 from handler.bigchat.simple_response import SimpleResponse
@@ -80,3 +81,52 @@ def create_bigchat_sheet(event, say, client):
 @loading_emoji_while_processing()
 def simple_response(event, say, client):
     SimpleResponse(event, SlackClient(say, client)).run()
+
+
+# channel_created event sample:
+# {
+#     'type': 'channel_created',
+#     'channel': {
+#         'id': 'C07DB6LPCJE',
+#         'name': 'test-create-channel-2',
+#         'is_channel': True,
+#         'is_group': False,
+#         'is_im': False,
+#         'is_mpim': False,
+#         'is_private': False,
+#         'created': 1721484974,
+#         'is_archived': False,
+#         'is_general': False,
+#         'unlinked': 0,
+#         'name_normalized': 'test-create-channel-2',
+#         'is_shared': False,
+#         'is_frozen': False,
+#         'is_org_shared': False,
+#         'is_pending_ext_shared': False,
+#         'pending_shared': [],
+#         'context_team_id': 'TQLEG4B38',
+#         'updated': 1721484974161,
+#         'parent_conversation': None,
+#         'creator': 'UQJ8HQJG5',
+#         'is_ext_shared': False,
+#         'shared_team_ids': [
+#             'TQLEG4B38'
+#         ],
+#         'pending_connected_team_ids': [],
+#         'topic': {
+#             'value': '',
+#             'creator': '',
+#             'last_set': 0
+#         },
+#         'purpose': {
+#             'value': '',
+#             'creator': '',
+#             'last_set': 0
+#         },
+#         'previous_names': []
+#     },
+#     'event_ts': '1721484974.006000'
+# }
+@catch_global_error()
+def announce_new_channel_created(event, say, client):
+    AnnounceNewChannelCreated(event, SlackClient(say, client)).run()
