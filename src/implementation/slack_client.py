@@ -27,8 +27,11 @@ class SlackClient:
     def send_message(self, msg: str, ts: str):
         self.say(msg, thread_ts=ts)
 
+    def send_message_to_freetalk(self, msg: str):
+        self.say(msg, channel="CQJ8HQWUV")
+
     def send_message_only_visible_to_user(
-        self, msg: str, user_id: str, channel: str, ts: Optional[str] = None
+            self, msg: str, user_id: str, channel: str, ts: Optional[str] = None
     ):
         self.web_client.chat_postEphemeral(
             text=msg, channel=channel, user=user_id, thread_ts=ts
@@ -48,7 +51,7 @@ class SlackClient:
         ]
 
     def get_replies(
-        self, channel: str, thread_ts: str = None, ts: str = None
+            self, channel: str, thread_ts: str = None, ts: str = None
     ) -> List[Message]:
         """
         해당 스레드 첫 댓글의 ts, 즉 thread_ts 를 넣어야 정상적으로 목록을 가져옴 (대댓글 X)
