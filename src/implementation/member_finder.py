@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import logging
 from typing import Dict, List
 
@@ -35,6 +37,12 @@ class MemberLackInfo(Exception):
 
 
 class MemberManager:
+    @classmethod
+    def get_instance(cls) -> MemberManager:
+        if not hasattr(cls, "_instance"):
+            cls._instance = cls(GoogleSpreadsheetClient())
+        return cls._instance
+
     def __init__(self, gs_client: GoogleSpreadsheetClient):
         self.gs_client = gs_client
         self.members_worksheet_id = int(envs.MEMBERS_INFO_WORKSHEET_ID)

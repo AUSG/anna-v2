@@ -9,15 +9,6 @@ from implementation.google_spreadsheet_client import GoogleSpreadsheetClient
 from implementation.member_finder import MemberManager
 from implementation.slack_client import SlackClient
 
-MEMBER_MANAGER = None
-
-
-def _get_member_manager():  # TODO(seonghyeok): we need better singleton
-    global MEMBER_MANAGER
-    if not MEMBER_MANAGER:
-        MEMBER_MANAGER = MemberManager(GoogleSpreadsheetClient())
-    return MEMBER_MANAGER
-
 
 # reaction_added event sample:
 # {
@@ -40,7 +31,7 @@ def join_bigchat(event, say, client):
         envs.JOIN_BIGCHAT_EMOJI,
         SlackClient(say, client),
         GoogleSpreadsheetClient(),
-        _get_member_manager(),
+        MemberManager.get_instance(),
     ).run()
 
 
@@ -52,7 +43,7 @@ def abandon_bigchat(event, say, client):
         envs.ANNA_ID,
         envs.JOIN_BIGCHAT_EMOJI,
         SlackClient(say, client),
-        _get_member_manager(),
+        MemberManager.get_instance(),
         GoogleSpreadsheetClient(),
     ).run()
 
