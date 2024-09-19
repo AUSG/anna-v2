@@ -19,6 +19,12 @@ class Emoji(BaseModel):
     name: str
 
 
+class Reaction(BaseModel):
+    name: str
+    users: List[str]
+    count: int
+
+
 class SlackClient:
     def __init__(self, say: Say, web_client: WebClient):
         self.say = say
@@ -49,6 +55,10 @@ class SlackClient:
             )
             for msg in messages
         ]
+
+    def get_channel(self) -> Optional[str]:
+        """현재 메시지가 발송된 채널을 반환한다."""
+        return self.say.channel
 
     def get_replies(
             self, channel: str, thread_ts: str = None, ts: str = None
@@ -87,6 +97,27 @@ class SlackClient:
             if ex.response.data["error"] == "already_reacted":
                 return
             raise ex
+
+    def get_emoji(self, channel: str, ts: str, emoji_name: str) -> Optional[Reaction]:
+        """channel에 있는 ts 시간에 발송된 메시지에 사용자들이 남긴 반응 목록을 가져온다.
+
+        해당 반응이 존재하지 않는다면 None을 반환한다."""
+        response = self.web_client.reactions_get(
+            channel=channel,
+            full=True,
+            timestamp=ts,
+        )
+        assert response["ok"]
+        assert response["type"] == "message"
+        for reaction in response["message"]["reactions"]:
+            if reaction["name"] == emoji_name:
+                return Reaction(
+                    name=reaction["name"],
+                    users=reaction["users"],
+                    count=reaction["count"],
+                )
+        else:
+            return None
 
     def remove_emoji(self, channel, ts, emoji_name):
         try:
