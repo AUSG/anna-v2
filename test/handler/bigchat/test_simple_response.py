@@ -12,7 +12,7 @@ class TestSimpleResponse(unittest.TestCase):
         mock_slack_client = MagicMock()
         sut = SimpleResponse(event, mock_slack_client)
 
-        result = sut.run()
+        result = sut.handle_mention()
 
         mock_slack_client.send_message.assert_called_once()
         assert result is True
@@ -23,7 +23,7 @@ class TestSimpleResponse(unittest.TestCase):
         mock_slack_client = MagicMock()
         sut = SimpleResponse(event, mock_slack_client)
 
-        result = sut.run()
+        result = sut.handle_mention()
 
         mock_slack_client.send_message.assert_not_called()
         assert result is False
