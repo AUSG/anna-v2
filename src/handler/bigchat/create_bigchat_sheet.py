@@ -9,7 +9,7 @@ class CreateBigchatSheet(MentionHandler):
         self.gs_client = gs_client
 
     def handle_mention(self):
-        if "새로운 빅챗" not in self.text:
+        if not self.can_handle():
             return False
 
         sheet_name = self.text.split("새로운 빅챗", maxsplit=1)[1].split("\n")[0].strip()

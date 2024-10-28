@@ -10,6 +10,8 @@ class ShuffleResponse(MentionHandler):
         self.slack_client = slack_client
 
     def handle_mention(self):
+        if not self.can_handle():
+            return False
         text = self.text.replace("<@U01BN035Y6L>", "").strip()
         shuffled = self._shuffle(text.replace("shuffle", "").replace("섞어줘", "").strip())
         self.slack_client.send_message(msg=shuffled, ts=self.ts)
