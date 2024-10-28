@@ -1,11 +1,14 @@
-class CreateBigchatSheet:
+from handler.bigchat.mention_handler import MentionHandler
+
+
+class CreateBigchatSheet(MentionHandler):
     def __init__(self, event, slack_client, gs_client):
         self.text = event["text"]
         self.ts = event["ts"]
         self.slack_client = slack_client
         self.gs_client = gs_client
 
-    def run(self):
+    def handle_mention(self):
         if "새로운 빅챗" not in self.text:
             return False
 
@@ -21,3 +24,6 @@ class CreateBigchatSheet:
             ts=self.ts,
         )
         return True
+
+    def can_handle(self):
+        return "새로운 빅챗" in self.text

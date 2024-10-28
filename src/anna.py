@@ -6,10 +6,9 @@ from config.env_config import envs
 from config.log_config import init_logger
 from handler.controller import (
     join_bigchat,
-    simple_response,
     abandon_bigchat,
-    create_bigchat_sheet,
     announce_new_channel_created,
+    mention_response,
 )
 
 init_logger()
@@ -32,8 +31,7 @@ def handle_reaction_removed_event(ack, event, say, client):
 @app.event("app_mention")
 def handle_app_mention_event(ack, event, say, client):
     ack()
-    simple_response(event=event, say=say, client=client)
-    create_bigchat_sheet(event=event, say=say, client=client)
+    mention_response(say=say, event=event, client=client)
 
 
 @app.event("channel_created")
