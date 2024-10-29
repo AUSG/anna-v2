@@ -12,7 +12,7 @@ class TestCreateBigchatSheet(unittest.TestCase):
         mock_gs_client = MagicMock()
         sut = CreateBigchatSheet(event, mock_slack_client, mock_gs_client)
 
-        result = sut.run()
+        result = sut.handle_mention()
 
         mock_gs_client.create_bigchat_sheet.assert_called_once()
         mock_gs_client.get_url.assert_called_once()
@@ -26,7 +26,7 @@ class TestCreateBigchatSheet(unittest.TestCase):
         mock_gs_client = MagicMock()
         sut = CreateBigchatSheet(event, mock_slack_client, mock_gs_client)
 
-        result = sut.run()
+        result = sut.handle_mention()
 
         mock_gs_client.assert_not_called()
         mock_slack_client.assert_not_called()
@@ -38,7 +38,7 @@ class TestCreateBigchatSheet(unittest.TestCase):
         mock_gs_client = MagicMock()
         sut = CreateBigchatSheet(event, mock_slack_client, mock_gs_client)
 
-        result = sut.run()
+        result = sut.handle_mention()
 
         mock_gs_client.assert_not_called()
         mock_slack_client.send_message.assert_called_once()

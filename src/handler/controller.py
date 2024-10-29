@@ -4,6 +4,8 @@ from handler.bigchat.announce_new_channel_created import AnnounceNewChannelCreat
 from handler.bigchat.create_bigchat_sheet import CreateBigchatSheet
 from handler.bigchat.join_bigchat import JoinBigchat
 from handler.bigchat.simple_response import SimpleResponse
+from handler.bigchat.shuffle_response import ShuffleResponse
+from handler.bigchat.mention_response import MentionResponse
 from handler.decorator import catch_global_error, loading_emoji_while_processing
 from implementation.google_spreadsheet_client import GoogleSpreadsheetClient
 from implementation.member_finder import MemberManager
@@ -73,14 +75,13 @@ def abandon_bigchat(event, say, client):
 # }
 @catch_global_error()
 @loading_emoji_while_processing()
-def create_bigchat_sheet(event, say, client):
-    CreateBigchatSheet(event, SlackClient(say, client), GoogleSpreadsheetClient()).run()
-
-
-@catch_global_error()
-@loading_emoji_while_processing()
-def simple_response(event, say, client):
-    SimpleResponse(event, SlackClient(say, client)).run()
+def mention_response(event, say, client):
+    shuffle_response = ShuffleResponse(event, SlackClient(say, client))
+    simple_response = SimpleResponse(event, SlackClient(say, client))
+    create_bigchat_sheet = CreateBigchatSheet(
+        event, SlackClient(say, client), GoogleSpreadsheetClient()
+    )
+    MentionResponse([shuffle_response, create_bigchat_sheet], simple_response).run()
 
 
 # channel_created event sample:
