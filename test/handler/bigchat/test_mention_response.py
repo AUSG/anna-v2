@@ -32,4 +32,4 @@ class TestMentionResponse(unittest.TestCase):
         result = sut.run()
 
         assert result is True
-        assert mock_slack_client.send_message.call_args.kwargs["msg"] == "?"
+        assert mock_slack_client.send_message.call_args.kwargs["msg"] == "앗, 잘못입력한 것 같아.\n나를 멘션하면서 help를 한 번 입력해봐!"
