@@ -11,9 +11,9 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(
         env_file=[
             f"{_get_project_root()}/env/.env.secret",
-            f"{_get_project_root()}/env/.env.shared"
+            f"{_get_project_root()}/env/.env.shared",
         ],
-        env_file_encoding="utf-8"
+        env_file_encoding="utf-8",
     )
 
     # Slack bot API
