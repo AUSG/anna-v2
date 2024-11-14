@@ -29,7 +29,7 @@ open_port:
 .PHONY: _lintfmt
 _lintfmt:
 	poetry run black src/
-	poetry run ruff src/
+	poetry run ruff check src/
 
 .PHONY: _test
 _test:

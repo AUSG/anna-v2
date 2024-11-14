@@ -60,7 +60,6 @@ def with_retry(max_try_cnt=10, fixed_wait_time_in_sec=3):
     """
 
     def decorator(func):
-
         @functools.wraps(func)
         def wrapper(*args, **kwargs):
             last_exception = None
