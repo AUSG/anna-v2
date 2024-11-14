@@ -1,3 +1,7 @@
+import functools
+import time
+
+
 def search_value(d, key):
     """
     주어진 key 에 해당하는 value 를 찾아주는 메서드.
@@ -48,3 +52,26 @@ def strip_multiline(text, *args, ignore_first_line=True):
             result = result.replace("{}", arg, 1)
 
     return result
+
+
+def with_retry(max_try_cnt=10, fixed_wait_time_in_sec=3):
+    """
+    usage: @retry(3, 1)
+    """
+
+    def decorator(func):
+
+        @functools.wraps(func)
+        def wrapper(*args, **kwargs):
+            last_exception = None
+            for attempt in range(max_try_cnt):
+                try:
+                    return func(*args, **kwargs)
+                except Exception as ex:
+                    last_exception = ex
+                    time.sleep(fixed_wait_time_in_sec)
+            raise last_exception
+
+        return wrapper
+
+    return decorator
