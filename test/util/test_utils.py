@@ -1,6 +1,6 @@
 import unittest
 
-from util.utils import search_value, strip_multiline
+from util.utils import search_value, strip_multiline, with_retry
 
 
 class TestUtils(unittest.TestCase):
@@ -111,3 +111,43 @@ C"""
 A
 B
 CCC"""
+
+class TestWithRetry(unittest.TestCase):
+    def test_with_retry_success(self):
+        attempts=0
+
+        @with_retry(fixed_wait_time_in_sec=0.01)
+        def always_succeed():
+            nonlocal attempts
+            attempts+=1
+            return "success"
+
+        self.assertEqual(always_succeed(), "success")
+        self.assertEqual(attempts, 1)
+
+    def test_with_retry_failure(self):
+        attempts = 0
+
+        @with_retry(fixed_wait_time_in_sec=0.01)
+        def always_fail():
+            nonlocal attempts
+            attempts+=1
+            raise ValueError("failure")
+
+        with self.assertRaises(ValueError):
+            always_fail()
+        self.assertEqual(attempts, 10)
+
+    def test_with_retry_partial_success(self):
+        attempts = 0
+
+        @with_retry(fixed_wait_time_in_sec=0.01)
+        def succeed_after_two_attempts():
+            nonlocal attempts
+            attempts += 1
+            if attempts < 3:
+                raise ValueError("failure")
+            return "success"
+
+        self.assertEqual(succeed_after_two_attempts(), "success")
+        self.assertEqual(attempts, 3)
