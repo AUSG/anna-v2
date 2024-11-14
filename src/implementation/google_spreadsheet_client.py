@@ -7,6 +7,7 @@ from gspread import service_account_from_dict, Worksheet, Spreadsheet
 from gspread_formatting import set_column_width
 
 from config.env_config import envs
+from util.utils import with_retry
 
 
 class GoogleSpreadsheetClient:
@@ -57,6 +58,7 @@ class GoogleSpreadsheetClient:
 
         return worksheet.id
 
+    @with_retry
     def append_row(
         self,
         worksheet_id: int,
@@ -94,6 +96,7 @@ class GoogleSpreadsheetClient:
         worksheet = spreadsheet.get_worksheet_by_id(worksheet_id)
         return worksheet
 
+    @with_retry
     def create_bigchat_sheet(self, title=None) -> Optional[int]:
         worksheet_id: Optional[int] = self._create_worksheet(
             title=title,
