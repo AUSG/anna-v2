@@ -56,7 +56,7 @@ def strip_multiline(text, *args, ignore_first_line=True):
 
 def with_retry(max_try_cnt=10, fixed_wait_time_in_sec=3):
     """
-    usage: @retry(3, 1)
+    usage: @with_retry(3, 1)
     """
 
     def decorator(func):
