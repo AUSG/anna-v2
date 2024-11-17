@@ -58,7 +58,7 @@ class GoogleSpreadsheetClient:
 
         return worksheet.id
 
-    @with_retry
+    @with_retry()
     def append_row(
         self,
         worksheet_id: int,
@@ -96,7 +96,7 @@ class GoogleSpreadsheetClient:
         worksheet = spreadsheet.get_worksheet_by_id(worksheet_id)
         return worksheet
 
-    @with_retry
+    @with_retry()
     def create_bigchat_sheet(self, title=None) -> Optional[int]:
         worksheet_id: Optional[int] = self._create_worksheet(
             title=title,
