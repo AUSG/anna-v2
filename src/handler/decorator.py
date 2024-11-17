@@ -51,7 +51,7 @@ def catch_global_error():
                 # notify user that something is wrong.
                 msg = (
                     ":blob-fearful: 요청이 정상적으로 처리되지 않았어. "
-                    "한 번 더 시도해보고, 그래도 안돼면 운영진에게 알려줘!"
+                    "한 번 더 시도해보고, 그래도 안되면 운영진에게 알려줘!"
                 )
                 say(
                     text=msg,
