@@ -73,6 +73,7 @@ class GoogleSpreadsheetClient:
 
         worksheet.append_row(_values)
 
+    @with_retry()
     def get_values(self, worksheet_id: int, cell_range=None) -> List[List[str]]:
         worksheet = self._get_worksheet(worksheet_id)
         return worksheet.get_values(cell_range)
@@ -88,9 +89,11 @@ class GoogleSpreadsheetClient:
     def _yyyymmddhhmmss(timezone: str = "Asia/Seoul") -> str:
         return datetime.now(gettz(timezone)).strftime("%Y%m%d %H%M%S")  # korean time
 
+    @with_retry()
     def _get_spreadsheet(self) -> Spreadsheet:
         return self.gs_client.open_by_key(self.spreadsheet_id)
 
+    @with_retry()
     def _get_worksheet(self, worksheet_id: int) -> Worksheet:
         spreadsheet = self._get_spreadsheet()
         worksheet = spreadsheet.get_worksheet_by_id(worksheet_id)
@@ -113,6 +116,7 @@ class GoogleSpreadsheetClient:
 
         return worksheet_id
 
+    @with_retry()
     def delete_row(self, worksheet_id: int, query: str):
         """
         XXX: 실제로 삭제할 정보가 없어서 아무 동작을 하지 않아도 에러를 뱉지 않는다.
