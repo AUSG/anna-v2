@@ -17,12 +17,10 @@ class Member(BaseModel):
 
     def transform_for_spreadsheet(self) -> List[str]:
         return [
-            self.eng_name.split(" ", 1)[0],  # first name
-            self.eng_name.split(" ", 1)[1],  # last name
-            self.eng_name,  # full name
-            self.email,  # email
-            self.school_name_or_company_name,  # school or company
-            self.phone,  # phone
+            self.kor_name,  # visitor_name (Korean name)
+            self.school_name_or_company_name,  # visitor_company_name
+            self.email,  # visitor_email
+            self.phone,  # visitor_mobile
         ]
 
 
