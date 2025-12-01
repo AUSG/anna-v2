@@ -105,12 +105,10 @@ class GoogleSpreadsheetClient:
             title=title,
             header_values=[
                 # csv 만들때 헤더 없는게 낫다고 해서 전부 주석처리 함
-                # "FirstName",
-                # "LastName",
-                # "FullName",
-                # "Email",
-                # "SchoolOrCompany",
-                # "Phone",
+                # "visitor_name",
+                # "visitor_company_name",
+                # "visitor_email",
+                # "visitor_mobile",
             ],
         )
 
