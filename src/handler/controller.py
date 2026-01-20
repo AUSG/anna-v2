@@ -7,12 +7,15 @@ from handler.bigchat.simple_response import SimpleResponse
 from handler.bigchat.shuffle_response import ShuffleResponse
 from handler.bigchat.mention_response import MentionResponse
 from handler.bigchat.help_response import HelpResponse
+from handler.bigchat.question_response import QuestionResponse
 from handler.decorator import catch_global_error, loading_emoji_while_processing
 from implementation.google_spreadsheet_client import GoogleSpreadsheetClient
+from implementation.llm_client import LLMClient
 from implementation.member_finder import MemberManager
 from implementation.slack_client import SlackClient
 
 MEMBER_MANAGER = None
+LLM_CLIENT = None
 
 
 def _get_member_manager():  # TODO(seonghyeok): we need better singleton
@@ -20,6 +23,17 @@ def _get_member_manager():  # TODO(seonghyeok): we need better singleton
     if not MEMBER_MANAGER:
         MEMBER_MANAGER = MemberManager(GoogleSpreadsheetClient())
     return MEMBER_MANAGER
+
+
+def _get_llm_client():
+    global LLM_CLIENT
+    if not LLM_CLIENT:
+        LLM_CLIENT = LLMClient(
+            base_url=envs.VLLM_BASE_URL,
+            api_key=envs.VLLM_API_KEY,
+            model=envs.VLLM_MODEL,
+        )
+    return LLM_CLIENT
 
 
 # reaction_added event sample:
@@ -83,8 +97,9 @@ def mention_response(event, say, client):
     create_bigchat_sheet = CreateBigchatSheet(
         event, SlackClient(say, client), GoogleSpreadsheetClient()
     )
+    question_response = QuestionResponse(event, SlackClient(say, client), _get_llm_client())
     MentionResponse(
-        [shuffle_response, create_bigchat_sheet, help_response], simple_response
+        [question_response, shuffle_response, create_bigchat_sheet, help_response], simple_response
     ).run()
 
 
