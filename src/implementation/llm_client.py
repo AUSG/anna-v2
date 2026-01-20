@@ -46,7 +46,7 @@ class LLMClient:
             return content.strip()
         except (KeyError, IndexError) as e:
             logger.error(f"Failed to parse LLM response: {e}")
-            raise LLMError("응답을 처리하는 중 문제가 발생했어요. 관리자에게 문의해주세요.")
+            raise LLMError("흐음~ 나도 잘 모르는 일인걸? 오거나이저를 찾아가볼까?")
 
     def is_healthy(self) -> bool:
         try:
