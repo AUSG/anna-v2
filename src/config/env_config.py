@@ -49,5 +49,10 @@ class Settings(BaseSettings):
     # Development environment variables
     LOGLEVEL: str = "DEBUG"
 
+    # vLLM settings
+    VLLM_BASE_URL: str = ""
+    VLLM_API_KEY: str = ""
+    VLLM_MODEL: str = ""
+
 
 envs = Settings()  # Singleton
