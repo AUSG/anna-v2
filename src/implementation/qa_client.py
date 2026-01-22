@@ -36,8 +36,10 @@ class QAClient:
             data = response.json()
             return data["answer"]
         except requests.exceptions.RequestException as e:
+            logger.error(f"QA server request failed: {e}")
             return None
         except (KeyError, IndexError) as e:
+            logger.error(f"QA server response parsing failed: {e}")
             return None
 
     def is_healthy(self) -> bool:
