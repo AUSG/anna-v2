@@ -15,7 +15,7 @@ from implementation.member_finder import MemberManager
 from implementation.slack_client import SlackClient
 
 MEMBER_MANAGER = None
-QAClient = None
+QA_CLIENT = None
 
 
 def _get_member_manager():  # TODO(seonghyeok): we need better singleton
@@ -26,13 +26,13 @@ def _get_member_manager():  # TODO(seonghyeok): we need better singleton
 
 
 def _get_qa_client():
-    global QAClient
-    if not QAClient:
-        QAClient = QAClient(
+    global QA_CLIENT
+    if not QA_CLIENT:
+        QA_CLIENT = QAClient(
             qa_server_base_url=envs.QA_SERVER_BASE_URL,
             api_key=envs.QA_API_KEY,
         )
-    return QAClient
+    return QA_CLIENT
 
 
 # reaction_added event sample:
