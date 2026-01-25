@@ -2,7 +2,7 @@ import logging
 import re
 
 from handler.bigchat.mention_handler import MentionHandler
-from implementation.llm_client import LLMClient, LLMError
+from implementation.qa_client import QAClient
 
 logger = logging.getLogger(__name__)
 
@@ -15,11 +15,11 @@ DEFAULT_SYSTEM_PROMPT = """당신은 AUSG(AWSKRUG University Student Group) 커�
 
 
 class QuestionResponse(MentionHandler):
-    def __init__(self, event, slack_client, llm_client: LLMClient):
+    def __init__(self, event, slack_client, qa_client: QAClient):
         self.text = event["text"]
         self.ts = event["ts"]
         self.slack_client = slack_client
-        self.llm_client = llm_client
+        self.qa_client = qa_client
 
     def handle_mention(self):
         if not self.can_handle():
@@ -35,11 +35,10 @@ class QuestionResponse(MentionHandler):
 
         logger.info(f"Processing question: {question[:100]}...")
 
-        try:
-            answer = self.llm_client.chat(question=question, system_prompt=DEFAULT_SYSTEM_PROMPT)
-            self.slack_client.send_message(msg=answer, ts=self.ts)
-        except LLMError as e:
-            self.slack_client.send_message(msg=str(e), ts=self.ts)
+        answer = self.qa_client.chat(question=question, system_prompt=DEFAULT_SYSTEM_PROMPT)
+        if answer is None:
+            answer = "흐음~ 나도 잘 모르는 일인걸? 오거나이저를 찾아가볼까?"
+        self.slack_client.send_message(msg=answer, ts=self.ts)
 
         return True
 
