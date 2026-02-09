@@ -71,7 +71,13 @@ class SlackClient:
             msg = self.get_replies(thread_ts=ts, channel=channel)[0]
             thread_ts = msg.thread_ts
 
-        resp = self.web_client.conversations_replies(ts=thread_ts, channel=channel)
+        for attempt in range(3):
+            try:
+                resp = self.web_client.conversations_replies(ts=thread_ts, channel=channel)
+                break
+            except OSError:
+                if attempt >= 2:
+                    raise
 
         if resp.status_code != 200:
             raise Exception(f"Failed to get message, ts={thread_ts}, channel={channel}")
