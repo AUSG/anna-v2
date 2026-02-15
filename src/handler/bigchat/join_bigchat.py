@@ -15,7 +15,6 @@ class JoinBigchat:
         self.type = event["type"]
         self.reaction = event["reaction"]
         self.channel = event["item"]["channel"]
-        self.item_user = event["item_user"]
         self.ts = event["item"]["ts"]
         self.user = event["user"]
         self.target_emoji = target_emoji
