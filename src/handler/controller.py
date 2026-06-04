@@ -8,6 +8,7 @@ from handler.bigchat.shuffle_response import ShuffleResponse
 from handler.bigchat.mention_response import MentionResponse
 from handler.bigchat.help_response import HelpResponse
 from handler.bigchat.question_response import QuestionResponse
+from handler.bigchat.subin_like_response import SubinLikeResponse
 from handler.decorator import catch_global_error, loading_emoji_while_processing
 from implementation.google_spreadsheet_client import GoogleSpreadsheetClient
 from implementation.qa_client import QAClient
@@ -96,9 +97,12 @@ def mention_response(event, say, client):
     create_bigchat_sheet = CreateBigchatSheet(
         event, SlackClient(say, client), GoogleSpreadsheetClient()
     )
-    question_response = QuestionResponse(event, SlackClient(say, client), _get_qa_client())
+    question_response = QuestionResponse(
+        event, SlackClient(say, client), _get_qa_client()
+    )
     MentionResponse(
-        [question_response, shuffle_response, create_bigchat_sheet, help_response], simple_response
+        [question_response, shuffle_response, create_bigchat_sheet, help_response],
+        simple_response,
     ).run()
 
 
@@ -149,3 +153,15 @@ def mention_response(event, say, client):
 @catch_global_error()
 def announce_new_channel_created(event, say, client):
     AnnounceNewChannelCreated(event, SlackClient(say, client)).run()
+
+
+# message event: 지정 채널(fun-anna-house, fun-free-talk)의 새 글(스레드 제외)에
+# 김수빈 말투로 자동 답글 (대상 채널은 SubinLikeResponse 에 하드코딩)
+@catch_global_error()
+def subin_like_response(event, say, client):
+    SubinLikeResponse(
+        event,
+        SlackClient(say, client),
+        _get_qa_client(),
+        anna_id=envs.ANNA_ID,
+    ).run()
