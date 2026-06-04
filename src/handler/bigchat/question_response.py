@@ -85,7 +85,7 @@ class QuestionResponse(MentionHandler):
                 channel=self.channel, thread_ts=self.thread_ts
             )
         except Exception as e:  # noqa: BLE001
-            logger.warning(f"Failed to fetch thread context: {e}")
+            logger.warning("Failed to fetch thread context: %s", e)
             return ""
 
         lines = []
