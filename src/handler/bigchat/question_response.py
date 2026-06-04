@@ -1,3 +1,5 @@
+# 다국어(한국어) 시스템 프롬프트 문자열이 길어, 이 파일은 줄길이(E501) 검사를 예외 처리한다.
+# ruff: noqa: E501
 import logging
 import re
 
@@ -53,17 +55,20 @@ class QuestionResponse(MentionHandler):
         thread_context = self._fetch_thread_context()
         if thread_context:
             logger.info(
-                "[q)] thread context (%d chars):\n%s", len(thread_context), thread_context
+                "[q)] thread context (%d chars):\n%s",
+                len(thread_context),
+                thread_context,
             )
             augmented = (
-                f"[현재 진행 중인 대화]\n{thread_context}\n\n"
-                f"[위 대화에 대한 질문] {question}"
+                f"[현재 진행 중인 대화]\n{thread_context}\n\n" f"[위 대화에 대한 질문] {question}"
             )
         else:
             logger.info("[q)] no thread context (top-level mention)")
             augmented = question
 
-        answer = self.qa_client.chat(question=augmented, system_prompt=DEFAULT_SYSTEM_PROMPT)
+        answer = self.qa_client.chat(
+            question=augmented, system_prompt=DEFAULT_SYSTEM_PROMPT
+        )
         if answer is None:
             answer = "흐음~ 나도 잘 모르는 일인걸? 오거나이저를 찾아가볼까?"
         logger.info("[q)] question=%r | answer=%r", question, answer)
@@ -91,7 +96,7 @@ class QuestionResponse(MentionHandler):
         joined = "\n".join(lines)
         # 과다 방지: 최근 대화 위주로 뒤에서 잘라 보존
         if len(joined) > self.THREAD_CONTEXT_MAX_CHARS:
-            joined = joined[-self.THREAD_CONTEXT_MAX_CHARS:]
+            joined = joined[-self.THREAD_CONTEXT_MAX_CHARS :]
         return joined
 
     def can_handle(self):
