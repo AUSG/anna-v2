@@ -1,5 +1,5 @@
 import logging
-from typing import Optional
+from typing import List, Optional
 
 import requests
 
@@ -42,6 +42,41 @@ class QAClient:
             logger.error(f"QA server response parsing failed: {e}")
             return None
 
+    def generate(
+        self,
+        content: str,
+        system_prompt: Optional[str] = None,
+        max_tokens: int = 512,
+        images: Optional[List[str]] = None,
+    ) -> Optional[str]:
+        """검색(RAG) 없이 순수 LLM 생성. 페르소나 기반 답글 등에 사용.
+
+        images: 이미지 data URL 리스트 (예: "data:image/png;base64,...") — 있으면 비전 입력.
+        """
+        payload = {"content": content, "max_tokens": max_tokens}
+        if system_prompt:
+            payload["system_prompt"] = system_prompt
+        if images:
+            payload["images"] = images
+
+        headers = {"X-API-Key": self.api_key}
+
+        try:
+            response = requests.post(
+                f"{self.qa_server_base_url}/api/v1/generate",
+                json=payload,
+                headers=headers,
+                timeout=self.timeout,
+            )
+            response.raise_for_status()
+            return response.json()["answer"]
+        except requests.exceptions.RequestException as e:
+            logger.error(f"QA server generate failed: {e}")
+            return None
+        except (KeyError, ValueError) as e:
+            logger.error(f"QA server generate parsing failed: {e}")
+            return None
+
     def is_healthy(self) -> bool:
         headers = {"X-API-Key": self.api_key}
 
@@ -49,7 +84,7 @@ class QAClient:
             response = requests.get(
                 f"{self.qa_server_base_url}/api/v1/chat/health",
                 headers=headers,
-                timeout=5
+                timeout=5,
             )
             if response.status_code == 200:
                 data = response.json()

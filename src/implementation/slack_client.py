@@ -1,9 +1,13 @@
+import logging
 from typing import List, Optional
 
+import requests
 from pydantic import BaseModel
 from slack_bolt import Say
 from slack_sdk import WebClient
 from slack_sdk.errors import SlackApiError
+
+logger = logging.getLogger(__name__)
 
 
 class Message(BaseModel):
@@ -26,6 +30,20 @@ class SlackClient:
 
     def send_message(self, msg: str, ts: str):
         self.say(msg, thread_ts=ts)
+
+    def download_file(self, url: str) -> Optional[bytes]:
+        """Slack url_private 파일을 봇 토큰으로 다운로드 (이미지 등). 실패 시 None."""
+        try:
+            resp = requests.get(
+                url,
+                headers={"Authorization": f"Bearer {self.web_client.token}"},
+                timeout=20,
+            )
+            resp.raise_for_status()
+            return resp.content
+        except requests.exceptions.RequestException as e:
+            logger.warning(f"Failed to download Slack file: {e}")
+            return None
 
     def send_message_to_freetalk(self, msg: str):
         self.say(msg, channel="CQJ8HQWUV")
@@ -73,7 +91,9 @@ class SlackClient:
 
         for attempt in range(3):
             try:
-                resp = self.web_client.conversations_replies(ts=thread_ts, channel=channel)
+                resp = self.web_client.conversations_replies(
+                    ts=thread_ts, channel=channel
+                )
                 break
             except OSError:
                 if attempt >= 2:

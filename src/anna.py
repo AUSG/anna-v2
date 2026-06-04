@@ -9,6 +9,7 @@ from handler.controller import (
     abandon_bigchat,
     announce_new_channel_created,
     mention_response,
+    subin_like_response,
 )
 
 init_logger()
@@ -38,6 +39,12 @@ def handle_app_mention_event(ack, event, say, client):
 def handle_channel_created_event(ack, event, say, client):
     ack()
     announce_new_channel_created(event=event, say=say, client=client)
+
+
+@app.event("message")
+def handle_message_event(ack, event, say, client):
+    ack()
+    subin_like_response(event=event, say=say, client=client)
 
 
 if __name__ == "__main__":
