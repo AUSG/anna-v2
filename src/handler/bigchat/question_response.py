@@ -93,11 +93,16 @@ class QuestionResponse(MentionHandler):
             text = re.sub(r"<@[A-Z0-9]+>", "", m.text or "").strip()
             if text:
                 lines.append(f"{m.user}: {text}")
-        joined = "\n".join(lines)
-        # 과다 방지: 최근 대화 위주로 뒤에서 잘라 보존
-        if len(joined) > self.THREAD_CONTEXT_MAX_CHARS:
-            joined = joined[-self.THREAD_CONTEXT_MAX_CHARS :]
-        return joined
+
+        # 과다 방지: 글자수가 아니라 메시지 단위로 자른다 (메시지 중간이 끊기지 않도록).
+        # 최근 메시지부터 채우고, budget 을 넘기는 오래된 메시지는 통째로 제외.
+        kept, total = [], 0
+        for line in reversed(lines):
+            if kept and total + len(line) + 1 > self.THREAD_CONTEXT_MAX_CHARS:
+                break
+            kept.append(line)
+            total += len(line) + 1
+        return "\n".join(reversed(kept))
 
     def can_handle(self):
         text_lower = self.text.lower()
