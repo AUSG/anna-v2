@@ -1,5 +1,6 @@
 # fun-anna-house 자동 답글: 한국어 페르소나 프롬프트가 길어 줄길이(E501) 검사를 예외 처리한다.
 # ruff: noqa: E501
+import base64
 import logging
 import re
 
@@ -10,7 +11,7 @@ AUTO_REPLY_CHANNEL_IDS = {"C03SZTDEDK3", "CQJ8HQWUV"}
 
 # 김수빈 유저의 말투를 흉내 내어, 지정 채널의 새 글에 답글을 단다. (검색 없이 순수 생성)
 KIMSUBIN_PERSONA_PROMPT = """너는 AUSG 커뮤니티 멤버 '김수빈'의 말투로 답글을 다는 봇이야.
-채널에 새로 올라온 글의 내용을 정확히 파악한 뒤, 김수빈이라면 어떻게 반응할지 그 말투로 답글을 단다.
+채널에 새로 올라온 글(첨부 이미지가 있으면 이미지 포함)의 내용을 정확히 파악한 뒤, 김수빈이라면 어떻게 반응할지 그 말투로 답글을 단다.
 
 김수빈 말투 특징:
 - 기본 해요체지만 드라이하고 담백하다. 호들갑·감탄사("와! 축하드려요!") 남발 금지.
@@ -46,6 +47,8 @@ class SubinLikeResponse:
 
     # 답글 길이 상한 (maxlen 조심): 짧은 문단 수준으로 제한
     REPLY_MAX_TOKENS = 220
+    # 한 번에 LLM 에 넘길 최대 이미지 수
+    MAX_IMAGES = 4
 
     def __init__(self, event, slack_client, qa_client, anna_id):
         self.event = event
@@ -63,24 +66,54 @@ class SubinLikeResponse:
             return
 
         content = re.sub(r"<@[A-Z0-9]+>", "", self.text).strip()
+        images = self._extract_images()
         answer = self.qa_client.generate(
             content=content,
             system_prompt=KIMSUBIN_PERSONA_PROMPT,
             max_tokens=self.REPLY_MAX_TOKENS,
+            images=images or None,
         )
         if not answer:
-            logger.info("[anna-house] generation failed/empty, skip")
+            logger.info("[subin] generation failed/empty, skip")
             return
 
-        logger.info("[anna-house] post=%r | reply=%r", content[:100], answer)
+        logger.info(
+            "[subin] post=%r images=%d | reply=%r", content[:80], len(images), answer
+        )
         self.slack_client.send_message(msg=answer, ts=self.ts)
+
+    def _image_files(self):
+        return [
+            f
+            for f in (self.event.get("files") or [])
+            if (f.get("mimetype") or "").startswith("image/")
+        ][: self.MAX_IMAGES]
+
+    def _extract_images(self):
+        """첨부 이미지를 봇 토큰으로 받아 base64 data URL 리스트로."""
+        out = []
+        for f in self._image_files():
+            url = f.get("url_private_download") or f.get("url_private")
+            if not url:
+                continue
+            data = self.slack_client.download_file(url)
+            if not data:
+                continue
+            mimetype = f.get("mimetype") or "image/png"
+            b64 = base64.b64encode(data).decode("ascii")
+            out.append(f"data:{mimetype};base64,{b64}")
+        return out
 
     def _should_handle(self) -> bool:
         # 지정된 자동 답글 채널만 (fun-anna-house, fun-free-talk)
         if self.channel not in AUTO_REPLY_CHANNEL_IDS:
             return False
-        # 봇/시스템(subtype) 메시지 무시 — 무한루프·잡음 방지
-        if self.event.get("bot_id") or self.event.get("subtype"):
+        # 봇 메시지 무시 — 무한루프·잡음 방지
+        if self.event.get("bot_id"):
+            return False
+        # subtype 메시지 무시하되, 이미지 첨부(file_share)는 허용
+        subtype = self.event.get("subtype")
+        if subtype and subtype != "file_share":
             return False
         # ANNA 자기 글 무시
         if self.user and self.user == self.anna_id:
@@ -89,10 +122,10 @@ class SubinLikeResponse:
         thread_ts = self.event.get("thread_ts")
         if thread_ts and thread_ts != self.ts:
             return False
-        # 빈 글 무시
-        if not self.text.strip():
-            return False
         # ANNA 멘션은 q) 핸들러에 양보 (중복 응답 방지)
         if self.anna_id and f"<@{self.anna_id}>" in self.text:
+            return False
+        # 텍스트도 이미지도 없으면 무시
+        if not self.text.strip() and not self._image_files():
             return False
         return True

@@ -1,5 +1,5 @@
 import logging
-from typing import Optional
+from typing import List, Optional
 
 import requests
 
@@ -47,11 +47,17 @@ class QAClient:
         content: str,
         system_prompt: Optional[str] = None,
         max_tokens: int = 512,
+        images: Optional[List[str]] = None,
     ) -> Optional[str]:
-        """검색(RAG) 없이 순수 LLM 생성. 페르소나 기반 답글 등에 사용."""
+        """검색(RAG) 없이 순수 LLM 생성. 페르소나 기반 답글 등에 사용.
+
+        images: 이미지 data URL 리스트 (예: "data:image/png;base64,...") — 있으면 비전 입력.
+        """
         payload = {"content": content, "max_tokens": max_tokens}
         if system_prompt:
             payload["system_prompt"] = system_prompt
+        if images:
+            payload["images"] = images
 
         headers = {"X-API-Key": self.api_key}
 
