@@ -7,7 +7,10 @@ import re
 logger = logging.getLogger(__name__)
 
 # 자동 답글 대상 채널 (하드코딩): fun-anna-house(C03SZTDEDK3), fun-free-talk(CQJ8HQWUV)
-AUTO_REPLY_CHANNEL_IDS = {"C03SZTDEDK3", "CQJ8HQWUV"}
+AUTO_REPLY_CHANNEL_IDS = {"C03SZTDEDK3"}
+
+# opt-out 스위치: 글에 이 문구가 있으면 ANNA 가 응답하지 않음 ("안나X" 도 매칭되도록 소문자 비교)
+OPT_OUT_MARKER = "안나x"
 
 # 김수빈 유저의 말투를 흉내 내어, 지정 채널의 새 글에 답글을 단다. (검색 없이 순수 생성)
 KIMSUBIN_PERSONA_PROMPT = """너는 AUSG 커뮤니티 멤버 '김수빈'의 말투로 답글을 다는 봇이야.
@@ -107,6 +110,9 @@ class SubinLikeResponse:
     def _should_handle(self) -> bool:
         # 지정된 자동 답글 채널만 (fun-anna-house, fun-free-talk)
         if self.channel not in AUTO_REPLY_CHANNEL_IDS:
+            return False
+        # 사용자 opt-out: 글에 "안나x" 가 있으면 응답하지 않음
+        if OPT_OUT_MARKER in self.text.lower():
             return False
         # 봇 메시지 무시 — 무한루프·잡음 방지
         if self.event.get("bot_id"):
