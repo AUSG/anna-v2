@@ -7,7 +7,7 @@ import re
 logger = logging.getLogger(__name__)
 
 # 자동 답글 대상 채널 (하드코딩): fun-anna-house(C03SZTDEDK3), fun-free-talk(CQJ8HQWUV)
-AUTO_REPLY_CHANNEL_IDS = {"C03SZTDEDK3"}
+AUTO_REPLY_CHANNEL_IDS = {"C03SZTDEDK3", "CQJ8HQWUV"}
 
 # opt-out 스위치: 글에 이 문구가 있으면 ANNA 가 응답하지 않음 ("안나X" 도 매칭되도록 소문자 비교)
 OPT_OUT_MARKER = "안나x"
