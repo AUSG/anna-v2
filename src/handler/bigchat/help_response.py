@@ -15,6 +15,7 @@ class HelpResponse(MentionHandler):
             msg=strip_multiline(
                 """
                 나를 멘션했을 때, 사용할 수 있는 명령어야.
+                - `otp`: ARP 로그인 코드를 발급해줘!
                 - `shuffle` 또는 `섞어줘`: 멘션된 유저들을 섞어줘!
                 - `새로운 빅챗`: 새로운 빅챗 시트를 만들어줘!
                 - `help` 또는 `도움`: 도움말을 보여줘!

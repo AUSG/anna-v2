@@ -9,10 +9,12 @@ from handler.bigchat.mention_response import MentionResponse
 from handler.bigchat.help_response import HelpResponse
 from handler.bigchat.question_response import QuestionResponse
 from handler.bigchat.subin_like_response import SubinLikeResponse
+from handler.otp.arp_response import ArpOtpResponse
 from handler.decorator import catch_global_error, loading_emoji_while_processing
 from implementation.google_spreadsheet_client import GoogleSpreadsheetClient
 from implementation.qa_client import QAClient
 from implementation.member_finder import MemberManager
+from implementation.arp_otp import ArpOtp
 from implementation.slack_client import SlackClient
 
 MEMBER_MANAGER = None
@@ -100,8 +102,22 @@ def mention_response(event, say, client):
     question_response = QuestionResponse(
         event, SlackClient(say, client), _get_qa_client()
     )
+    arp_otp_response = ArpOtpResponse(
+        event,
+        SlackClient(say, client),
+        ArpOtp(
+            base_url=envs.ARP_BASE_URL,
+            secret=envs.ARP_OTP_SECRET,
+        ),
+    )
     MentionResponse(
-        [question_response, shuffle_response, create_bigchat_sheet, help_response],
+        [
+            arp_otp_response,
+            question_response,
+            shuffle_response,
+            create_bigchat_sheet,
+            help_response,
+        ],
         simple_response,
     ).run()
 

@@ -53,4 +53,9 @@ class Settings(BaseSettings):
     QA_SERVER_BASE_URL: str = ""
     QA_API_KEY: str = ""
 
+    # ARP OTP login
+    ARP_BASE_URL: str = ""
+    ARP_OTP_SECRET: str = ""
+
+
 envs = Settings()  # Singleton
