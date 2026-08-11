@@ -153,10 +153,26 @@ class TestJoinBigchat(unittest.TestCase):
         gcal_url, ics_url = buttons[0]["url"], buttons[1]["url"]
         # gcal은 직링크여야 한다 — 서버 302 경유 시 모바일 앱 링크 핸드오프가 끊긴다
         assert gcal_url.startswith("https://calendar.google.com/calendar/render?")
-        # gcal 본문에는 소개글 대신 원본 메시지 permalink가 들어간다 (버튼 url 3000자 제한)
+        # gcal 본문은 permalink가 맨 앞, 그 아래 소개글 — 잘려도 permalink는 항상 남는다
         assert "ausg.slack.com" in gcal_url
+        assert "%EC%86%8C%EA%B0%9C%EA%B8%80" in gcal_url  # "소개글" (intro도 이어붙음)
         assert "/bigchat/161837744/event.ics?" in ics_url
         assert "token=" in ics_url and "channel=" in ics_url and "ts=" in ics_url
+
+    def test_build_calendar_blocks_keeps_permalink_when_long_intro_truncated(self):
+        event = create_sample_reaction_added_event("gogo")
+        mock_slack_client = MagicMock()
+        mock_slack_client.get_permalink.return_value = (
+            "https://ausg.slack.com/archives/C03SZTDEDK3/p1688801145307229"
+        )
+        mock_gs_client = MagicMock()
+        mock_gs_client.get_worksheet_title.return_value = "AI 밋업 26-08-20 19:00~21:00"
+        sut = JoinBigchat(event, "gogo", mock_slack_client, mock_gs_client, MagicMock())
+
+        blocks = sut._build_calendar_blocks("등록했어", 161837744, "긴 소개글 " * 2000)
+
+        gcal_url = blocks[1]["elements"][0]["url"]
+        assert "ausg.slack.com" in gcal_url  # 소개글이 잘려도 맨 앞의 permalink는 남는다
 
     def test_build_calendar_blocks_falls_back_to_intro_without_permalink(self):
         event = create_sample_reaction_added_event("gogo")

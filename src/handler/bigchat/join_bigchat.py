@@ -51,8 +51,9 @@ class JoinBigchat:
         gcal 버튼은 캘린더 템플릿 URL 직링크여야 한다 — 서버 302 리다이렉트를 거치면
         모바일 앱 링크 핸드오프가 끊겨 웹뷰(비로그인)로 열리고, 구글이 마케팅 페이지로
         튕겨버린다. 직링크는 Slack 버튼 url 3000자 제한을 받아 소개글 전문을 못 싣기
-        때문에, gcal 본문에는 소개글 대신 원본 메시지 permalink를 넣는다 (permalink
-        조회 실패 시 잘린 소개글로 폴백). ics는 서버가 클릭 시점에 소개글 전문을 넣는다.
+        때문에, gcal 본문은 맨 앞에 원본 메시지 permalink를 두고 그 아래에 소개글을
+        이어붙인다 — 절단은 뒤에서부터 일어나므로 잘려도 permalink는 항상 남는다.
+        ics는 서버가 클릭 시점에 소개글 전문을 넣는다.
         """
         try:
             sheet_name = self.gs_client.get_worksheet_title(worksheet_id)
@@ -64,7 +65,9 @@ class JoinBigchat:
             return None
 
         permalink = self.slack_client.get_permalink(self.channel, self.ts)
-        gcal_details = f"슬랙에서 소개글 보기: {permalink}" if permalink else intro_text
+        gcal_details = (
+            f"슬랙에서 소개글 보기: {permalink}\n\n{intro_text}" if permalink else intro_text
+        )
         buttons = [
             {
                 "type": "button",
