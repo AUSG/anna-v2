@@ -128,6 +128,19 @@ class TestWithRetry(unittest.TestCase):
             always_fail()
         self.assertEqual(attempts, 10)
 
+    def test_with_retry_non_retryable_exception_raises_immediately(self):
+        attempts = 0
+
+        @with_retry(fixed_wait_time_in_sec=0.01, non_retryable_exceptions=(KeyError,))
+        def always_fail_with_non_retryable():
+            nonlocal attempts
+            attempts += 1
+            raise KeyError("failure")
+
+        with self.assertRaises(KeyError):
+            always_fail_with_non_retryable()
+        self.assertEqual(attempts, 1)
+
     def test_with_retry_partial_success(self):
         attempts = 0
 

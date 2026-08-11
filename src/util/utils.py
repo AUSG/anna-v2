@@ -54,9 +54,11 @@ def strip_multiline(text, *args, ignore_first_line=True):
     return result
 
 
-def with_retry(max_try_cnt=10, fixed_wait_time_in_sec=3):
+def with_retry(max_try_cnt=10, fixed_wait_time_in_sec=3, non_retryable_exceptions=()):
     """
     usage: @with_retry(3, 1)
+
+    :param non_retryable_exceptions: 재시도해도 성공할 수 없는 예외 타입 튜플. 잡지 않고 즉시 전파한다.
     """
 
     def decorator(func):
@@ -66,6 +68,8 @@ def with_retry(max_try_cnt=10, fixed_wait_time_in_sec=3):
             for attempt in range(max_try_cnt):
                 try:
                     return func(*args, **kwargs)
+                except non_retryable_exceptions:
+                    raise
                 except Exception as ex:
                     last_exception = ex
                     time.sleep(fixed_wait_time_in_sec)

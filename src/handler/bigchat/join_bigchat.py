@@ -3,6 +3,7 @@ import re
 from typing import List, Optional
 
 from config.env_config import envs
+from implementation.google_spreadsheet_client import WorksheetNotFound
 from implementation.member_finder import MemberNotFound, MemberLackInfo
 from implementation.slack_client import Message
 from util.bigchat_event import parse_sheet_name, to_gcal_link, ics_token
@@ -105,7 +106,15 @@ class JoinBigchat:
             )
             return False
 
-        self.gs_client.append_row(worksheet_id, member.transform_for_spreadsheet())
+        try:
+            self.gs_client.append_row(worksheet_id, member.transform_for_spreadsheet())
+        except WorksheetNotFound:
+            self.slack_client.send_message(
+                msg=f"<@{self.user}>, 이 빅챗의 신청 시트를 찾을 수 없어. 이미 마감되었거나 삭제된 것 같아. "
+                f"모집이 진행 중인 빅챗이라면 운영진에게 알려줘!",
+                ts=self.ts,
+            )
+            return False
 
         self.slack_client.send_message(msg=f"<@{self.user}>, 등록 완료!", ts=self.ts)
         msg = strip_multiline(
