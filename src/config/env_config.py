@@ -53,4 +53,5 @@ class Settings(BaseSettings):
     QA_SERVER_BASE_URL: str = ""
     QA_API_KEY: str = ""
 
+
 envs = Settings()  # Singleton

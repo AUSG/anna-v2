@@ -1,6 +1,8 @@
 import logging
 
+from flask import Flask, request
 from slack_bolt import App
+from slack_bolt.adapter.flask import SlackRequestHandler
 
 from config.env_config import envs
 from config.log_config import init_logger
@@ -47,7 +49,21 @@ def handle_message_event(ack, event, say, client):
     subin_like_response(event=event, say=say, client=client)
 
 
+flask_app = Flask(__name__)
+slack_request_handler = SlackRequestHandler(app)
+
+
+@flask_app.route("/slack/events", methods=["POST"])
+def slack_events():
+    return slack_request_handler.handle(request)
+
+
+@flask_app.route("/health", methods=["GET"])
+def health():
+    return {"status": "ok"}
+
+
 if __name__ == "__main__":
     PORT = 8080
     logging.getLogger(__name__).info("Anna wakes up at room %d", PORT)
-    app.start(PORT)
+    flask_app.run(host="0.0.0.0", port=PORT)

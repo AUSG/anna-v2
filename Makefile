@@ -16,7 +16,7 @@ setup_local_env: _set_hooks _update_submodule
 wakeup_anna:
 	pip install poetry
 	poetry install
-	poetry run python src/anna.py
+	poetry run gunicorn --chdir src anna:flask_app --bind 0.0.0.0:8080 --workers 1 --threads 8 --timeout 120
 
 .PHONY: open_port
 open_port:
