@@ -48,6 +48,15 @@ class SlackClient:
     def send_message_to_freetalk(self, msg: str):
         self.say(msg, channel="CQJ8HQWUV")
 
+    def get_permalink(self, channel: str, ts: str) -> Optional[str]:
+        """메시지 permalink를 반환. 실패 시 None."""
+        try:
+            resp = self.web_client.chat_getPermalink(channel=channel, message_ts=ts)
+            return resp["permalink"]
+        except SlackApiError as ex:
+            logger.warning(f"Failed to get permalink: {ex}")
+            return None
+
     def send_message_only_visible_to_user(
         self,
         msg: str,
