@@ -100,8 +100,18 @@ def mention_response(event, say, client):
     question_response = QuestionResponse(
         event, SlackClient(say, client), _get_qa_client()
     )
+    # 어느 명령에도 걸리지 않은 멘션은 텍스트 전체를 질문으로 처리 (빈 멘션만 SimpleResponse 로)
+    question_fallback = QuestionResponse(
+        event, SlackClient(say, client), _get_qa_client(), require_prefix=False
+    )
     MentionResponse(
-        [question_response, shuffle_response, create_bigchat_sheet, help_response],
+        [
+            question_response,
+            shuffle_response,
+            create_bigchat_sheet,
+            help_response,
+            question_fallback,
+        ],
         simple_response,
     ).run()
 

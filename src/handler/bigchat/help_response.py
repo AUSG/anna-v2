@@ -18,6 +18,8 @@ class HelpResponse(MentionHandler):
                 - `shuffle` 또는 `섞어줘`: 멘션된 유저들을 섞어줘!
                 - `새로운 빅챗`: 새로운 빅챗 시트를 만들어줘!
                 - `help` 또는 `도움`: 도움말을 보여줘!
+                그 외에는 뭐든 물어봐 — 그냥 멘션하면서 질문하면 내가 아는 선에서 답해줄게!
+                (`q)` 를 붙이면 위 명령어보다 질문을 우선해)
                 더 많은 기능이 필요하면, https://github.com/AUSG/anna-v2 으로 기여해줘!"""
             ),
             ts=self.ts,
