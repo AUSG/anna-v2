@@ -29,7 +29,13 @@ class QuestionResponse(MentionHandler):
     # 스레드 맥락 과다 방지: 가장 최근부터 이 글자 수까지만 포함
     THREAD_CONTEXT_MAX_CHARS = 4000
 
-    def __init__(self, event, slack_client, qa_client: QAClient):
+    def __init__(self, event, slack_client, qa_client: QAClient, require_prefix=True):
+        """require_prefix=True 면 `q)` 가 있을 때만 반응한다 (명령어보다 먼저 평가되는 명시적 질문).
+
+        require_prefix=False 면 멘션 텍스트 전체를 질문으로 취급한다 — 셔플/새로운 빅챗/help
+        등 어느 명령에도 걸리지 않은 멘션을 받아주는 체인 마지막 자리 전용. 빈 멘션은
+        can_handle 이 False 라 기존 폴백(SimpleResponse)으로 넘어간다.
+        """
         self.text = event["text"]
         self.ts = event["ts"]
         self.channel = event.get("channel")
@@ -37,6 +43,7 @@ class QuestionResponse(MentionHandler):
         self.thread_ts = event.get("thread_ts")
         self.slack_client = slack_client
         self.qa_client = qa_client
+        self.require_prefix = require_prefix
 
     def handle_mention(self):
         if not self.can_handle():
@@ -105,12 +112,15 @@ class QuestionResponse(MentionHandler):
         return "\n".join(reversed(kept))
 
     def can_handle(self):
-        text_lower = self.text.lower()
-        return "q)" in text_lower
+        if self.require_prefix:
+            return "q)" in self.text.lower()
+        return bool(self._extract_question())
 
     def _extract_question(self) -> str:
         clean_text = re.sub(r"<@[A-Z0-9]+>", "", self.text).strip()
         match = QUESTION_PATTERN.search(clean_text)
         if match:
             return match.group(1).strip()
-        return ""
+        if self.require_prefix:
+            return ""
+        return clean_text
