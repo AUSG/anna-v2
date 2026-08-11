@@ -16,8 +16,8 @@ SHEET_NAME_PAT = re.compile(
     r"^(?P<name>.+) (?P<date>\d{2}-\d{2}-\d{2}) (?P<start>\d{2}:\d{2})~(?P<end>\d{2}:\d{2})$"
 )
 
-# Slack 버튼 url 필드의 최대 길이는 3000자
-SLACK_BUTTON_URL_LIMIT = 2900
+# 302 리다이렉트로 내려주는 gcal URL의 안전 상한 (브라우저/구글 프론트엔드의 ~8k 제한 대비 여유)
+GCAL_URL_LIMIT = 6000
 
 
 @dataclass
@@ -61,10 +61,12 @@ def to_gcal_link(event: BigchatEvent, details: str = "") -> str:
     return f"https://calendar.google.com/calendar/render?{urlencode(params)}"
 
 
-def to_gcal_link_truncated(event: BigchatEvent, details: str = "") -> str:
-    """Slack 버튼 url 길이 제한에 맞을 때까지 details를 잘라낸 gcal 링크."""
+def to_gcal_link_truncated(
+    event: BigchatEvent, details: str = "", limit: int = GCAL_URL_LIMIT
+) -> str:
+    """URL 길이 제한에 맞을 때까지 details를 잘라낸 gcal 링크."""
     link = to_gcal_link(event, details)
-    while len(link) > SLACK_BUTTON_URL_LIMIT and details:
+    while len(link) > limit and details:
         details = details[: len(details) - 100]
         link = to_gcal_link(event, details + "…" if details else "")
     return link
@@ -92,16 +94,17 @@ def to_ics(event: BigchatEvent, uid: str, description: str = "") -> str:
     return "\r\n".join([_fold_ics_line(line) for line in lines] + [""])
 
 
-def ics_payload(worksheet_id: int, channel: str, ts: str) -> str:
+def calendar_payload(worksheet_id: int, channel: str, ts: str) -> str:
     return f"{worksheet_id}:{channel}:{ts}"
 
 
-def ics_token(secret: str, payload: str) -> str:
+def calendar_token(secret: str, payload: str) -> str:
+    """gcal 리다이렉트와 ics 다운로드가 같은 토큰을 공유한다 (시크릿 env는 ICS_TOKEN_SECRET 그대로)."""
     return hmac.new(secret.encode(), payload.encode(), hashlib.sha256).hexdigest()
 
 
-def verify_ics_token(secret: str, payload: str, token: str) -> bool:
-    return hmac.compare_digest(ics_token(secret, payload), token)
+def verify_calendar_token(secret: str, payload: str, token: str) -> bool:
+    return hmac.compare_digest(calendar_token(secret, payload), token)
 
 
 def _fmt_local(dt: datetime) -> str:

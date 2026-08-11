@@ -7,12 +7,7 @@ from implementation.member_finder import MemberNotFound, MemberLackInfo
 from implementation.slack_client import Message
 from urllib.parse import urlencode
 
-from util.bigchat_event import (
-    ics_payload,
-    ics_token,
-    parse_sheet_name,
-    to_gcal_link_truncated,
-)
+from util.bigchat_event import calendar_payload, calendar_token, parse_sheet_name
 from util.utils import strip_multiline
 
 logger = logging.getLogger(__name__)
@@ -43,13 +38,16 @@ class JoinBigchat:
         return None
 
     def _build_calendar_blocks(
-        self, msg: str, worksheet_id: int, intro_text: str
+        self, msg: str, worksheet_id: int
     ) -> Optional[List[dict]]:
         """시트 이름에서 이벤트 정보를 파싱해 캘린더 버튼 블록을 만든다. 구형식 시트 등 파싱 불가면 None.
 
-        스레드 첫 글(intro_text)은 캘린더 일정의 본문이 된다 — gcal은 details 파라미터로
-        (버튼 url 길이 제한에 맞게 잘라서), ics는 클릭 시점에 서버가 슬랙에서 다시 읽어온다.
+        두 버튼 모두 서명된 서버 URL을 가리킨다 — gcal은 302 리다이렉트, ics는 파일 다운로드.
+        서버가 클릭 시점에 시트 이름(시간)과 스레드 첫 글(일정 본문)을 새로 읽으므로 항상 최신이다.
         """
+        if not envs.ICS_TOKEN_SECRET:
+            return None
+
         try:
             sheet_name = self.gs_client.get_worksheet_title(worksheet_id)
             event = parse_sheet_name(sheet_name)
@@ -59,6 +57,11 @@ class JoinBigchat:
         if not event:
             return None
 
+        token = calendar_token(
+            envs.ICS_TOKEN_SECRET,
+            calendar_payload(worksheet_id, self.channel, self.ts),
+        )
+        query = urlencode({"token": token, "channel": self.channel, "ts": self.ts})
         buttons = [
             {
                 "type": "button",
@@ -68,27 +71,19 @@ class JoinBigchat:
                     "text": "📅 Google Calendar에 추가",
                     "emoji": True,
                 },
-                "url": to_gcal_link_truncated(event, intro_text),
-            }
+                "url": f"{envs.PUBLIC_BASE_URL}/bigchat/{worksheet_id}/gcal?{query}",
+            },
+            {
+                "type": "button",
+                "action_id": "calendar_ics",
+                "text": {
+                    "type": "plain_text",
+                    "text": "📥 .ics 다운로드",
+                    "emoji": True,
+                },
+                "url": f"{envs.PUBLIC_BASE_URL}/bigchat/{worksheet_id}/event.ics?{query}",
+            },
         ]
-        if envs.ICS_TOKEN_SECRET:
-            token = ics_token(
-                envs.ICS_TOKEN_SECRET,
-                ics_payload(worksheet_id, self.channel, self.ts),
-            )
-            query = urlencode({"token": token, "channel": self.channel, "ts": self.ts})
-            buttons.append(
-                {
-                    "type": "button",
-                    "action_id": "calendar_ics",
-                    "text": {
-                        "type": "plain_text",
-                        "text": "📥 .ics 다운로드",
-                        "emoji": True,
-                    },
-                    "url": f"{envs.PUBLIC_BASE_URL}/bigchat/{worksheet_id}/event.ics?{query}",
-                }
-            )
 
         return [
             {"type": "section", "text": {"type": "mrkdwn", "text": msg}},
@@ -136,7 +131,7 @@ class JoinBigchat:
         )
         self.slack_client.send_message_only_visible_to_user(
             msg=msg,
-            blocks=self._build_calendar_blocks(msg, worksheet_id, messages[0].text),
+            blocks=self._build_calendar_blocks(msg, worksheet_id),
             channel=self.channel,
             ts=self.ts,
             user_id=self.user,

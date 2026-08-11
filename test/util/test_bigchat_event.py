@@ -1,14 +1,14 @@
 import unittest
 
 from util.bigchat_event import (
-    SLACK_BUTTON_URL_LIMIT,
-    ics_payload,
-    ics_token,
+    GCAL_URL_LIMIT,
+    calendar_payload,
+    calendar_token,
     parse_sheet_name,
     to_gcal_link,
     to_gcal_link_truncated,
     to_ics,
-    verify_ics_token,
+    verify_calendar_token,
 )
 
 
@@ -58,12 +58,12 @@ class TestCalendarLinks(unittest.TestCase):
 
         assert "details=" in link
 
-    def test_gcal_link_truncated_fits_slack_button_limit(self):
+    def test_gcal_link_truncated_fits_url_limit(self):
         long_intro = "빅챗 소개글 " * 2000
 
         link = to_gcal_link_truncated(self.event, long_intro)
 
-        assert len(link) <= SLACK_BUTTON_URL_LIMIT
+        assert len(link) <= GCAL_URL_LIMIT
         assert "details=" in link  # 잘리더라도 앞부분은 남는다
 
     def test_ics(self):
@@ -95,14 +95,14 @@ class TestCalendarLinks(unittest.TestCase):
             assert len(line.encode("utf-8")) <= 75, line
 
 
-class TestIcsToken(unittest.TestCase):
+class TestCalendarToken(unittest.TestCase):
     def test_verify_roundtrip(self):
-        payload = ics_payload(161837744, "C03SZTDEDK3", "1688801145.307229")
-        token = ics_token("secret", payload)
+        payload = calendar_payload(161837744, "C03SZTDEDK3", "1688801145.307229")
+        token = calendar_token("secret", payload)
 
-        assert verify_ics_token("secret", payload, token) is True
-        assert verify_ics_token("other-secret", payload, token) is False
-        assert verify_ics_token("secret", payload, "") is False
+        assert verify_calendar_token("secret", payload, token) is True
+        assert verify_calendar_token("other-secret", payload, token) is False
+        assert verify_calendar_token("secret", payload, "") is False
         # channel/ts가 바뀌면 (다른 스레드로 바꿔치기) 검증 실패
-        tampered = ics_payload(161837744, "C_OTHER", "1688801145.307229")
-        assert verify_ics_token("secret", tampered, token) is False
+        tampered = calendar_payload(161837744, "C_OTHER", "1688801145.307229")
+        assert verify_calendar_token("secret", tampered, token) is False
