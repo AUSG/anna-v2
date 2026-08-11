@@ -15,4 +15,7 @@ class TestAnnounceNewChannelCreated(unittest.TestCase):
 
         mock_slack_client.send_message_to_freetalk.assert_called_once()
         assert result is True
-        assert mock_slack_client.send_message_to_freetalk.call_args.kwargs["msg"] == '새로운 채널이 만들어졌어! <#C1234567890>'
+        assert (
+            mock_slack_client.send_message_to_freetalk.call_args.kwargs["msg"]
+            == "새로운 채널이 만들어졌어! <#C1234567890>"
+        )

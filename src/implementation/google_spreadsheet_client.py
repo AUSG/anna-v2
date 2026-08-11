@@ -78,6 +78,10 @@ class GoogleSpreadsheetClient:
         worksheet = self._get_worksheet(worksheet_id)
         return worksheet.get_values(cell_range)
 
+    @with_retry()
+    def get_worksheet_title(self, worksheet_id: int) -> str:
+        return self._get_worksheet(worksheet_id).title
+
     def get_url(self, worksheet_id: int) -> str:
         return f"https://docs.google.com/spreadsheets/d/{self.spreadsheet_id}/edit#gid={str(worksheet_id)}"
 

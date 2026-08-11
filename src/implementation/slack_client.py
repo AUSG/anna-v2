@@ -49,10 +49,15 @@ class SlackClient:
         self.say(msg, channel="CQJ8HQWUV")
 
     def send_message_only_visible_to_user(
-        self, msg: str, user_id: str, channel: str, ts: Optional[str] = None
+        self,
+        msg: str,
+        user_id: str,
+        channel: str,
+        ts: Optional[str] = None,
+        blocks: Optional[List[dict]] = None,
     ):
         self.web_client.chat_postEphemeral(
-            text=msg, channel=channel, user=user_id, thread_ts=ts
+            text=msg, blocks=blocks, channel=channel, user=user_id, thread_ts=ts
         )
 
     @staticmethod

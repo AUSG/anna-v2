@@ -1,9 +1,14 @@
-from typing import List
+import logging
 import re
+from typing import List, Optional
 
+from config.env_config import envs
 from implementation.member_finder import MemberNotFound, MemberLackInfo
 from implementation.slack_client import Message
+from util.bigchat_event import parse_sheet_name, to_gcal_link, ics_token
 from util.utils import strip_multiline
+
+logger = logging.getLogger(__name__)
 
 SPREADSHEET_PAT = re.compile(
     r"https://docs.google.com/spreadsheets/d/.*/edit#gid=(\d*)"
@@ -29,6 +34,51 @@ class JoinBigchat:
             if pat is not None and len(pat.groups()) > 0:
                 return int(pat.groups()[0])
         return None
+
+    def _build_calendar_blocks(
+        self, msg: str, worksheet_id: int
+    ) -> Optional[List[dict]]:
+        """시트 이름에서 이벤트 정보를 파싱해 캘린더 버튼 블록을 만든다. 구형식 시트 등 파싱 불가면 None."""
+        try:
+            sheet_name = self.gs_client.get_worksheet_title(worksheet_id)
+            event = parse_sheet_name(sheet_name)
+        except Exception as ex:
+            logger.warning(f"Failed to build calendar buttons: {ex}")
+            return None
+        if not event:
+            return None
+
+        buttons = [
+            {
+                "type": "button",
+                "action_id": "calendar_gcal",
+                "text": {
+                    "type": "plain_text",
+                    "text": "📅 Google Calendar에 추가",
+                    "emoji": True,
+                },
+                "url": to_gcal_link(event),
+            }
+        ]
+        if envs.ICS_TOKEN_SECRET:
+            token = ics_token(envs.ICS_TOKEN_SECRET, worksheet_id)
+            buttons.append(
+                {
+                    "type": "button",
+                    "action_id": "calendar_ics",
+                    "text": {
+                        "type": "plain_text",
+                        "text": "📥 .ics 다운로드",
+                        "emoji": True,
+                    },
+                    "url": f"{envs.PUBLIC_BASE_URL}/bigchat/{worksheet_id}/event.ics?token={token}",
+                }
+            )
+
+        return [
+            {"type": "section", "text": {"type": "mrkdwn", "text": msg}},
+            {"type": "actions", "elements": buttons},
+        ]
 
     def run(self):
         if self.type != "reaction_added" or self.reaction != self.target_emoji:
@@ -58,18 +108,20 @@ class JoinBigchat:
         self.gs_client.append_row(worksheet_id, member.transform_for_spreadsheet())
 
         self.slack_client.send_message(msg=f"<@{self.user}>, 등록 완료!", ts=self.ts)
+        msg = strip_multiline(
+            f"""
+            <@{self.user}> 네 신청 정보를 아래와 같이 등록했어. 바뀐 부분이 있다면 운영진에게 DM으로 알려줘!
+            ```
+            이름(영문): {member.kor_name}({member.eng_name})
+            핸드폰: {member.phone}
+            이메일: {member.email}
+            학교/회사: {member.school_name_or_company_name}
+            ```
+            (참고로 이 메시지는 너만 볼 수 있어!)"""
+        )
         self.slack_client.send_message_only_visible_to_user(
-            msg=strip_multiline(
-                f"""
-                <@{self.user}> 네 신청 정보를 아래와 같이 등록했어. 바뀐 부분이 있다면 운영진에게 DM으로 알려줘!
-                ```
-                이름(영문): {member.kor_name}({member.eng_name})
-                핸드폰: {member.phone}
-                이메일: {member.email}
-                학교/회사: {member.school_name_or_company_name}
-                ```
-                (참고로 이 메시지는 너만 볼 수 있어!)"""
-            ),
+            msg=msg,
+            blocks=self._build_calendar_blocks(msg, worksheet_id),
             channel=self.channel,
             ts=self.ts,
             user_id=self.user,

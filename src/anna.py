@@ -1,6 +1,7 @@
 import logging
+import re
 
-from flask import Flask, request
+from flask import Flask, Response, abort, request
 from slack_bolt import App
 from slack_bolt.adapter.flask import SlackRequestHandler
 
@@ -13,6 +14,8 @@ from handler.controller import (
     mention_response,
     subin_like_response,
 )
+from implementation.google_spreadsheet_client import GoogleSpreadsheetClient
+from util.bigchat_event import parse_sheet_name, to_ics, verify_ics_token
 
 init_logger()
 
@@ -49,6 +52,12 @@ def handle_message_event(ack, event, say, client):
     subin_like_response(event=event, say=say, client=client)
 
 
+@app.action(re.compile("calendar_.*"))
+def handle_calendar_button(ack):
+    # 링크 버튼은 URL을 여는 것 외에 서버 동작이 없지만, ack하지 않으면 버튼에 ⚠️가 표시된다
+    ack()
+
+
 flask_app = Flask(__name__)
 slack_request_handler = SlackRequestHandler(app)
 
@@ -61,6 +70,34 @@ def slack_events():
 @flask_app.route("/health", methods=["GET"])
 def health():
     return {"status": "ok"}
+
+
+@flask_app.route("/bigchat/<int:worksheet_id>/event.ics", methods=["GET"])
+def bigchat_ics(worksheet_id: int):
+    if not envs.ICS_TOKEN_SECRET:
+        abort(404)
+    if not verify_ics_token(
+        envs.ICS_TOKEN_SECRET, worksheet_id, request.args.get("token", "")
+    ):
+        abort(403)
+
+    try:
+        sheet_name = GoogleSpreadsheetClient().get_worksheet_title(worksheet_id)
+    except Exception as ex:
+        logging.getLogger(__name__).warning(
+            f"Failed to load worksheet {worksheet_id}: {ex}"
+        )
+        abort(404)
+
+    event = parse_sheet_name(sheet_name or "")
+    if not event:
+        abort(404)
+
+    return Response(
+        to_ics(event, uid=f"bigchat-{worksheet_id}@ausg-anna"),
+        mimetype="text/calendar",
+        headers={"Content-Disposition": 'attachment; filename="event.ics"'},
+    )
 
 
 if __name__ == "__main__":
