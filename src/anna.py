@@ -91,8 +91,33 @@ def _fetch_bigchat_intro(channel: str, ts: str) -> str:
         return ""
 
 
+def _fetch_permalink(channel: str, ts: str) -> str:
+    """원본 메시지 permalink를 클릭 시점에 조회한다. 실패해도 캘린더 제공은 막지 않는다."""
+    if not channel or not ts:
+        return ""
+    try:
+        web_client = WebClient(token=envs.SLACK_BOT_TOKEN)
+        resp = web_client.chat_getPermalink(channel=channel, message_ts=ts)
+        return resp["permalink"]
+    except Exception as ex:
+        logging.getLogger(__name__).warning(f"Failed to fetch permalink: {ex}")
+        return ""
+
+
+def _build_calendar_description(channel: str, ts: str) -> str:
+    """gcal 본문과 같은 포맷: 맨 앞에 permalink, 그 아래 소개글 (ics는 길이 제한이 없어 전문)."""
+    parts = []
+    permalink = _fetch_permalink(channel, ts)
+    if permalink:
+        parts.append(f"슬랙에서 소개글 보기: {permalink}")
+    intro = _fetch_bigchat_intro(channel, ts)
+    if intro:
+        parts.append(intro)
+    return "\n\n".join(parts)
+
+
 def _load_bigchat_calendar_context(worksheet_id: int):
-    """ics 다운로드의 검증/조회 경로. 반환: (event, intro_text)"""
+    """ics 다운로드의 검증/조회 경로. 반환: (event, description)"""
     if not envs.ICS_TOKEN_SECRET:
         abort(404)
     channel = request.args.get("channel", "")
@@ -116,14 +141,14 @@ def _load_bigchat_calendar_context(worksheet_id: int):
     if not event:
         abort(404)
 
-    return event, _fetch_bigchat_intro(channel, ts)
+    return event, _build_calendar_description(channel, ts)
 
 
 @flask_app.route("/bigchat/<int:worksheet_id>/event.ics", methods=["GET"])
 def bigchat_ics(worksheet_id: int):
-    event, intro = _load_bigchat_calendar_context(worksheet_id)
+    event, description = _load_bigchat_calendar_context(worksheet_id)
     return Response(
-        to_ics(event, uid=f"bigchat-{worksheet_id}@ausg-anna", description=intro),
+        to_ics(event, uid=f"bigchat-{worksheet_id}@ausg-anna", description=description),
         mimetype="text/calendar",
         headers={"Content-Disposition": 'attachment; filename="event.ics"'},
     )
