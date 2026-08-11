@@ -101,7 +101,7 @@ class TestJoinBigchat(unittest.TestCase):
         mock_gs_client.get_worksheet_title.return_value = "AI 밋업 26-08-20 19:00~21:00"
         sut = JoinBigchat(event, "gogo", MagicMock(), mock_gs_client, MagicMock())
 
-        blocks = sut._build_calendar_blocks("등록했어", 161837744)
+        blocks = sut._build_calendar_blocks("등록했어", 161837744, "이번 빅챗 소개글입니다")
 
         assert blocks is not None
         buttons = blocks[1]["elements"]
@@ -109,6 +109,7 @@ class TestJoinBigchat(unittest.TestCase):
         assert buttons[0]["url"].startswith(
             "https://calendar.google.com/calendar/render?"
         )
+        assert "details=" in buttons[0]["url"]  # 스레드 첫 글이 일정 본문으로 들어간다
         # ICS_TOKEN_SECRET 미설정(기본값) 상태에서는 ics 버튼이 생기지 않는다
         assert all(b["action_id"] != "calendar_ics" for b in buttons)
 
@@ -118,6 +119,6 @@ class TestJoinBigchat(unittest.TestCase):
         mock_gs_client.get_worksheet_title.return_value = "빅챗 23-07-31"
         sut = JoinBigchat(event, "gogo", MagicMock(), mock_gs_client, MagicMock())
 
-        blocks = sut._build_calendar_blocks("등록했어", 161837744)
+        blocks = sut._build_calendar_blocks("등록했어", 161837744, "소개글")
 
         assert blocks is None

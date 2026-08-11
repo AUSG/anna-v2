@@ -15,7 +15,8 @@ from handler.controller import (
     subin_like_response,
 )
 from implementation.google_spreadsheet_client import GoogleSpreadsheetClient
-from util.bigchat_event import parse_sheet_name, to_ics, verify_ics_token
+from slack_sdk import WebClient
+from util.bigchat_event import ics_payload, parse_sheet_name, to_ics, verify_ics_token
 
 init_logger()
 
@@ -72,12 +73,27 @@ def health():
     return {"status": "ok"}
 
 
+def _fetch_bigchat_intro(channel: str, ts: str) -> str:
+    """스레드 첫 글(이벤트 소개글)을 클릭 시점에 읽어온다. 실패해도 ics 제공은 막지 않는다."""
+    try:
+        web_client = WebClient(token=envs.SLACK_BOT_TOKEN)
+        resp = web_client.conversations_replies(channel=channel, ts=ts, limit=1)
+        return resp["messages"][0]["text"]
+    except Exception as ex:
+        logging.getLogger(__name__).warning(f"Failed to fetch bigchat intro: {ex}")
+        return ""
+
+
 @flask_app.route("/bigchat/<int:worksheet_id>/event.ics", methods=["GET"])
 def bigchat_ics(worksheet_id: int):
     if not envs.ICS_TOKEN_SECRET:
         abort(404)
+    channel = request.args.get("channel", "")
+    ts = request.args.get("ts", "")
     if not verify_ics_token(
-        envs.ICS_TOKEN_SECRET, worksheet_id, request.args.get("token", "")
+        envs.ICS_TOKEN_SECRET,
+        ics_payload(worksheet_id, channel, ts),
+        request.args.get("token", ""),
     ):
         abort(403)
 
@@ -93,8 +109,9 @@ def bigchat_ics(worksheet_id: int):
     if not event:
         abort(404)
 
+    description = _fetch_bigchat_intro(channel, ts) if channel and ts else ""
     return Response(
-        to_ics(event, uid=f"bigchat-{worksheet_id}@ausg-anna"),
+        to_ics(event, uid=f"bigchat-{worksheet_id}@ausg-anna", description=description),
         mimetype="text/calendar",
         headers={"Content-Disposition": 'attachment; filename="event.ics"'},
     )
