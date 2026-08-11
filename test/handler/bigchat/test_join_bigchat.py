@@ -141,27 +141,28 @@ class TestJoinBigchat(unittest.TestCase):
         sut = JoinBigchat(event, "gogo", MagicMock(), mock_gs_client, MagicMock())
 
         with patch.object(envs, "ICS_TOKEN_SECRET", "testsecret"):
-            blocks = sut._build_calendar_blocks("등록했어", 161837744)
+            blocks = sut._build_calendar_blocks("등록했어", 161837744, "이번 빅챗 소개글입니다")
 
         assert blocks is not None
         buttons = blocks[1]["elements"]
-        # 두 버튼 모두 같은 서명 쿼리를 달고 서버를 가리킨다 (gcal은 302 리다이렉트, ics는 다운로드)
         assert [b["action_id"] for b in buttons] == ["calendar_gcal", "calendar_ics"]
         gcal_url, ics_url = buttons[0]["url"], buttons[1]["url"]
-        assert "/bigchat/161837744/gcal?" in gcal_url
+        # gcal은 직링크여야 한다 — 서버 302 경유 시 모바일 앱 링크 핸드오프가 끊긴다
+        assert gcal_url.startswith("https://calendar.google.com/calendar/render?")
+        assert "details=" in gcal_url  # 스레드 첫 글이 일정 본문으로 들어간다
         assert "/bigchat/161837744/event.ics?" in ics_url
-        assert gcal_url.split("?")[1] == ics_url.split("?")[1]
-        assert "token=" in gcal_url and "channel=" in gcal_url and "ts=" in gcal_url
+        assert "token=" in ics_url and "channel=" in ics_url and "ts=" in ics_url
 
-    def test_build_calendar_blocks_without_secret(self):
+    def test_build_calendar_blocks_without_secret_has_gcal_only(self):
         event = create_sample_reaction_added_event("gogo")
         mock_gs_client = MagicMock()
         mock_gs_client.get_worksheet_title.return_value = "AI 밋업 26-08-20 19:00~21:00"
         sut = JoinBigchat(event, "gogo", MagicMock(), mock_gs_client, MagicMock())
 
-        blocks = sut._build_calendar_blocks("등록했어", 161837744)
+        blocks = sut._build_calendar_blocks("등록했어", 161837744, "소개글")
 
-        assert blocks is None  # 시크릿 미설정이면 버튼 없이 기존 메시지만
+        buttons = blocks[1]["elements"]
+        assert [b["action_id"] for b in buttons] == ["calendar_gcal"]
 
     def test_build_calendar_blocks_with_old_format_sheet(self):
         event = create_sample_reaction_added_event("gogo")
@@ -170,6 +171,6 @@ class TestJoinBigchat(unittest.TestCase):
         sut = JoinBigchat(event, "gogo", MagicMock(), mock_gs_client, MagicMock())
 
         with patch.object(envs, "ICS_TOKEN_SECRET", "testsecret"):
-            blocks = sut._build_calendar_blocks("등록했어", 161837744)
+            blocks = sut._build_calendar_blocks("등록했어", 161837744, "소개글")
 
         assert blocks is None

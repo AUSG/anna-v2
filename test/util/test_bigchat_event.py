@@ -1,7 +1,7 @@
 import unittest
 
 from util.bigchat_event import (
-    GCAL_URL_LIMIT,
+    SLACK_BUTTON_URL_LIMIT,
     calendar_payload,
     calendar_token,
     parse_sheet_name,
@@ -63,7 +63,7 @@ class TestCalendarLinks(unittest.TestCase):
 
         link = to_gcal_link_truncated(self.event, long_intro)
 
-        assert len(link) <= GCAL_URL_LIMIT
+        assert len(link) <= SLACK_BUTTON_URL_LIMIT
         assert "details=" in link  # 잘리더라도 앞부분은 남는다
 
     def test_ics(self):

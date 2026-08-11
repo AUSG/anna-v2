@@ -16,8 +16,8 @@ SHEET_NAME_PAT = re.compile(
     r"^(?P<name>.+) (?P<date>\d{2}-\d{2}-\d{2}) (?P<start>\d{2}:\d{2})~(?P<end>\d{2}:\d{2})$"
 )
 
-# 302 리다이렉트로 내려주는 gcal URL의 안전 상한 (브라우저/구글 프론트엔드의 ~8k 제한 대비 여유)
-GCAL_URL_LIMIT = 6000
+# Slack 버튼 url 필드의 최대 길이는 3000자
+SLACK_BUTTON_URL_LIMIT = 2900
 
 
 @dataclass
@@ -62,7 +62,7 @@ def to_gcal_link(event: BigchatEvent, details: str = "") -> str:
 
 
 def to_gcal_link_truncated(
-    event: BigchatEvent, details: str = "", limit: int = GCAL_URL_LIMIT
+    event: BigchatEvent, details: str = "", limit: int = SLACK_BUTTON_URL_LIMIT
 ) -> str:
     """URL 길이 제한에 맞을 때까지 details를 잘라낸 gcal 링크."""
     link = to_gcal_link(event, details)
