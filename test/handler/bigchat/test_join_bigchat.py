@@ -1,8 +1,9 @@
 import unittest
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 from test.handler.bigchat.sample_data import create_sample_reaction_added_event
 
+from config.env_config import envs
 from handler.bigchat.join_bigchat import JoinBigchat
 from implementation.google_spreadsheet_client import WorksheetNotFound
 from implementation.member_finder import Member
@@ -139,16 +140,28 @@ class TestJoinBigchat(unittest.TestCase):
         mock_gs_client.get_worksheet_title.return_value = "AI 밋업 26-08-20 19:00~21:00"
         sut = JoinBigchat(event, "gogo", MagicMock(), mock_gs_client, MagicMock())
 
-        blocks = sut._build_calendar_blocks("등록했어", 161837744)
+        with patch.object(envs, "ICS_TOKEN_SECRET", "testsecret"):
+            blocks = sut._build_calendar_blocks("등록했어", 161837744)
 
         assert blocks is not None
         buttons = blocks[1]["elements"]
-        assert buttons[0]["action_id"] == "calendar_gcal"
-        assert buttons[0]["url"].startswith(
-            "https://calendar.google.com/calendar/render?"
-        )
-        # ICS_TOKEN_SECRET 미설정(기본값) 상태에서는 ics 버튼이 생기지 않는다
-        assert all(b["action_id"] != "calendar_ics" for b in buttons)
+        # 두 버튼 모두 같은 서명 쿼리를 달고 서버를 가리킨다 (gcal은 302 리다이렉트, ics는 다운로드)
+        assert [b["action_id"] for b in buttons] == ["calendar_gcal", "calendar_ics"]
+        gcal_url, ics_url = buttons[0]["url"], buttons[1]["url"]
+        assert "/bigchat/161837744/gcal?" in gcal_url
+        assert "/bigchat/161837744/event.ics?" in ics_url
+        assert gcal_url.split("?")[1] == ics_url.split("?")[1]
+        assert "token=" in gcal_url and "channel=" in gcal_url and "ts=" in gcal_url
+
+    def test_build_calendar_blocks_without_secret(self):
+        event = create_sample_reaction_added_event("gogo")
+        mock_gs_client = MagicMock()
+        mock_gs_client.get_worksheet_title.return_value = "AI 밋업 26-08-20 19:00~21:00"
+        sut = JoinBigchat(event, "gogo", MagicMock(), mock_gs_client, MagicMock())
+
+        blocks = sut._build_calendar_blocks("등록했어", 161837744)
+
+        assert blocks is None  # 시크릿 미설정이면 버튼 없이 기존 메시지만
 
     def test_build_calendar_blocks_with_old_format_sheet(self):
         event = create_sample_reaction_added_event("gogo")
@@ -156,6 +169,7 @@ class TestJoinBigchat(unittest.TestCase):
         mock_gs_client.get_worksheet_title.return_value = "빅챗 23-07-31"
         sut = JoinBigchat(event, "gogo", MagicMock(), mock_gs_client, MagicMock())
 
-        blocks = sut._build_calendar_blocks("등록했어", 161837744)
+        with patch.object(envs, "ICS_TOKEN_SECRET", "testsecret"):
+            blocks = sut._build_calendar_blocks("등록했어", 161837744)
 
         assert blocks is None

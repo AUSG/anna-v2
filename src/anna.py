@@ -1,7 +1,7 @@
 import logging
 import re
 
-from flask import Flask, Response, abort, request
+from flask import Flask, Response, abort, redirect, request
 from slack_bolt import App
 from slack_bolt.adapter.flask import SlackRequestHandler
 
@@ -15,7 +15,14 @@ from handler.controller import (
     subin_like_response,
 )
 from implementation.google_spreadsheet_client import GoogleSpreadsheetClient
-from util.bigchat_event import parse_sheet_name, to_ics, verify_ics_token
+from slack_sdk import WebClient
+from util.bigchat_event import (
+    calendar_payload,
+    parse_sheet_name,
+    to_gcal_link_truncated,
+    to_ics,
+    verify_calendar_token,
+)
 
 init_logger()
 
@@ -72,12 +79,29 @@ def health():
     return {"status": "ok"}
 
 
-@flask_app.route("/bigchat/<int:worksheet_id>/event.ics", methods=["GET"])
-def bigchat_ics(worksheet_id: int):
+def _fetch_bigchat_intro(channel: str, ts: str) -> str:
+    """스레드 첫 글(이벤트 소개글)을 클릭 시점에 읽어온다. 실패해도 캘린더 제공은 막지 않는다."""
+    if not channel or not ts:
+        return ""
+    try:
+        web_client = WebClient(token=envs.SLACK_BOT_TOKEN)
+        resp = web_client.conversations_replies(channel=channel, ts=ts, limit=1)
+        return resp["messages"][0]["text"]
+    except Exception as ex:
+        logging.getLogger(__name__).warning(f"Failed to fetch bigchat intro: {ex}")
+        return ""
+
+
+def _load_bigchat_calendar_context(worksheet_id: int):
+    """gcal 리다이렉트와 ics 다운로드가 공유하는 검증/조회 경로. 반환: (event, intro_text)"""
     if not envs.ICS_TOKEN_SECRET:
         abort(404)
-    if not verify_ics_token(
-        envs.ICS_TOKEN_SECRET, worksheet_id, request.args.get("token", "")
+    channel = request.args.get("channel", "")
+    ts = request.args.get("ts", "")
+    if not verify_calendar_token(
+        envs.ICS_TOKEN_SECRET,
+        calendar_payload(worksheet_id, channel, ts),
+        request.args.get("token", ""),
     ):
         abort(403)
 
@@ -93,8 +117,23 @@ def bigchat_ics(worksheet_id: int):
     if not event:
         abort(404)
 
+    return event, _fetch_bigchat_intro(channel, ts)
+
+
+@flask_app.route("/bigchat/<int:worksheet_id>/gcal", methods=["GET"])
+def bigchat_gcal(worksheet_id: int):
+    event, intro = _load_bigchat_calendar_context(worksheet_id)
+    # 302 (301 금지): 클릭 시점에 최신 시간/소개글로 새로 만드는 URL이라 영구 캐시되면 안 된다
+    response = redirect(to_gcal_link_truncated(event, intro), code=302)
+    response.headers["Cache-Control"] = "no-store"
+    return response
+
+
+@flask_app.route("/bigchat/<int:worksheet_id>/event.ics", methods=["GET"])
+def bigchat_ics(worksheet_id: int):
+    event, intro = _load_bigchat_calendar_context(worksheet_id)
     return Response(
-        to_ics(event, uid=f"bigchat-{worksheet_id}@ausg-anna"),
+        to_ics(event, uid=f"bigchat-{worksheet_id}@ausg-anna", description=intro),
         mimetype="text/calendar",
         headers={"Content-Disposition": 'attachment; filename="event.ics"'},
     )

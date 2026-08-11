@@ -6,7 +6,9 @@ from config.env_config import envs
 from implementation.google_spreadsheet_client import WorksheetNotFound
 from implementation.member_finder import MemberNotFound, MemberLackInfo
 from implementation.slack_client import Message
-from util.bigchat_event import parse_sheet_name, to_gcal_link, ics_token
+from urllib.parse import urlencode
+
+from util.bigchat_event import calendar_payload, calendar_token, parse_sheet_name
 from util.utils import strip_multiline
 
 logger = logging.getLogger(__name__)
@@ -39,7 +41,14 @@ class JoinBigchat:
     def _build_calendar_blocks(
         self, msg: str, worksheet_id: int
     ) -> Optional[List[dict]]:
-        """시트 이름에서 이벤트 정보를 파싱해 캘린더 버튼 블록을 만든다. 구형식 시트 등 파싱 불가면 None."""
+        """시트 이름에서 이벤트 정보를 파싱해 캘린더 버튼 블록을 만든다. 구형식 시트 등 파싱 불가면 None.
+
+        두 버튼 모두 서명된 서버 URL을 가리킨다 — gcal은 302 리다이렉트, ics는 파일 다운로드.
+        서버가 클릭 시점에 시트 이름(시간)과 스레드 첫 글(일정 본문)을 새로 읽으므로 항상 최신이다.
+        """
+        if not envs.ICS_TOKEN_SECRET:
+            return None
+
         try:
             sheet_name = self.gs_client.get_worksheet_title(worksheet_id)
             event = parse_sheet_name(sheet_name)
@@ -49,6 +58,11 @@ class JoinBigchat:
         if not event:
             return None
 
+        token = calendar_token(
+            envs.ICS_TOKEN_SECRET,
+            calendar_payload(worksheet_id, self.channel, self.ts),
+        )
+        query = urlencode({"token": token, "channel": self.channel, "ts": self.ts})
         buttons = [
             {
                 "type": "button",
@@ -58,23 +72,19 @@ class JoinBigchat:
                     "text": "📅 Google Calendar에 추가",
                     "emoji": True,
                 },
-                "url": to_gcal_link(event),
-            }
+                "url": f"{envs.PUBLIC_BASE_URL}/bigchat/{worksheet_id}/gcal?{query}",
+            },
+            {
+                "type": "button",
+                "action_id": "calendar_ics",
+                "text": {
+                    "type": "plain_text",
+                    "text": "📥 .ics 다운로드",
+                    "emoji": True,
+                },
+                "url": f"{envs.PUBLIC_BASE_URL}/bigchat/{worksheet_id}/event.ics?{query}",
+            },
         ]
-        if envs.ICS_TOKEN_SECRET:
-            token = ics_token(envs.ICS_TOKEN_SECRET, worksheet_id)
-            buttons.append(
-                {
-                    "type": "button",
-                    "action_id": "calendar_ics",
-                    "text": {
-                        "type": "plain_text",
-                        "text": "📥 .ics 다운로드",
-                        "emoji": True,
-                    },
-                    "url": f"{envs.PUBLIC_BASE_URL}/bigchat/{worksheet_id}/event.ics?token={token}",
-                }
-            )
 
         return [
             {"type": "section", "text": {"type": "mrkdwn", "text": msg}},
