@@ -4,6 +4,7 @@ from typing import List, Optional
 
 from dateutil.tz import gettz
 from gspread import service_account_from_dict, Worksheet, Spreadsheet
+from gspread.exceptions import WorksheetNotFound
 from gspread_formatting import set_column_width
 
 from config.env_config import envs
@@ -58,7 +59,7 @@ class GoogleSpreadsheetClient:
 
         return worksheet.id
 
-    @with_retry()
+    @with_retry(non_retryable_exceptions=(WorksheetNotFound,))
     def append_row(
         self,
         worksheet_id: int,
@@ -73,12 +74,12 @@ class GoogleSpreadsheetClient:
 
         worksheet.append_row(_values)
 
-    @with_retry()
+    @with_retry(non_retryable_exceptions=(WorksheetNotFound,))
     def get_values(self, worksheet_id: int, cell_range=None) -> List[List[str]]:
         worksheet = self._get_worksheet(worksheet_id)
         return worksheet.get_values(cell_range)
 
-    @with_retry()
+    @with_retry(non_retryable_exceptions=(WorksheetNotFound,))
     def get_worksheet_title(self, worksheet_id: int) -> str:
         return self._get_worksheet(worksheet_id).title
 
@@ -97,7 +98,7 @@ class GoogleSpreadsheetClient:
     def _get_spreadsheet(self) -> Spreadsheet:
         return self.gs_client.open_by_key(self.spreadsheet_id)
 
-    @with_retry()
+    @with_retry(non_retryable_exceptions=(WorksheetNotFound,))
     def _get_worksheet(self, worksheet_id: int) -> Worksheet:
         spreadsheet = self._get_spreadsheet()
         worksheet = spreadsheet.get_worksheet_by_id(worksheet_id)
@@ -118,7 +119,7 @@ class GoogleSpreadsheetClient:
 
         return worksheet_id
 
-    @with_retry()
+    @with_retry(non_retryable_exceptions=(WorksheetNotFound,))
     def delete_row(self, worksheet_id: int, query: str):
         """
         XXX: 실제로 삭제할 정보가 없어서 아무 동작을 하지 않아도 에러를 뱉지 않는다.
