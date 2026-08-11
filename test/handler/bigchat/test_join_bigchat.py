@@ -57,6 +57,44 @@ class TestJoinBigchat(unittest.TestCase):
         )
         assert result is True
 
+    def test_run_with_old_format_sheet_registers_without_buttons(self):
+        """구형식 시트여도 참가 신청은 그대로 성공하고, 캘린더 버튼만 생략된다."""
+        event = create_sample_reaction_added_event("gogo")
+        mock_slack_client = MagicMock()
+        mock_slack_client.get_replies.return_value = [
+            Message(
+                ts=event["item"]["ts"],
+                thread_ts="1689429129.825319",
+                channel="C03SZTDEDK3",
+                user="U01BN035Y6L",
+                text="새로운 빅챗, 등록 완료! <https://docs.google.com/spreadsheets/d/1FtKRO4gmlVg-Si0_CHt-tkpVd3LDTXdsoZ0u98MYd0k/edit#gid=161837744|구글스프레드 시트>",
+            ),
+        ]
+        mock_gs_client = MagicMock()
+        mock_gs_client.get_worksheet_title.return_value = "빅챗 23-07-31"  # 구형식
+        mock_member_manager = MagicMock()
+        mock_member_manager.find.return_value = Member(
+            kor_name="문성혁",
+            eng_name="Moon Seonghyeok",
+            email="email",
+            phone="phone",
+            school_name_or_company_name="school_name_or_company_name",
+        )
+        sut = JoinBigchat(
+            event, "gogo", mock_slack_client, mock_gs_client, mock_member_manager
+        )
+
+        result = sut.run()
+
+        mock_gs_client.append_row.assert_called_once()
+        assert result is True
+        assert (
+            mock_slack_client.send_message_only_visible_to_user.call_args.kwargs[
+                "blocks"
+            ]
+            is None
+        )
+
     def test_build_calendar_blocks_with_new_format_sheet(self):
         event = create_sample_reaction_added_event("gogo")
         mock_gs_client = MagicMock()
