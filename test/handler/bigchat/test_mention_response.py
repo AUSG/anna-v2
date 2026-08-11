@@ -20,7 +20,10 @@ class TestMentionResponse(unittest.TestCase):
 
         mock_slack_client.send_message.assert_called_once()
         assert result is True
-        assert mock_slack_client.send_message.call_args.kwargs["msg"] in ["여기있어!\n<@Uabc> <@Udef>", "여기있어!\n<@Udef> <@Uabc>"]
+        assert mock_slack_client.send_message.call_args.kwargs["msg"] in [
+            "여기있어!\n<@Uabc> <@Udef>",
+            "여기있어!\n<@Udef> <@Uabc>",
+        ]
 
     def test_run_by_unaccepted_keyword_by_fallback(self):
         event = create_sample_app_mention_event("<@U01BN035Y6L>")
@@ -32,4 +35,7 @@ class TestMentionResponse(unittest.TestCase):
         result = sut.run()
 
         assert result is True
-        assert mock_slack_client.send_message.call_args.kwargs["msg"] == "앗, 잘못입력한 것 같아.\n나를 멘션하면서 help를 한 번 입력해봐!"
+        assert (
+            mock_slack_client.send_message.call_args.kwargs["msg"]
+            == "앗, 잘못입력한 것 같아.\n나를 멘션하면서 help를 한 번 입력해봐!"
+        )

@@ -16,14 +16,22 @@ class TestShuffleResponse(unittest.TestCase):
 
         mock_slack_client.send_message.assert_called_once()
         assert result is True
-        assert mock_slack_client.send_message.call_args.kwargs["msg"] in ["여기있어!\n<@Uabc> <@Udef>", "여기있어!\n<@Udef> <@Uabc>"]
+        assert mock_slack_client.send_message.call_args.kwargs["msg"] in [
+            "여기있어!\n<@Uabc> <@Udef>",
+            "여기있어!\n<@Udef> <@Uabc>",
+        ]
 
     def test_run_by_english(self):
-        event = create_sample_app_mention_event("<@U01BN035Y6L> shuffle <@Uabc> <@Udef>")
+        event = create_sample_app_mention_event(
+            "<@U01BN035Y6L> shuffle <@Uabc> <@Udef>"
+        )
         mock_slack_client = MagicMock()
         sut = ShuffleResponse(event, mock_slack_client)
 
         result = sut.handle_mention()
 
         assert result is True
-        assert mock_slack_client.send_message.call_args.kwargs["msg"] in ["여기있어!\n<@Uabc> <@Udef>", "여기있어!\n<@Udef> <@Uabc>"]
+        assert mock_slack_client.send_message.call_args.kwargs["msg"] in [
+            "여기있어!\n<@Uabc> <@Udef>",
+            "여기있어!\n<@Udef> <@Uabc>",
+        ]
