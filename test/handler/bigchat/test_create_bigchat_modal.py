@@ -40,7 +40,9 @@ class TestNormalizeBodies(unittest.TestCase):
         assert event["ts"] == "1688800000.000001"
 
     def test_view_submission(self):
-        body = create_sample_view_submission_body("AI 밋업", "2026-08-20", "19:00", "21:00")
+        body = create_sample_view_submission_body(
+            "AI 밋업", "2026-08-20", "19:00", "21:00"
+        )
 
         event = normalize_view_body(body)
 
