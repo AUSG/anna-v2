@@ -144,7 +144,9 @@ class JoinBigchat:
             return False
 
         try:
-            self.gs_client.append_row(worksheet_id, member.transform_for_spreadsheet())
+            added = self.gs_client.append_row_if_absent(
+                worksheet_id, member.transform_for_spreadsheet()
+            )
         except WorksheetNotFound:
             self.slack_client.send_message(
                 msg=f"<@{self.user}>, 이 빅챗의 신청 시트를 찾을 수 없어. 이미 마감되었거나 삭제된 것 같아. "
@@ -152,6 +154,13 @@ class JoinBigchat:
                 ts=self.ts,
             )
             return False
+
+        if not added:
+            # 시트 생성 직후의 일괄 등록(#89)과 동시에 처리됐거나 이벤트가 중복 전달된 경우
+            self.slack_client.send_message(
+                msg=f"<@{self.user}>, 이미 등록되어 있어!", ts=self.ts
+            )
+            return True
 
         self.slack_client.send_message(msg=f"<@{self.user}>, 등록 완료!", ts=self.ts)
         msg = build_registration_info_message(self.user, member)

@@ -49,3 +49,20 @@ class TestSlackClientGetEmoji(unittest.TestCase):
         )
 
         assert self.sut.get_emoji(channel="C1", ts="123.456", emoji_name="gogo") is None
+
+    def test_retries_on_transient_os_error(self):
+        self.mock_web_client.reactions_get.side_effect = [
+            OSError("connection reset"),
+            {"message": {"reactions": [{"name": "gogo", "users": ["U1"], "count": 1}]}},
+        ]
+
+        reaction = self.sut.get_emoji(channel="C1", ts="123.456", emoji_name="gogo")
+
+        assert reaction is not None
+        assert self.mock_web_client.reactions_get.call_count == 2
+
+    def test_returns_none_when_os_error_persists(self):
+        self.mock_web_client.reactions_get.side_effect = OSError("connection reset")
+
+        assert self.sut.get_emoji(channel="C1", ts="123.456", emoji_name="gogo") is None
+        assert self.mock_web_client.reactions_get.call_count == 3

@@ -1,8 +1,14 @@
+import logging
+
+from slack_sdk.errors import SlackApiError
+
 from handler.bigchat.join_bigchat import build_registration_info_message
 from handler.bigchat.mention_handler import MentionHandler
 from implementation.member_finder import MemberLackInfo, MemberNotFound
 from util.bigchat_event import parse_sheet_name
 from util.utils import strip_multiline
+
+logger = logging.getLogger(__name__)
 
 
 class CreateBigchatSheet(MentionHandler):
@@ -55,8 +61,13 @@ class CreateBigchatSheet(MentionHandler):
         reaction 은 시트 링크 메시지를 올린 '뒤에' 읽는다. 링크가 올라간 이후의
         reaction 은 JoinBigchat(reaction_added)이 정상 처리하므로, 이 순서면 시트
         생성 전후 어느 시점에 눌린 reaction 도 두 경로 중 한쪽에는 반드시 잡힌다.
-        두 경로가 거의 동시에 같은 사람을 처리하는 좁은 구간은 시트의 기존 행과
-        대조해 중복 등록을 막는다.
+        두 경로가 거의 동시에 같은 사람을 처리해도 append_row_if_absent 가
+        중복 등록을 막는다.
+
+        여기 도달했다면 시트 생성과 링크 안내는 이미 성공했으므로, 일괄 등록이
+        실패해도 전체 요청을 실패 처리하면 안 된다 — 전역 에러 핸들러의
+        '다시 시도해줘' 안내를 따라 멘션을 다시 보내면 같은 이름의 시트를 또
+        만들려다 실패한다. 대신 스레드에 경고만 남긴다.
         """
         # 모집글(스레드 부모)에 달린 reaction 을 읽어야 한다. 스레드 없이 채널에
         # 바로 멘션한 경우엔 멘션 글 자체가 모집글이다.
@@ -67,40 +78,53 @@ class CreateBigchatSheet(MentionHandler):
         if reaction is None:
             return
 
-        existing_rows = self.gs_client.get_values(worksheet_id)
-        registered = []
-        for user in reaction.users:
-            try:
-                member = self.member_manager.find(user)
-            except MemberNotFound:
-                self.slack_client.send_message(
-                    msg=f"<@{user}>, 네 정보를 찾지 못했어. 운영진에게 연락해줘!",
-                    ts=self.ts,
-                )
-            except MemberLackInfo:
-                self.slack_client.send_message(
-                    msg=f"<@{user}>, 네 정보에 누락된 값이 있어. 운영진에게 연락해줘!",
-                    ts=self.ts,
-                )
-            else:
-                row = member.transform_for_spreadsheet()
-                if row in existing_rows:
-                    continue
-                self.gs_client.append_row(worksheet_id, row)
-                registered.append((user, member))
+        try:
+            registered = []
+            for user in reaction.users:
+                try:
+                    member = self.member_manager.find(user)
+                except MemberNotFound:
+                    self.slack_client.send_message(
+                        msg=f"<@{user}>, 네 정보를 찾지 못했어. 운영진에게 연락해줘!",
+                        ts=self.ts,
+                    )
+                except MemberLackInfo:
+                    self.slack_client.send_message(
+                        msg=f"<@{user}>, 네 정보에 누락된 값이 있어. 운영진에게 연락해줘!",
+                        ts=self.ts,
+                    )
+                else:
+                    if self.gs_client.append_row_if_absent(
+                        worksheet_id, member.transform_for_spreadsheet()
+                    ):
+                        registered.append((user, member))
 
-        if not registered:
-            return
+            if not registered:
+                return
 
-        mentions = " ".join(f"<@{user}>" for user, _ in registered)
-        self.slack_client.send_message(
-            msg=f"{mentions} 시트가 만들어지기 전에 :{self.target_emoji}:를 눌러줬구나! 지금 등록 완료했어!",
-            ts=self.ts,
-        )
-        for user, member in registered:
-            self.slack_client.send_message_only_visible_to_user(
-                msg=build_registration_info_message(user, member),
-                channel=self.channel,
+            mentions = " ".join(f"<@{user}>" for user, _ in registered)
+            self.slack_client.send_message(
+                msg=f"{mentions} 시트가 만들어지기 전에 :{self.target_emoji}:를 눌러줬구나! 지금 등록 완료했어!",
                 ts=self.ts,
-                user_id=user,
+            )
+            for user, member in registered:
+                try:
+                    self.slack_client.send_message_only_visible_to_user(
+                        msg=build_registration_info_message(user, member),
+                        channel=self.channel,
+                        ts=self.ts,
+                        user_id=user,
+                    )
+                except SlackApiError as ex:
+                    # 채널을 떠났거나 비활성화된 반응자에게는 ephemeral 을 못 보낸다.
+                    # 등록 자체는 이미 끝났으므로 나머지 인원 안내를 계속한다.
+                    logger.warning(
+                        f"Failed to send registration info to {user}: {ex}"
+                    )
+        except Exception:
+            logger.exception("Failed to backfill early reactions")
+            self.slack_client.send_message(
+                msg=f"미리 눌린 :{self.target_emoji}: 자동 등록을 처리하다 문제가 생겨서 멈췄어. "
+                "등록되지 않은 사람이 있을 수 있으니 시트를 확인해줘!",
+                ts=self.ts,
             )

@@ -139,13 +139,19 @@ class SlackClient:
 
         해당 반응이 없거나 메시지를 읽지 못하면 None을 반환한다.
         """
-        try:
-            response = self.web_client.reactions_get(
-                channel=channel, timestamp=ts, full=True
-            )
-        except SlackApiError as ex:
-            logger.warning(f"Failed to get reactions: {ex}")
-            return None
+        for attempt in range(3):
+            try:
+                response = self.web_client.reactions_get(
+                    channel=channel, timestamp=ts, full=True
+                )
+                break
+            except SlackApiError as ex:
+                logger.warning(f"Failed to get reactions: {ex}")
+                return None
+            except OSError as ex:
+                if attempt >= 2:
+                    logger.warning(f"Failed to get reactions: {ex}")
+                    return None
 
         message = response.get("message") or {}
         for reaction in message.get("reactions", []):
