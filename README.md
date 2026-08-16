@@ -17,6 +17,14 @@
 
 이렇게 시트가 생성된 이후엔, 해당 스레드의 첫 글에 :gogo: 이모지를 달아서 각자의 이름을 해당 시트에 추가할 수 있다.
 
+메시지를 직접 입력하는 대신, 빅챗 소개글 메시지의 더보기 메뉴(`⋮`) > `새로운 빅챗 만들기` 단축메뉴로 폼(모달)을 띄워서 만들 수도 있다. 이름/날짜/시작·종료 시각을 입력해 제출하면 같은 방식으로 시트가 생성되고, 그 메시지의 스레드에 시트 링크 답글이 달린다. (스레드 안의 답글에서 실행해도 스레드 첫 글 기준으로 동작한다.)
+
+> 이 단축메뉴가 동작하려면 [슬랙 앱 설정](https://api.slack.com/apps/AR4RK9XGX)에서 아래 세팅이 필요하다:
+>
+> 1. Interactivity & Shortcuts > Interactivity ON, Request URL은 이벤트 구독과 **동일한** `https://anna-v2-2023.fly.dev/slack/events` (서버 라우트가 이것 하나뿐이고, Bolt가 이벤트/모달 payload를 모두 여기서 구분 처리한다)
+> 2. Interactivity & Shortcuts > Shortcuts에 "On messages" 타입으로 Callback ID `create_bigchat` 등록
+> 3. OAuth & Permissions > Bot Token Scopes에 `commands` 추가 (스코프 추가 후엔 워크스페이스에 재설치 필요)
+
 2. 빅챗 전날 리마인더 DM
 
 매일 저녁 6시(KST)에 다음 날 열리는 빅챗 시트를 찾아, 신청자 전원에게 잊지 말고 오라는 DM 을 보낸다. (신청 시트의 이메일을 멤버 시트와 대조해 슬랙 계정을 찾는다)
@@ -57,7 +65,7 @@ make open_port
 
 > 💡 아래 작업을 하기 전 미리 경고: URL 값을 바꾸기 전 기존 값을 따로 저장해 둘 것.
 
-이후, [슬랙 - ANNA 설정](https://api.slack.com/apps/AR4RK9XGX/event-subscriptions)에서 `Request URL` 항목을 위 명령어 결과로 나온 https 주소로 바꿔준다. 그냥 URL 만 입력하면 안되고, `/slack/events`를 붙여줘야 한다[^1]. 성공적으로 "Verified" 메시지가 떴다면, 하단의 "Save Changes" 를 눌러 적용해주자.
+이후, [슬랙 - ANNA 설정](https://api.slack.com/apps/AR4RK9XGX/event-subscriptions)에서 `Request URL` 항목을 위 명령어 결과로 나온 https 주소로 바꿔준다. 그냥 URL 만 입력하면 안되고, `/slack/events`를 붙여줘야 한다[^1]. 성공적으로 "Verified" 메시지가 떴다면, 하단의 "Save Changes" 를 눌러 적용해주자. 모달/버튼 같은 상호작용도 로컬에서 테스트하려면 Interactivity & Shortcuts 의 `Request URL` 도 같은 주소로 바꿔줘야 한다.
 
 [^1]: 예를 들어 포워딩 URL이 https://a.b.dev 라면, https://a.b.dev/slack/events 을 입력해야 한다.
 

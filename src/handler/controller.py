@@ -7,6 +7,10 @@ from slack_sdk.http_retry.builtin_handlers import RateLimitErrorRetryHandler
 from config.env_config import envs
 from handler.bigchat.abandon_bigchat import AbandonBigchat
 from handler.bigchat.announce_new_channel_created import AnnounceNewChannelCreated
+from handler.bigchat.create_bigchat_modal import (
+    OpenCreateBigchatModal,
+    SubmitCreateBigchatModal,
+)
 from handler.bigchat.create_bigchat_sheet import CreateBigchatSheet
 from handler.bigchat.join_bigchat import JoinBigchat
 from handler.bigchat.simple_response import SimpleResponse
@@ -120,6 +124,44 @@ def mention_response(event, say, client):
             question_fallback,
         ],
         simple_response,
+    ).run()
+
+
+# message shortcut(message_action) payload sample (normalize_shortcut_body 적용 후):
+# {
+#     'type': 'message_action',
+#     'callback_id': 'create_bigchat',
+#     'trigger_id': '13345224609.738474920.8088930838d88f008e0',
+#     'response_url': 'https://hooks.slack.com/app/TQLEG4B38/...',
+#     'channel': 'C03SZTDEDK3',   # normalize: {'id': ...} -> id 문자열
+#     'ts': '1688801145.307229',  # normalize: 실행한 메시지가 속한 스레드의 첫 글 ts
+#     'user': 'UQJ8HQJG5',        # normalize: {'id': ...} -> id 문자열
+#     'message': { ... },
+#     ...
+# }
+@catch_global_error()
+def open_create_bigchat_modal(event, say, client):
+    OpenCreateBigchatModal(event, client).run()
+
+
+# view_submission payload sample (normalize_view_body 적용 후):
+# {
+#     'type': 'view_submission',
+#     'channel': 'C03SZTDEDK3',   # normalize: private_metadata 에서 복원
+#     'ts': '1688801145.307229',  # normalize: private_metadata 에서 복원 (스레드 첫 글 ts)
+#     'user': 'UQJ8HQJG5',        # normalize: {'id': ...} -> id 문자열
+#     'view': {
+#         'callback_id': 'create_bigchat_modal',
+#         'private_metadata': '{"channel": ..., "thread_ts": ..., "response_url": ...}',
+#         'state': {'values': { ... }},
+#         ...
+#     },
+#     ...
+# }
+@catch_global_error()
+def submit_create_bigchat_modal(event, say, client, ack):
+    SubmitCreateBigchatModal(
+        event, ack, SlackClient(say, client), GoogleSpreadsheetClient()
     ).run()
 
 

@@ -3,6 +3,11 @@ from util.bigchat_event import parse_sheet_name
 from util.utils import strip_multiline
 
 
+def bigchat_created_message(sheet_url: str, sheet_name: str) -> str:
+    # 이 답글의 시트 링크(gid)가 :gogo: 참여 흐름(JoinBigchat)이 시트를 찾는 앵커다
+    return f"새로운 빅챗, 등록 완료! <{sheet_url}|{sheet_name}> :google_spreadsheets:"
+
+
 class CreateBigchatSheet(MentionHandler):
     def __init__(self, event, slack_client, gs_client):
         self.text = event["text"]
@@ -35,7 +40,7 @@ class CreateBigchatSheet(MentionHandler):
         worksheet_id = self.gs_client.create_bigchat_sheet(sheet_name)
         sheet_url = self.gs_client.get_url(worksheet_id)
         self.slack_client.send_message(
-            msg=f"새로운 빅챗, 등록 완료! <{sheet_url}|{sheet_name}> :google_spreadsheets:",
+            msg=bigchat_created_message(sheet_url, sheet_name),
             ts=self.ts,
         )
         return True

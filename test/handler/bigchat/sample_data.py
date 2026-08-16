@@ -1,3 +1,63 @@
+import json
+
+
+def create_sample_message_shortcut_body(thread_ts=None):
+    message = {
+        "type": "message",
+        "user": "U01BN035Y6L",
+        "ts": "1688801145.307229",
+        "text": "8월 빅챗을 소개합니다 ...",
+    }
+    if thread_ts:
+        message["thread_ts"] = thread_ts
+    return {
+        "type": "message_action",
+        "callback_id": "create_bigchat",
+        "trigger_id": "13345224609.738474920.8088930838d88f008e0",
+        "response_url": "https://hooks.slack.com/app/TQLEG4B38/1234567890/abcdefg",
+        "user": {"id": "UQJ8HQJG5", "name": "roeniss"},
+        "channel": {"id": "C03SZTDEDK3", "name": "bigchat"},
+        "team": {"id": "TQLEG4B38", "domain": "ausg"},
+        "message": message,
+    }
+
+
+def create_sample_view_submission_body(name, date, start, end):
+    return {
+        "type": "view_submission",
+        "user": {"id": "UQJ8HQJG5", "name": "roeniss"},
+        "team": {"id": "TQLEG4B38", "domain": "ausg"},
+        "view": {
+            "id": "V05JX2B8GPY",
+            "type": "modal",
+            "callback_id": "create_bigchat_modal",
+            "private_metadata": json.dumps(
+                {
+                    "channel": "C03SZTDEDK3",
+                    "thread_ts": "1688801145.307229",
+                    "response_url": "https://hooks.slack.com/app/TQLEG4B38/1234567890/abcdefg",
+                }
+            ),
+            "state": {
+                "values": {
+                    "bigchat_name": {
+                        "value": {"type": "plain_text_input", "value": name}
+                    },
+                    "bigchat_date": {
+                        "value": {"type": "datepicker", "selected_date": date}
+                    },
+                    "bigchat_start": {
+                        "value": {"type": "timepicker", "selected_time": start}
+                    },
+                    "bigchat_end": {
+                        "value": {"type": "timepicker", "selected_time": end}
+                    },
+                }
+            },
+        },
+    }
+
+
 def create_sample_app_mention_event(msg):
     return {
         "client_msg_id": "8fb50d48-f93d-4cca-b9ca-6965479e9a93",

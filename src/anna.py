@@ -7,12 +7,20 @@ from slack_bolt.adapter.flask import SlackRequestHandler
 
 from config.env_config import envs
 from config.log_config import init_logger
+from handler.bigchat.create_bigchat_modal import (
+    CREATE_BIGCHAT_SHORTCUT_ID,
+    CREATE_BIGCHAT_VIEW_ID,
+    normalize_shortcut_body,
+    normalize_view_body,
+)
 from handler.controller import (
     join_bigchat,
     abandon_bigchat,
     announce_new_channel_created,
     mention_response,
+    open_create_bigchat_modal,
     remind_bigchat,
+    submit_create_bigchat_modal,
     subin_like_response,
 )
 from implementation.google_spreadsheet_client import GoogleSpreadsheetClient
@@ -74,6 +82,22 @@ def handle_message_event(ack, event, say, client):
 def handle_calendar_button(ack):
     # 링크 버튼은 URL을 여는 것 외에 서버 동작이 없지만, ack하지 않으면 버튼에 ⚠️가 표시된다
     ack()
+
+
+@app.shortcut(CREATE_BIGCHAT_SHORTCUT_ID)
+def handle_create_bigchat_shortcut(ack, body, say, client):
+    ack()
+    open_create_bigchat_modal(
+        event=normalize_shortcut_body(body), say=say, client=client
+    )
+
+
+@app.view(CREATE_BIGCHAT_VIEW_ID)
+def handle_create_bigchat_view_submission(ack, body, say, client):
+    # ack는 검증 결과(인라인 에러 vs 모달 닫기)에 따라 핸들러 안에서 호출된다
+    submit_create_bigchat_modal(
+        event=normalize_view_body(body), say=say, client=client, ack=ack
+    )
 
 
 flask_app = Flask(__name__)
