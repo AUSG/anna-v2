@@ -53,6 +53,9 @@ class MemberManager:
         self.logger.debug(member)
         return member
 
+    @ttl_cache(maxsize=1, ttl=60)  # not thread-safe
+    # 시트 생성 직후의 일괄 등록(#89)이 N명을 연달아 조회해도 멤버 시트 읽기는 1회면 된다.
+    # ttl 이 길면 방금 멤버 시트에 추가된 사람이 그만큼 늦게 조회되므로 60초로 짧게 잡았다.
     def _fetch_members(self) -> Dict[str, Member]:
         member_info_cols = "J:O"  # 열 순서: user_id, kor_name, eng_name, email, phone, school_name or company_name
         raw_members = self.gs_client.get_values(
