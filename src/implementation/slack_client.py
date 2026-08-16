@@ -37,6 +37,19 @@ class SlackClient:
     def send_message(self, msg: str, ts: str):
         self.say(msg, thread_ts=ts)
 
+    def send_thread_message(self, msg: str, channel: str, ts: str):
+        """say 컨텍스트가 없는 경우(모달 제출 등)에 채널/스레드를 직접 지정해서 메시지를 보낸다."""
+        self.web_client.chat_postMessage(channel=channel, text=msg, thread_ts=ts)
+
+    def send_response_url_message(self, response_url: str, msg: str):
+        """상호작용 payload의 response_url로 응답한다. 봇이 채널 멤버가 아니어도 전달된다."""
+        resp = requests.post(
+            response_url,
+            json={"response_type": "ephemeral", "text": msg},
+            timeout=10,
+        )
+        resp.raise_for_status()
+
     def download_file(self, url: str) -> Optional[bytes]:
         """Slack url_private 파일을 봇 토큰으로 다운로드 (이미지 등). 실패 시 None."""
         try:

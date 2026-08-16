@@ -127,12 +127,13 @@ class TestCreateBigchatSheetEarlyReactionBackfill(unittest.TestCase):
         self.mock_gs_client.append_row_if_absent.assert_called_once_with(
             self.WORKSHEET_ID, SAMPLE_MEMBER.transform_for_spreadsheet()
         )
-        # 시트 링크 안내 + 일괄 등록 안내
-        assert self.mock_slack_client.send_message.call_count == 2
-        assert (
-            "지금 등록 완료했어"
-            in self.mock_slack_client.send_message.call_args.kwargs["msg"]
-        )
+        # 시트 링크 안내는 send_message, 일괄 등록 안내는 (say 컨텍스트가 없는
+        # 모달 경로와 공유하는) send_thread_message 로 나간다
+        self.mock_slack_client.send_message.assert_called_once()
+        self.mock_slack_client.send_thread_message.assert_called_once()
+        group_kwargs = self.mock_slack_client.send_thread_message.call_args.kwargs
+        assert "지금 등록 완료했어" in group_kwargs["msg"]
+        assert group_kwargs["ts"] == self.event["thread_ts"]
         # 등록 정보는 본인에게만 보이는 메시지로 안내
         self.mock_slack_client.send_message_only_visible_to_user.assert_called_once()
         ephemeral_kwargs = (
@@ -160,6 +161,7 @@ class TestCreateBigchatSheetEarlyReactionBackfill(unittest.TestCase):
         assert self.sut.handle_mention()
 
         self.mock_slack_client.send_message.assert_called_once()  # 시트 링크 안내만
+        self.mock_slack_client.send_thread_message.assert_not_called()
         self.mock_slack_client.send_message_only_visible_to_user.assert_not_called()
 
     def test_notifies_users_whose_member_info_is_missing(self):
@@ -173,7 +175,7 @@ class TestCreateBigchatSheetEarlyReactionBackfill(unittest.TestCase):
         self.mock_gs_client.append_row_if_absent.assert_not_called()
         assert (
             "네 정보를 찾지 못했어"
-            in self.mock_slack_client.send_message.call_args.kwargs["msg"]
+            in self.mock_slack_client.send_thread_message.call_args.kwargs["msg"]
         )
 
     def test_registers_multiple_users_and_reports_each_outcome(self):
@@ -190,14 +192,16 @@ class TestCreateBigchatSheetEarlyReactionBackfill(unittest.TestCase):
         assert self.sut.handle_mention()
 
         assert self.mock_gs_client.append_row_if_absent.call_count == 2
+        self.mock_slack_client.send_message.assert_called_once()  # 링크 안내
         messages = [
-            c.kwargs["msg"] for c in self.mock_slack_client.send_message.call_args_list
+            c.kwargs["msg"]
+            for c in self.mock_slack_client.send_thread_message.call_args_list
         ]
-        assert len(messages) == 3  # 링크 안내 + 정보 누락 안내 + 일괄 등록 안내
-        assert "네 정보에 누락된 값이 있어" in messages[1]
-        assert "<@U_LACK>" in messages[1]
-        assert "<@U_OK>" in messages[2]
-        assert "<@U_DUP>" not in messages[2]  # 이미 등록된 사람은 재안내하지 않는다
+        assert len(messages) == 2  # 정보 누락 안내 + 일괄 등록 안내
+        assert "네 정보에 누락된 값이 있어" in messages[0]
+        assert "<@U_LACK>" in messages[0]
+        assert "<@U_OK>" in messages[1]
+        assert "<@U_DUP>" not in messages[1]  # 이미 등록된 사람은 재안내하지 않는다
         self.mock_slack_client.send_message_only_visible_to_user.assert_called_once()
         assert (
             self.mock_slack_client.send_message_only_visible_to_user.call_args.kwargs[
@@ -222,7 +226,9 @@ class TestCreateBigchatSheetEarlyReactionBackfill(unittest.TestCase):
         assert (
             self.mock_slack_client.send_message_only_visible_to_user.call_count == 2
         )
-        assert self.mock_slack_client.send_message.call_count == 2  # 경고 메시지 없음
+        # 링크 안내 1 + 일괄 등록 안내 1, 경고 메시지 없음
+        self.mock_slack_client.send_message.assert_called_once()
+        self.mock_slack_client.send_thread_message.assert_called_once()
 
     def test_backfill_failure_warns_thread_instead_of_crashing(self):
         """시트 생성이 이미 성공했으므로, 일괄 등록 실패는 전역 에러('다시
@@ -236,7 +242,7 @@ class TestCreateBigchatSheetEarlyReactionBackfill(unittest.TestCase):
 
         assert (
             "문제가 생겨서 멈췄어"
-            in self.mock_slack_client.send_message.call_args.kwargs["msg"]
+            in self.mock_slack_client.send_thread_message.call_args.kwargs["msg"]
         )
 
     def test_reads_reactions_from_mention_itself_when_not_in_thread(self):
@@ -285,4 +291,5 @@ class TestCreateBigchatSheetEarlyReactionBackfill(unittest.TestCase):
             full=True,
         )
         self.mock_gs_client.append_row_if_absent.assert_called_once()
+        mock_web_client.chat_postMessage.assert_called_once()  # 일괄 등록 안내
         mock_web_client.chat_postEphemeral.assert_called_once()
