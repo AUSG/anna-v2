@@ -1,3 +1,9 @@
+import logging
+import traceback
+
+from slack_sdk import WebClient
+from slack_sdk.http_retry.builtin_handlers import RateLimitErrorRetryHandler
+
 from config.env_config import envs
 from handler.bigchat.abandon_bigchat import AbandonBigchat
 from handler.bigchat.announce_new_channel_created import AnnounceNewChannelCreated
@@ -6,6 +12,7 @@ from handler.bigchat.join_bigchat import JoinBigchat
 from handler.bigchat.simple_response import SimpleResponse
 from handler.bigchat.shuffle_response import ShuffleResponse
 from handler.bigchat.mention_response import MentionResponse
+from handler.bigchat.remind_bigchat import RemindBigchat
 from handler.bigchat.help_response import HelpResponse
 from handler.bigchat.question_response import QuestionResponse
 from handler.bigchat.subin_like_response import SubinLikeResponse
@@ -163,6 +170,29 @@ def mention_response(event, say, client):
 @catch_global_error()
 def announce_new_channel_created(event, say, client):
     AnnounceNewChannelCreated(event, SlackClient(say, client)).run()
+
+
+# 스케줄러(빅챗 전날 저녁)가 부르는 진입점 — 슬랙 이벤트 없이 실행되므로 bolt 의 say/client 가
+# 없고, 에러 알림도 catch_global_error 대신 web_client 로 직접 어드민 채널에 보낸다
+def remind_bigchat():
+    web_client = WebClient(token=envs.SLACK_BOT_TOKEN)
+    # 여러 명에게 연속으로 DM 을 보내다 429 를 맞으면 Retry-After 만큼 기다렸다 재시도한다
+    web_client.retry_handlers.append(RateLimitErrorRetryHandler(max_retry_count=2))
+    try:
+        RemindBigchat(
+            SlackClient(None, web_client),
+            GoogleSpreadsheetClient(),
+            _get_member_manager(),
+        ).run()
+    except Exception:
+        logging.getLogger(__name__).exception("Failed to send bigchat reminders")
+        try:
+            web_client.chat_postMessage(
+                channel=envs.ADMIN_CHANNEL,
+                text=f":blob-fearful: 빅챗 리마인더 DM 발송 중 에러가 발생했어!\n```\n{traceback.format_exc()}\n```",
+            )
+        except Exception:
+            logging.getLogger(__name__).exception("Failed to notify admin channel")
 
 
 # message event: 지정 채널(fun-anna-house, fun-free-talk)의 새 글(스레드 제외)에

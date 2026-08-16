@@ -53,6 +53,15 @@ class MemberManager:
         self.logger.debug(member)
         return member
 
+    def email_to_slack_ids(self) -> Dict[str, str]:
+        """이메일(소문자) → 슬랙 user_id 매핑. 빅챗 신청 시트의 행(이메일)을 슬랙 계정으로 역추적할 때 쓴다."""
+        members = self._fetch_members()
+        return {
+            member.email.strip().lower(): user_id
+            for user_id, member in members.items()
+            if member.email.strip()
+        }
+
     def _fetch_members(self) -> Dict[str, Member]:
         member_info_cols = "J:O"  # 열 순서: user_id, kor_name, eng_name, email, phone, school_name or company_name
         raw_members = self.gs_client.get_values(
