@@ -30,13 +30,13 @@ init_logger()
 
 app = App(token=envs.SLACK_BOT_TOKEN, signing_secret=envs.SLACK_SIGNING_SECRET)
 
-# 빅챗 전날 저녁 8시(KST)에 신청자들에게 리마인더 DM 을 보낸다
+# 빅챗 전날 저녁 6시(KST)에 신청자들에게 리마인더 DM 을 보낸다
 if envs.BIGCHAT_REMINDER_ENABLED:
     DailyScheduler(
-        job=remind_bigchat, hour=20, minute=0, tz=KST, name="bigchat-reminder"
+        job=remind_bigchat, hour=18, minute=0, tz=KST, name="bigchat-reminder"
     ).start()
     logging.getLogger(__name__).info(
-        "Bigchat reminder scheduler started (daily 20:00 KST)"
+        "Bigchat reminder scheduler started (daily 18:00 KST)"
     )
 
 

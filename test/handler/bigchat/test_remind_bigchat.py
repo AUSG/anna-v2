@@ -8,8 +8,8 @@ from handler.bigchat.remind_bigchat import RemindBigchat
 
 KST = gettz("Asia/Seoul")
 
-# 행사(26-08-20 목요일) 전날 저녁 8시
-NOW = datetime(2026, 8, 19, 20, 0, tzinfo=KST)
+# 행사(26-08-20 목요일) 전날 저녁 6시
+NOW = datetime(2026, 8, 19, 18, 0, tzinfo=KST)
 
 
 class TestRemindBigchat(unittest.TestCase):
