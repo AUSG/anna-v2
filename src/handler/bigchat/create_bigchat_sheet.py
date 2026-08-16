@@ -1,16 +1,21 @@
+from handler.bigchat.join_bigchat import build_registration_info_message
 from handler.bigchat.mention_handler import MentionHandler
+from implementation.member_finder import MemberLackInfo, MemberNotFound
 from util.bigchat_event import parse_sheet_name
 from util.utils import strip_multiline
 
 
 class CreateBigchatSheet(MentionHandler):
-    def __init__(self, event, slack_client, gs_client):
+    def __init__(self, event, slack_client, gs_client, member_manager, target_emoji):
         self.text = event["text"]
         self.ts = event["ts"]
+        self.thread_ts = event.get("thread_ts")
         self.channel = event["channel"]
         self.user = event["user"]
         self.slack_client = slack_client
         self.gs_client = gs_client
+        self.member_manager = member_manager
+        self.target_emoji = target_emoji
 
     def handle_mention(self):
         if not self.can_handle():
@@ -38,7 +43,64 @@ class CreateBigchatSheet(MentionHandler):
             msg=f"새로운 빅챗, 등록 완료! <{sheet_url}|{sheet_name}> :google_spreadsheets:",
             ts=self.ts,
         )
+        self._register_early_reacted_users(worksheet_id)
         return True
 
     def can_handle(self):
         return "새로운 빅챗" in self.text
+
+    def _register_early_reacted_users(self, worksheet_id):
+        """시트가 생기기 전에 모집글에 :gogo:를 눌러 등록되지 못한 사람들을 일괄 등록한다. (#89)
+
+        reaction 은 시트 링크 메시지를 올린 '뒤에' 읽는다. 링크가 올라간 이후의
+        reaction 은 JoinBigchat(reaction_added)이 정상 처리하므로, 이 순서면 시트
+        생성 전후 어느 시점에 눌린 reaction 도 두 경로 중 한쪽에는 반드시 잡힌다.
+        두 경로가 거의 동시에 같은 사람을 처리하는 좁은 구간은 시트의 기존 행과
+        대조해 중복 등록을 막는다.
+        """
+        # 모집글(스레드 부모)에 달린 reaction 을 읽어야 한다. 스레드 없이 채널에
+        # 바로 멘션한 경우엔 멘션 글 자체가 모집글이다.
+        parent_ts = self.thread_ts or self.ts
+        reaction = self.slack_client.get_emoji(
+            channel=self.channel, ts=parent_ts, emoji_name=self.target_emoji
+        )
+        if reaction is None:
+            return
+
+        existing_rows = self.gs_client.get_values(worksheet_id)
+        registered = []
+        for user in reaction.users:
+            try:
+                member = self.member_manager.find(user)
+            except MemberNotFound:
+                self.slack_client.send_message(
+                    msg=f"<@{user}>, 네 정보를 찾지 못했어. 운영진에게 연락해줘!",
+                    ts=self.ts,
+                )
+            except MemberLackInfo:
+                self.slack_client.send_message(
+                    msg=f"<@{user}>, 네 정보에 누락된 값이 있어. 운영진에게 연락해줘!",
+                    ts=self.ts,
+                )
+            else:
+                row = member.transform_for_spreadsheet()
+                if row in existing_rows:
+                    continue
+                self.gs_client.append_row(worksheet_id, row)
+                registered.append((user, member))
+
+        if not registered:
+            return
+
+        mentions = " ".join(f"<@{user}>" for user, _ in registered)
+        self.slack_client.send_message(
+            msg=f"{mentions} 시트가 만들어지기 전에 :{self.target_emoji}:를 눌러줬구나! 지금 등록 완료했어!",
+            ts=self.ts,
+        )
+        for user, member in registered:
+            self.slack_client.send_message_only_visible_to_user(
+                msg=build_registration_info_message(user, member),
+                channel=self.channel,
+                ts=self.ts,
+                user_id=user,
+            )

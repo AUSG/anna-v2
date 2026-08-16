@@ -95,7 +95,11 @@ def mention_response(event, say, client):
     shuffle_response = ShuffleResponse(event, SlackClient(say, client))
     simple_response = SimpleResponse(event, SlackClient(say, client))
     create_bigchat_sheet = CreateBigchatSheet(
-        event, SlackClient(say, client), GoogleSpreadsheetClient()
+        event,
+        SlackClient(say, client),
+        GoogleSpreadsheetClient(),
+        _get_member_manager(),
+        envs.JOIN_BIGCHAT_EMOJI,
     )
     question_response = QuestionResponse(
         event, SlackClient(say, client), _get_qa_client()
