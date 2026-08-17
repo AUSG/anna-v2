@@ -215,9 +215,15 @@ class RemindBigchat:
             f"{d.month}월 {d.day}일 ({WEEKDAYS_KO[d.weekday()]}) "
             f"{d.strftime('%H:%M')}~{event.end.strftime('%H:%M')}"
         )
+        # 시트 이름이 "빅챗 26-08-18 ..." 이면 이벤트 이름이 그냥 "빅챗" 이라
+        # 그대로 쓰면 "*빅챗* 빅챗이 열리는 날이야" 처럼 겹친다.
+        # 어느 쪽이든 '빅챗' 으로 끝나므로 뒤에 붙는 조사는 항상 '이'.
+        subject = (
+            f"*{event.name}*" if event.name.endswith("빅챗") else f"*{event.name}* 빅챗"
+        )
         return strip_multiline(
             f"""
-            :wave: 안녕! 내일 *{event.name}* 빅챗이 열리는 날이야.
+            :wave: 안녕! 내일 {subject}이 열리는 날이야.
             :calendar: {when}
             잊지 말고 꼭 와줘! 내일 만나 :raised_hands:"""
         )

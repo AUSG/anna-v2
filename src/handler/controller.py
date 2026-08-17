@@ -17,7 +17,7 @@ from handler.bigchat.simple_response import SimpleResponse
 from handler.bigchat.shuffle_response import ShuffleResponse
 from handler.bigchat.mention_response import MentionResponse
 from handler.bigchat.remind_bigchat import RemindBigchat
-from handler.bigchat.remind_bigchat_test import RemindBigchatTest
+from handler.bigchat.remind_bigchat_command import RemindBigchatCommand
 from handler.bigchat.help_response import HelpResponse
 from handler.bigchat.question_response import QuestionResponse
 from handler.bigchat.subin_like_response import SubinLikeResponse
@@ -113,7 +113,7 @@ def mention_response(event, say, client):
         _get_member_manager(),
         envs.JOIN_BIGCHAT_EMOJI,
     )
-    remind_bigchat_test = RemindBigchatTest(
+    remind_bigchat_command = RemindBigchatCommand(
         event,
         SlackClient(say, client),
         GoogleSpreadsheetClient(),
@@ -131,8 +131,8 @@ def mention_response(event, say, client):
         [
             question_response,
             shuffle_response,
-            # "새로운 빅챗" 보다 먼저 봐야 한다 — 리마인더 테스트 문구에도 '빅챗' 이 들어간다
-            remind_bigchat_test,
+            # "새로운 빅챗" 보다 먼저 봐야 한다 — 리마인더 명령 문구에도 '빅챗' 이 들어간다
+            remind_bigchat_command,
             create_bigchat_sheet,
             help_response,
             question_fallback,
