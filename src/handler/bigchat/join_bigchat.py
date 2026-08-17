@@ -1,5 +1,6 @@
 import logging
 import re
+from contextlib import nullcontext
 from typing import List, Optional
 
 from config.env_config import envs
@@ -38,7 +39,16 @@ def build_registration_info_message(user: str, member) -> str:
 
 
 class JoinBigchat:
-    def __init__(self, event, target_emoji, slack_client, gs_client, member_manager):
+    def __init__(
+        self,
+        event,
+        target_emoji,
+        slack_client,
+        gs_client,
+        member_manager,
+        loading_emoji=None,
+    ):
+        """loading_emoji: 실제 등록 작업만 감쌀 컨텍스트 매니저. 넘기지 않으면 이모지를 붙이지 않는다."""
         self.type = event["type"]
         self.reaction = event["reaction"]
         self.channel = event["item"]["channel"]
@@ -48,6 +58,7 @@ class JoinBigchat:
         self.slack_client = slack_client
         self.gs_client = gs_client
         self.member_manager = member_manager
+        self.loading_emoji = loading_emoji or nullcontext()
 
     @staticmethod
     def _extract_worksheet_id(messages: List[Message]):
@@ -130,6 +141,12 @@ class JoinBigchat:
         if not worksheet_id:
             return False
 
+        # 여기부터가 실제 동작이다. 위 검사들에서 걸러진 이벤트(관심 없는 이모지, 빅챗 글이
+        # 아닌 메시지 등)에는 loading 이모지가 아예 붙지 않는다.
+        with self.loading_emoji:
+            return self._register(worksheet_id, messages)
+
+    def _register(self, worksheet_id: int, messages: List[Message]) -> bool:
         try:
             member = self.member_manager.find(self.user)
         except MemberNotFound:
