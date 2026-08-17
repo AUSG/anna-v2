@@ -25,7 +25,7 @@ from handler.decorator import catch_global_error, loading_emoji_while_processing
 from implementation.google_spreadsheet_client import GoogleSpreadsheetClient
 from implementation.qa_client import QAClient
 from implementation.member_finder import MemberManager
-from implementation.slack_client import SlackClient
+from implementation.slack_client import NO_UNFURL, SlackClient
 
 MEMBER_MANAGER = None
 QA_CLIENT = None
@@ -254,6 +254,7 @@ def remind_bigchat():
             web_client.chat_postMessage(
                 channel=envs.ADMIN_CHANNEL,
                 text=f":blob-fearful: 빅챗 리마인더 DM 발송 중 에러가 발생했어!\n```\n{traceback.format_exc()}\n```",
+                **NO_UNFURL,
             )
         except Exception:
             logger.exception("Failed to notify admin channel")

@@ -9,6 +9,12 @@ from slack_sdk.errors import SlackApiError
 
 logger = logging.getLogger(__name__)
 
+# 안나가 보내는 메시지에는 링크/이미지 미리보기(unfurl)를 붙이지 않는다. 시트 URL 이나
+# permalink 를 그대로 실어 보내는 메시지가 많아서, 미리보기가 붙으면 본문보다 커져 스레드가
+# 지저분해진다. chat.postMessage / say 에 그대로 펼쳐서 넘긴다.
+# XXX: chat.postEphemeral 은 unfurl 옵션을 지원하지 않아 적용 대상이 아니다.
+NO_UNFURL = {"unfurl_links": False, "unfurl_media": False}
+
 
 class Message(BaseModel):
     ts: str
@@ -37,15 +43,17 @@ class SlackClient:
         self.web_client = web_client
 
     def send_message(self, msg: str, ts: str):
-        self.say(msg, thread_ts=ts)
+        self.say(msg, thread_ts=ts, **NO_UNFURL)
 
     def send_direct_message(self, user_id: str, msg: str):
         """유저와 앱 사이의 DM 으로 메시지를 보낸다. channel 에 user id 를 주면 슬랙이 DM 채널로 라우팅한다."""
-        self.web_client.chat_postMessage(channel=user_id, text=msg)
+        self.web_client.chat_postMessage(channel=user_id, text=msg, **NO_UNFURL)
 
     def send_thread_message(self, msg: str, channel: str, ts: str):
         """say 컨텍스트가 없는 경우(모달 제출 등)에 채널/스레드를 직접 지정해서 메시지를 보낸다."""
-        self.web_client.chat_postMessage(channel=channel, text=msg, thread_ts=ts)
+        self.web_client.chat_postMessage(
+            channel=channel, text=msg, thread_ts=ts, **NO_UNFURL
+        )
 
     def send_response_url_message(self, response_url: str, msg: str):
         """상호작용 payload의 response_url로 응답한다. 봇이 채널 멤버가 아니어도 전달된다."""
@@ -71,7 +79,7 @@ class SlackClient:
             return None
 
     def send_message_to_freetalk(self, msg: str):
-        self.say(msg, channel="CQJ8HQWUV")
+        self.say(msg, channel="CQJ8HQWUV", **NO_UNFURL)
 
     def get_permalink(self, channel: str, ts: str) -> Optional[str]:
         """메시지 permalink를 반환. 실패 시 None."""

@@ -3,7 +3,7 @@ import traceback
 from functools import wraps
 
 from config.env_config import envs
-from implementation.slack_client import SlackClient
+from implementation.slack_client import NO_UNFURL, SlackClient
 from util.utils import search_value, strip_multiline
 
 ADMIN_CHANNEL = envs.ADMIN_CHANNEL
@@ -45,7 +45,7 @@ def catch_global_error():
 
                 say = kwargs["say"]
                 say(
-                    text=err_msg, channel=ADMIN_CHANNEL
+                    text=err_msg, channel=ADMIN_CHANNEL, **NO_UNFURL
                 )  # send full log to admin channel
 
                 # notify user that something is wrong.
@@ -60,6 +60,7 @@ def catch_global_error():
                     or ADMIN_CHANNEL,
                     thread_ts=search_value(event, "ts")
                     or search_value(event, "thread_ts"),
+                    **NO_UNFURL,
                 )
 
         return wrapper
