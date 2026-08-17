@@ -21,14 +21,27 @@ from handler.bigchat.remind_bigchat_command import RemindBigchatCommand
 from handler.bigchat.help_response import HelpResponse
 from handler.bigchat.question_response import QuestionResponse
 from handler.bigchat.subin_like_response import SubinLikeResponse
-from handler.decorator import catch_global_error, loading_emoji_while_processing
+from handler.decorator import catch_global_error
+from handler.loading_emoji import LoadingEmoji
 from implementation.google_spreadsheet_client import GoogleSpreadsheetClient
 from implementation.qa_client import QAClient
 from implementation.member_finder import MemberManager
 from implementation.slack_client import NO_UNFURL, SlackClient
+from util.utils import search_value
 
 MEMBER_MANAGER = None
 QA_CLIENT = None
+
+
+def _loading_emoji(slack_client, event) -> LoadingEmoji:
+    """이벤트가 가리키는 메시지에 붙일 loading 이모지 컨텍스트.
+
+    이모지를 언제 붙일지는 핸들러가 정한다 — 실제 동작이 없는 이벤트에도 이모지가 붙었다
+    떨어지지 않도록, 핸들러가 처리를 시작하는 지점에서만 with 블록으로 감싼다.
+    """
+    return LoadingEmoji(
+        slack_client, search_value(event, "channel"), search_value(event, "ts")
+    )
 
 
 def _get_member_manager():  # TODO(seonghyeok): we need better singleton
@@ -62,27 +75,29 @@ def _get_qa_client():
 #   'event_ts': '1688833113.003600'
 # }
 @catch_global_error()
-@loading_emoji_while_processing([envs.JOIN_BIGCHAT_EMOJI])
 def join_bigchat(event, say, client):
+    slack_client = SlackClient(say, client)
     JoinBigchat(
         event,
         envs.JOIN_BIGCHAT_EMOJI,
-        SlackClient(say, client),
+        slack_client,
         GoogleSpreadsheetClient(),
         _get_member_manager(),
+        loading_emoji=_loading_emoji(slack_client, event),
     ).run()
 
 
 @catch_global_error()
-@loading_emoji_while_processing([envs.JOIN_BIGCHAT_EMOJI])
 def abandon_bigchat(event, say, client):
+    slack_client = SlackClient(say, client)
     AbandonBigchat(
         event,
         envs.ANNA_ID,
         envs.JOIN_BIGCHAT_EMOJI,
-        SlackClient(say, client),
+        slack_client,
         _get_member_manager(),
         GoogleSpreadsheetClient(),
+        loading_emoji=_loading_emoji(slack_client, event),
     ).run()
 
 
@@ -101,44 +116,45 @@ def abandon_bigchat(event, say, client):
 #     'event_ts': '1689403771.805849'
 # }
 @catch_global_error()
-@loading_emoji_while_processing()
 def mention_response(event, say, client):
-    help_response = HelpResponse(event, SlackClient(say, client))
-    shuffle_response = ShuffleResponse(event, SlackClient(say, client))
-    simple_response = SimpleResponse(event, SlackClient(say, client))
+    slack_client = SlackClient(say, client)
+    help_response = HelpResponse(event, slack_client)
+    shuffle_response = ShuffleResponse(event, slack_client)
+    simple_response = SimpleResponse(event, slack_client)
     create_bigchat_sheet = CreateBigchatSheet(
         event,
-        SlackClient(say, client),
+        slack_client,
         GoogleSpreadsheetClient(),
         _get_member_manager(),
         envs.JOIN_BIGCHAT_EMOJI,
     )
     remind_bigchat_command = RemindBigchatCommand(
         event,
-        SlackClient(say, client),
+        slack_client,
         GoogleSpreadsheetClient(),
         _get_member_manager(),
         envs.ANNA_ID,
     )
-    question_response = QuestionResponse(
-        event, SlackClient(say, client), _get_qa_client()
-    )
+    question_response = QuestionResponse(event, slack_client, _get_qa_client())
     # 어느 명령에도 걸리지 않은 멘션은 텍스트 전체를 질문으로 처리 (빈 멘션만 SimpleResponse 로)
     question_fallback = QuestionResponse(
-        event, SlackClient(say, client), _get_qa_client(), require_prefix=False
+        event, slack_client, _get_qa_client(), require_prefix=False
     )
-    MentionResponse(
-        [
-            question_response,
-            shuffle_response,
-            # "새로운 빅챗" 보다 먼저 봐야 한다 — 리마인더 명령 문구에도 '빅챗' 이 들어간다
-            remind_bigchat_command,
-            create_bigchat_sheet,
-            help_response,
-            question_fallback,
-        ],
-        simple_response,
-    ).run()
+    # 멘션은 어느 명령에도 걸리지 않아도 폴백(SimpleResponse)이 답하므로 항상 실제 동작이 있다.
+    # 따라서 run() 전체를 감싸도 no-op 에 이모지가 붙는 일이 없다.
+    with _loading_emoji(slack_client, event):
+        MentionResponse(
+            [
+                question_response,
+                shuffle_response,
+                # "새로운 빅챗" 보다 먼저 봐야 한다 — 리마인더 명령 문구에도 '빅챗' 이 들어간다
+                remind_bigchat_command,
+                create_bigchat_sheet,
+                help_response,
+                question_fallback,
+            ],
+            simple_response,
+        ).run()
 
 
 # message shortcut(message_action) payload sample (normalize_shortcut_body 적용 후):

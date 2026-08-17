@@ -5,6 +5,7 @@ from test.handler.bigchat.sample_data import create_sample_reaction_added_event
 
 from config.env_config import envs
 from handler.bigchat.join_bigchat import JoinBigchat
+from handler.loading_emoji import LoadingEmoji
 from implementation.google_spreadsheet_client import WorksheetNotFound
 from implementation.member_finder import Member
 from implementation.slack_client import Message
@@ -128,9 +129,7 @@ class TestJoinBigchat(unittest.TestCase):
         result = sut.run()
 
         assert result is True
-        assert (
-            "이미 등록되어 있어" in mock_slack_client.send_message.call_args.kwargs["msg"]
-        )
+        assert "이미 등록되어 있어" in mock_slack_client.send_message.call_args.kwargs["msg"]
         mock_slack_client.send_message_only_visible_to_user.assert_not_called()
 
     def test_run_with_deleted_sheet_notifies_user(self):
@@ -244,3 +243,122 @@ class TestJoinBigchat(unittest.TestCase):
             blocks = sut._build_calendar_blocks("등록했어", 161837744, "소개글")
 
         assert blocks is None
+
+
+class TestJoinBigchatLoadingEmoji(unittest.TestCase):
+    """loading 이모지는 실제 등록 작업 전후에만 붙었다 떨어져야 한다."""
+
+    @staticmethod
+    def _message(ts, text):
+        return Message(
+            ts=ts,
+            thread_ts="1689429129.825319",
+            channel="C03SZTDEDK3",
+            user="U01BN035Y6L",
+            text=text,
+        )
+
+    def _sut(self, event, mock_slack_client, mock_gs_client, mock_member_manager):
+        return JoinBigchat(
+            event,
+            "gogo",
+            mock_slack_client,
+            mock_gs_client,
+            mock_member_manager,
+            loading_emoji=LoadingEmoji(
+                mock_slack_client, event["item"]["channel"], event["item"]["ts"]
+            ),
+        )
+
+    def test_not_attached_when_reaction_is_not_the_target_emoji(self):
+        event = create_sample_reaction_added_event("thinking")
+        mock_slack_client = MagicMock()
+
+        assert (
+            self._sut(event, mock_slack_client, MagicMock(), MagicMock()).run() is False
+        )
+
+        mock_slack_client.add_emoji.assert_not_called()
+        mock_slack_client.remove_emoji.assert_not_called()
+
+    def test_not_attached_when_message_has_no_bigchat_sheet(self):
+        """빅챗 글이 아닌 아무 메시지에 이모지를 달아도 아무 동작이 없으므로 이모지를 붙이지 않는다."""
+        event = create_sample_reaction_added_event("gogo")
+        mock_slack_client = MagicMock()
+        mock_slack_client.get_replies.return_value = [
+            self._message(event["item"]["ts"], "점심 뭐 먹지")
+        ]
+
+        assert (
+            self._sut(event, mock_slack_client, MagicMock(), MagicMock()).run() is False
+        )
+
+        mock_slack_client.add_emoji.assert_not_called()
+        mock_slack_client.remove_emoji.assert_not_called()
+
+    def test_not_attached_when_reaction_is_on_a_reply(self):
+        event = create_sample_reaction_added_event("gogo")
+        mock_slack_client = MagicMock()
+        mock_slack_client.get_replies.return_value = [
+            self._message("1688801100.000000", "스레드 첫 글"),
+        ]
+
+        assert (
+            self._sut(event, mock_slack_client, MagicMock(), MagicMock()).run() is False
+        )
+
+        mock_slack_client.add_emoji.assert_not_called()
+
+    def test_wraps_the_actual_registration(self):
+        event = create_sample_reaction_added_event("gogo")
+        mock_slack_client = MagicMock()
+        mock_slack_client.get_replies.return_value = [
+            self._message(
+                event["item"]["ts"],
+                "새로운 빅챗, 등록 완료! <https://docs.google.com/spreadsheets/d/1FtKRO4gmlVg-Si0_CHt-tkpVd3LDTXdsoZ0u98MYd0k/edit#gid=161837744|구글스프레드 시트>",
+            )
+        ]
+        mock_gs_client = MagicMock()
+        mock_member_manager = MagicMock()
+        mock_member_manager.find.return_value = Member(
+            kor_name="문성혁",
+            eng_name="Moon Seonghyeok",
+            email="email",
+            phone="phone",
+            school_name_or_company_name="school_name_or_company_name",
+        )
+
+        result = self._sut(
+            event, mock_slack_client, mock_gs_client, mock_member_manager
+        ).run()
+
+        assert result is True
+        mock_slack_client.add_emoji.assert_called_once_with(
+            event["item"]["channel"], event["item"]["ts"], "loading"
+        )
+        mock_slack_client.remove_emoji.assert_called_once_with(
+            event["item"]["channel"], event["item"]["ts"], "loading"
+        )
+        # 시트 조회(no-op 판별)는 이모지 없이, 실제 등록은 이모지를 붙인 채로 진행한다
+        call_names = [c[0] for c in mock_slack_client.mock_calls]
+        assert call_names.index("get_replies") < call_names.index("add_emoji")
+        assert call_names.index("add_emoji") < call_names.index("send_message")
+        assert call_names.index("send_message") < call_names.index("remove_emoji")
+
+    def test_removed_even_when_registration_fails(self):
+        event = create_sample_reaction_added_event("gogo")
+        mock_slack_client = MagicMock()
+        mock_slack_client.get_replies.return_value = [
+            self._message(
+                event["item"]["ts"],
+                "새로운 빅챗, 등록 완료! <https://docs.google.com/spreadsheets/d/1FtKRO4gmlVg-Si0_CHt-tkpVd3LDTXdsoZ0u98MYd0k/edit#gid=161837744|구글스프레드 시트>",
+            )
+        ]
+        mock_member_manager = MagicMock()
+        mock_member_manager.find.side_effect = RuntimeError("스프레드시트 접속 실패")
+
+        with self.assertRaises(RuntimeError):
+            self._sut(event, mock_slack_client, MagicMock(), mock_member_manager).run()
+
+        mock_slack_client.add_emoji.assert_called_once()
+        mock_slack_client.remove_emoji.assert_called_once()

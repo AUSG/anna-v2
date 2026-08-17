@@ -3,7 +3,7 @@ import traceback
 from functools import wraps
 
 from config.env_config import envs
-from implementation.slack_client import NO_UNFURL, SlackClient
+from implementation.slack_client import NO_UNFURL
 from util.utils import search_value, strip_multiline
 
 ADMIN_CHANNEL = envs.ADMIN_CHANNEL
@@ -62,39 +62,6 @@ def catch_global_error():
                     or search_value(event, "thread_ts"),
                     **NO_UNFURL,
                 )
-
-        return wrapper
-
-    return decorator
-
-
-def loading_emoji_while_processing(target_emojis=None):
-    def decorator(f):
-        @wraps(f)
-        def wrapper(*args, **kwargs):
-            slack_client = SlackClient(kwargs["say"], kwargs["client"])
-            channel = search_value(kwargs["event"], "channel")
-            ts = search_value(kwargs["event"], "ts")
-
-            if (
-                target_emojis is None
-                or kwargs.get("event", {}).get("reaction") in target_emojis
-            ):
-                try:
-                    slack_client.add_emoji(channel, ts, "loading")
-                except Exception:
-                    pass
-                try:
-                    f(*args, **kwargs)
-                except Exception as ex:
-                    raise ex
-                finally:
-                    slack_client.remove_emoji(channel, ts, "loading")
-            else:
-                try:
-                    f(*args, **kwargs)
-                except Exception as ex:
-                    raise ex
 
         return wrapper
 

@@ -1,4 +1,5 @@
 import re
+from contextlib import nullcontext
 from typing import List
 
 from implementation.google_spreadsheet_client import WorksheetNotFound
@@ -12,8 +13,16 @@ SPREADSHEET_PAT = re.compile(
 
 class AbandonBigchat:
     def __init__(
-        self, event, anna, target_emoji, slack_client, member_manager, gs_client
+        self,
+        event,
+        anna,
+        target_emoji,
+        slack_client,
+        member_manager,
+        gs_client,
+        loading_emoji=None,
     ):
+        """loading_emoji: 실제 취소 작업만 감쌀 컨텍스트 매니저. 넘기지 않으면 이모지를 붙이지 않는다."""
         self.anna = anna
         self.type = event["type"]
         self.reaction = event["reaction"]
@@ -24,6 +33,7 @@ class AbandonBigchat:
         self.slack_client = slack_client
         self.member_manager = member_manager
         self.gs_client = gs_client
+        self.loading_emoji = loading_emoji or nullcontext()
 
     @staticmethod
     def _extract_worksheet_id(messages: List[Message]):
@@ -45,6 +55,12 @@ class AbandonBigchat:
         if not worksheet_id:
             return False
 
+        # 여기부터가 실제 동작이다. 위 검사들에서 걸러진 이벤트(관심 없는 이모지, 빅챗 글이
+        # 아닌 메시지 등)에는 loading 이모지가 아예 붙지 않는다.
+        with self.loading_emoji:
+            return self._abandon(worksheet_id)
+
+    def _abandon(self, worksheet_id: int) -> bool:
         try:
             member = self.member_manager.find(self.user)
         except MemberNotFound:
