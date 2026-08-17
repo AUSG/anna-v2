@@ -259,7 +259,7 @@ def remind_bigchat():
             logger.exception("Failed to notify admin channel")
 
 
-# message event: 지정 채널(fun-anna-house, fun-free-talk)의 새 글(스레드 제외)에
+# message event: 지정 채널(fun-anna-house)의 새 글(스레드 제외)에
 # 김수빈 말투로 자동 답글 (대상 채널은 SubinLikeResponse 에 하드코딩)
 @catch_global_error()
 def subin_like_response(event, say, client):
