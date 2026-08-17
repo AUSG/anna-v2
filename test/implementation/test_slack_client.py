@@ -15,7 +15,7 @@ class TestSlackClient(unittest.TestCase):
         sut.send_direct_message(user_id="U0001", msg="내일 만나!")
 
         mock_web_client.chat_postMessage.assert_called_once_with(
-            channel="U0001", text="내일 만나!"
+            channel="U0001", text="내일 만나!", unfurl_links=False, unfurl_media=False
         )
 
     def test_send_thread_message(self):
@@ -25,7 +25,34 @@ class TestSlackClient(unittest.TestCase):
         sut.send_thread_message(msg="hello", channel="C03SZTDEDK3", ts="123.456")
 
         mock_web_client.chat_postMessage.assert_called_once_with(
-            channel="C03SZTDEDK3", text="hello", thread_ts="123.456"
+            channel="C03SZTDEDK3",
+            text="hello",
+            thread_ts="123.456",
+            unfurl_links=False,
+            unfurl_media=False,
+        )
+
+    def test_send_message_disables_unfurling(self):
+        mock_say = MagicMock()
+        sut = SlackClient(mock_say, MagicMock())
+
+        sut.send_message(msg="https://docs.google.com/spreadsheets/d/1", ts="123.456")
+
+        mock_say.assert_called_once_with(
+            "https://docs.google.com/spreadsheets/d/1",
+            thread_ts="123.456",
+            unfurl_links=False,
+            unfurl_media=False,
+        )
+
+    def test_send_message_to_freetalk_disables_unfurling(self):
+        mock_say = MagicMock()
+        sut = SlackClient(mock_say, MagicMock())
+
+        sut.send_message_to_freetalk(msg="hello")
+
+        mock_say.assert_called_once_with(
+            "hello", channel="CQJ8HQWUV", unfurl_links=False, unfurl_media=False
         )
 
     @patch("implementation.slack_client.requests.post")
