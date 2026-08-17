@@ -1,7 +1,7 @@
 import logging
 import threading
 from datetime import datetime
-from typing import List, Optional
+from typing import List, Optional, Tuple
 
 from dateutil.tz import gettz
 from gspread import service_account_from_dict, Worksheet, Spreadsheet
@@ -99,6 +99,11 @@ class GoogleSpreadsheetClient:
     @with_retry(non_retryable_exceptions=(WorksheetNotFound,))
     def get_worksheet_title(self, worksheet_id: int) -> str:
         return self._get_worksheet(worksheet_id).title
+
+    @with_retry()
+    def list_worksheets(self) -> List[Tuple[int, str]]:
+        """스프레드시트의 모든 워크시트를 (worksheet_id, title) 목록으로 반환한다."""
+        return [(ws.id, ws.title) for ws in self._get_spreadsheet().worksheets()]
 
     def get_url(self, worksheet_id: int) -> str:
         return f"https://docs.google.com/spreadsheets/d/{self.spreadsheet_id}/edit#gid={str(worksheet_id)}"

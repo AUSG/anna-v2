@@ -30,12 +30,18 @@ class Reaction(BaseModel):
 
 
 class SlackClient:
-    def __init__(self, say: Say, web_client: WebClient):
+    def __init__(self, say: Optional[Say], web_client: WebClient):
+        """say 는 슬랙 이벤트 컨텍스트에서만 존재한다. 스케줄 발송처럼 이벤트 없이 쓸 땐
+        None 을 넘기고, web_client 기반 메서드만 사용해야 한다."""
         self.say = say
         self.web_client = web_client
 
     def send_message(self, msg: str, ts: str):
         self.say(msg, thread_ts=ts)
+
+    def send_direct_message(self, user_id: str, msg: str):
+        """유저와 앱 사이의 DM 으로 메시지를 보낸다. channel 에 user id 를 주면 슬랙이 DM 채널로 라우팅한다."""
+        self.web_client.chat_postMessage(channel=user_id, text=msg)
 
     def send_thread_message(self, msg: str, channel: str, ts: str):
         """say 컨텍스트가 없는 경우(모달 제출 등)에 채널/스레드를 직접 지정해서 메시지를 보낸다."""

@@ -19,21 +19,33 @@ from handler.controller import (
     announce_new_channel_created,
     mention_response,
     open_create_bigchat_modal,
+    remind_bigchat,
     submit_create_bigchat_modal,
     subin_like_response,
 )
 from implementation.google_spreadsheet_client import GoogleSpreadsheetClient
 from slack_sdk import WebClient
 from util.bigchat_event import (
+    KST,
     calendar_payload,
     parse_sheet_name,
     to_ics,
     verify_calendar_token,
 )
+from util.daily_scheduler import DailyScheduler
 
 init_logger()
 
 app = App(token=envs.SLACK_BOT_TOKEN, signing_secret=envs.SLACK_SIGNING_SECRET)
+
+# 빅챗 전날 저녁 6시(KST)에 신청자들에게 리마인더 DM 을 보낸다
+if envs.BIGCHAT_REMINDER_ENABLED:
+    DailyScheduler(
+        job=remind_bigchat, hour=18, minute=0, tz=KST, name="bigchat-reminder"
+    ).start()
+    logging.getLogger(__name__).info(
+        "Bigchat reminder scheduler started (daily 18:00 KST)"
+    )
 
 
 @app.event("reaction_added")

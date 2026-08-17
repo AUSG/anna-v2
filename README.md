@@ -25,6 +25,12 @@
 > 2. Interactivity & Shortcuts > Shortcuts에 "On messages" 타입으로 Callback ID `create_bigchat` 등록
 > 3. OAuth & Permissions > Bot Token Scopes에 `commands` 추가 (스코프 추가 후엔 워크스페이스에 재설치 필요)
 
+2. 빅챗 전날 리마인더 DM
+
+매일 저녁 6시(KST)에 다음 날 열리는 빅챗 시트를 찾아, 신청자 전원에게 잊지 말고 오라는 DM 을 보낸다. (신청 시트의 이메일을 멤버 시트와 대조해 슬랙 계정을 찾는다)
+
+로컬 개발 중에는 프로덕션과 중복 발송될 수 있으니, 필요하면 `BIGCHAT_REMINDER_ENABLED=false` 환경변수로 끌 수 있다.
+
 # 기본적인 개발환경 구축하기
 
 ```sh

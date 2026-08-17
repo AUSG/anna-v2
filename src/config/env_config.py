@@ -57,5 +57,9 @@ class Settings(BaseSettings):
     PUBLIC_BASE_URL: str = "https://anna-v2-2023.fly.dev"
     ICS_TOKEN_SECRET: str = ""  # 비어 있으면 ics 버튼/엔드포인트 비활성화
 
+    # Bigchat reminder DM (빅챗 전날 저녁 신청자들에게 발송)
+    # 로컬 개발 중 프로덕션과 중복 발송되지 않게 하려면 false 로 끈다
+    BIGCHAT_REMINDER_ENABLED: bool = True
+
 
 envs = Settings()  # Singleton

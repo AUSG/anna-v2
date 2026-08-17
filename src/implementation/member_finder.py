@@ -53,6 +53,15 @@ class MemberManager:
         self.logger.debug(member)
         return member
 
+    def email_to_slack_ids(self) -> Dict[str, str]:
+        """이메일(소문자) → 슬랙 user_id 매핑. 빅챗 신청 시트의 행(이메일)을 슬랙 계정으로 역추적할 때 쓴다."""
+        members = self._fetch_members()
+        return {
+            member.email.strip().lower(): user_id
+            for user_id, member in members.items()
+            if member.email.strip()
+        }
+
     @ttl_cache(maxsize=1, ttl=60)  # not thread-safe
     # 시트 생성 직후의 일괄 등록(#89)이 N명을 연달아 조회해도 멤버 시트 읽기는 1회면 된다.
     # ttl 이 길면 방금 멤버 시트에 추가된 사람이 그만큼 늦게 조회되므로 60초로 짧게 잡았다.
