@@ -6,7 +6,7 @@ import re
 
 logger = logging.getLogger(__name__)
 
-# 자동 답글 대상 채널 (하드코딩): fun-anna-house(C03SZTDEDK3), fun-free-talk(CQJ8HQWUV)
+# 자동 답글 대상 채널 (하드코딩): fun-anna-house(C03SZTDEDK3)
 AUTO_REPLY_CHANNEL_IDS = {"C03SZTDEDK3"}
 
 # opt-out 스위치: 글에 이 문구가 있으면 ANNA 가 응답하지 않음 ("안나X" 도 매칭되도록 소문자 비교)
@@ -46,7 +46,7 @@ KIMSUBIN_PERSONA_PROMPT = """너는 AUSG 커뮤니티 멤버 '김수빈'의 말�
 
 
 class SubinLikeResponse:
-    """지정 채널(fun-anna-house, fun-free-talk)의 root 글(스레드 답글 제외)에 김수빈 말투로 답글."""
+    """지정 채널(fun-anna-house)의 root 글(스레드 답글 제외)에 김수빈 말투로 답글."""
 
     # 답글 길이 상한 (maxlen 조심): 짧은 문단 수준으로 제한
     REPLY_MAX_TOKENS = 220
@@ -108,7 +108,7 @@ class SubinLikeResponse:
         return out
 
     def _should_handle(self) -> bool:
-        # 지정된 자동 답글 채널만 (fun-anna-house, fun-free-talk)
+        # 지정된 자동 답글 채널만 (fun-anna-house)
         if self.channel not in AUTO_REPLY_CHANNEL_IDS:
             return False
         # 사용자 opt-out: 글에 "안나x" 가 있으면 응답하지 않음
