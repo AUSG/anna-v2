@@ -42,8 +42,26 @@ class TestRemindBigchat(unittest.TestCase):
         assert [c.kwargs["user_id"] for c in dm_calls] == ["U0001", "U0002"]
         msg = dm_calls[0].kwargs["msg"]
         assert "내일" in msg
-        assert "AI 밋업" in msg
+        assert "*AI 밋업* 빅챗이 열리는 날이야" in msg
         assert "8월 20일 (목) 19:00~21:00" in msg
+
+    def test_message_does_not_repeat_bigchat_when_name_already_ends_with_it(self):
+        """시트를 '빅챗 26-08-20 ...' 로 만들면 이름이 그냥 '빅챗' 이라 '*빅챗* 빅챗이' 로 겹쳤다."""
+        self.mock_gs_client.list_worksheets.return_value = [
+            (111, "빅챗 26-08-20 19:00~21:00"),
+        ]
+        self.mock_gs_client.get_values.return_value = [
+            ["김철수", "AUSG대", "chulsoo@example.com", "010-1234-5678"],
+        ]
+        self.mock_member_manager.email_to_slack_ids.return_value = {
+            "chulsoo@example.com": "U0001",
+        }
+
+        self.sut.run(now=NOW)
+
+        msg = self.mock_slack_client.send_direct_message.call_args.kwargs["msg"]
+        assert "*빅챗*이 열리는 날이야" in msg
+        assert "빅챗 빅챗" not in msg
 
     def test_run_skips_sheets_not_happening_tomorrow(self):
         self.mock_gs_client.list_worksheets.return_value = [
