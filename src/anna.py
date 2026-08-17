@@ -33,6 +33,7 @@ from util.bigchat_event import (
     verify_calendar_token,
 )
 from util.daily_scheduler import DailyScheduler
+from util.slack_event import is_edited_message
 
 init_logger()
 
@@ -63,6 +64,12 @@ def handle_reaction_removed_event(ack, event, say, client):
 @app.event("app_mention")
 def handle_app_mention_event(ack, event, say, client):
     ack()
+    # 이미 있던 멘션을 고쳐도 이벤트가 다시 온다 — 명령이 두 번 실행되지 않도록 여기서 끊는다
+    if is_edited_message(event):
+        logging.getLogger(__name__).info(
+            "Ignoring app_mention from an edited message (ts=%s)", event.get("ts")
+        )
+        return
     mention_response(say=say, event=event, client=client)
 
 
@@ -75,6 +82,12 @@ def handle_channel_created_event(ack, event, say, client):
 @app.event("message")
 def handle_message_event(ack, event, say, client):
     ack()
+    # 수정은 새 글이 아니다 (자동 답글 대상 채널은 수정이 잦아 DEBUG 로만 남긴다)
+    if is_edited_message(event):
+        logging.getLogger(__name__).debug(
+            "Ignoring edited message event (ts=%s)", event.get("ts")
+        )
+        return
     subin_like_response(event=event, say=say, client=client)
 
 
