@@ -23,6 +23,20 @@ SPREADSHEET_PAT = re.compile(
 )
 
 
+def build_registration_info_message(user: str, member) -> str:
+    return strip_multiline(
+        f"""
+        <@{user}> 네 신청 정보를 아래와 같이 등록했어. 바뀐 부분이 있다면 운영진에게 DM으로 알려줘!
+        ```
+        이름(영문): {member.kor_name}({member.eng_name})
+        핸드폰: {member.phone}
+        이메일: {member.email}
+        학교/회사: {member.school_name_or_company_name}
+        ```
+        (참고로 이 메시지는 너만 볼 수 있어!)"""
+    )
+
+
 class JoinBigchat:
     def __init__(self, event, target_emoji, slack_client, gs_client, member_manager):
         self.type = event["type"]
@@ -130,7 +144,9 @@ class JoinBigchat:
             return False
 
         try:
-            self.gs_client.append_row(worksheet_id, member.transform_for_spreadsheet())
+            added = self.gs_client.append_row_if_absent(
+                worksheet_id, member.transform_for_spreadsheet()
+            )
         except WorksheetNotFound:
             self.slack_client.send_message(
                 msg=f"<@{self.user}>, 이 빅챗의 신청 시트를 찾을 수 없어. 이미 마감되었거나 삭제된 것 같아. "
@@ -139,18 +155,15 @@ class JoinBigchat:
             )
             return False
 
+        if not added:
+            # 시트 생성 직후의 일괄 등록(#89)과 동시에 처리됐거나 이벤트가 중복 전달된 경우
+            self.slack_client.send_message(
+                msg=f"<@{self.user}>, 이미 등록되어 있어!", ts=self.ts
+            )
+            return True
+
         self.slack_client.send_message(msg=f"<@{self.user}>, 등록 완료!", ts=self.ts)
-        msg = strip_multiline(
-            f"""
-            <@{self.user}> 네 신청 정보를 아래와 같이 등록했어. 바뀐 부분이 있다면 운영진에게 DM으로 알려줘!
-            ```
-            이름(영문): {member.kor_name}({member.eng_name})
-            핸드폰: {member.phone}
-            이메일: {member.email}
-            학교/회사: {member.school_name_or_company_name}
-            ```
-            (참고로 이 메시지는 너만 볼 수 있어!)"""
-        )
+        msg = build_registration_info_message(self.user, member)
         self.slack_client.send_message_only_visible_to_user(
             msg=msg,
             blocks=self._build_calendar_blocks(msg, worksheet_id, messages[0].text),

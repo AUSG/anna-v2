@@ -2,7 +2,10 @@ import json
 
 from slack_sdk.errors import SlackApiError
 
-from handler.bigchat.create_bigchat_sheet import bigchat_created_message
+from handler.bigchat.create_bigchat_sheet import (
+    bigchat_created_message,
+    register_early_reacted_users,
+)
 from util.bigchat_event import parse_sheet_name
 from util.utils import strip_multiline
 
@@ -105,7 +108,9 @@ class OpenCreateBigchatModal:
 
 
 class SubmitCreateBigchatModal:
-    def __init__(self, event, ack, slack_client, gs_client):
+    def __init__(
+        self, event, ack, slack_client, gs_client, member_manager, target_emoji
+    ):
         metadata = json.loads(event["view"]["private_metadata"])
         values = event["view"]["state"]["values"]
         self.channel = metadata["channel"]
@@ -118,6 +123,8 @@ class SubmitCreateBigchatModal:
         self.ack = ack
         self.slack_client = slack_client
         self.gs_client = gs_client
+        self.member_manager = member_manager
+        self.target_emoji = target_emoji
 
     def run(self):
         sheet_name = f"{self.name} {self.date[2:]} {self.start}~{self.end}"
@@ -138,7 +145,19 @@ class SubmitCreateBigchatModal:
         except SlackApiError as ex:
             if ex.response["error"] not in ("not_in_channel", "channel_not_found"):
                 raise
+            # 봇이 채널에 없으면 모집글의 reaction 도 읽을 수 없으니 일괄 등록은 생략한다
             self._notify_bot_not_in_channel(sheet_url, sheet_name)
+            return True
+
+        register_early_reacted_users(
+            self.slack_client,
+            self.gs_client,
+            self.member_manager,
+            self.target_emoji,
+            worksheet_id,
+            channel=self.channel,
+            thread_ts=self.thread_ts,
+        )
         return True
 
     def _validate(self, sheet_name):

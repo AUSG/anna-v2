@@ -106,7 +106,11 @@ def mention_response(event, say, client):
     shuffle_response = ShuffleResponse(event, SlackClient(say, client))
     simple_response = SimpleResponse(event, SlackClient(say, client))
     create_bigchat_sheet = CreateBigchatSheet(
-        event, SlackClient(say, client), GoogleSpreadsheetClient()
+        event,
+        SlackClient(say, client),
+        GoogleSpreadsheetClient(),
+        _get_member_manager(),
+        envs.JOIN_BIGCHAT_EMOJI,
     )
     question_response = QuestionResponse(
         event, SlackClient(say, client), _get_qa_client()
@@ -161,7 +165,12 @@ def open_create_bigchat_modal(event, say, client):
 @catch_global_error()
 def submit_create_bigchat_modal(event, say, client, ack):
     SubmitCreateBigchatModal(
-        event, ack, SlackClient(say, client), GoogleSpreadsheetClient()
+        event,
+        ack,
+        SlackClient(say, client),
+        GoogleSpreadsheetClient(),
+        _get_member_manager(),
+        envs.JOIN_BIGCHAT_EMOJI,
     ).run()
 
 

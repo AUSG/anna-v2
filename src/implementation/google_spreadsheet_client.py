@@ -1,4 +1,5 @@
 import logging
+import threading
 from datetime import datetime
 from typing import List, Optional, Tuple
 
@@ -9,6 +10,10 @@ from gspread_formatting import set_column_width
 
 from config.env_config import envs
 from util.utils import with_retry
+
+# append_row_if_absent 의 확인-후-추가를 원자적으로 만드는 프로세스 전역 락.
+# 이 앱은 단일 프로세스(gunicorn --workers 1)로 떠 있어서 프로세스 락으로 충분하다.
+_APPEND_IF_ABSENT_LOCK = threading.Lock()
 
 
 class GoogleSpreadsheetClient:
@@ -73,6 +78,18 @@ class GoogleSpreadsheetClient:
             _values.insert(0, self._yyyymmddhhmmss())
 
         worksheet.append_row(_values)
+
+    def append_row_if_absent(self, worksheet_id: int, values: List[str]) -> bool:
+        """같은 행이 이미 있으면 추가하지 않는다. 실제로 추가했으면 True.
+
+        빅챗 등록은 JoinBigchat(reaction_added)과 시트 생성 직후의 일괄 등록(#89)이
+        거의 동시에 같은 사람을 처리할 수 있어서, 확인과 추가를 락으로 직렬화한다.
+        """
+        with _APPEND_IF_ABSENT_LOCK:
+            if list(values) in self.get_values(worksheet_id):
+                return False
+            self.append_row(worksheet_id, values)
+            return True
 
     @with_retry(non_retryable_exceptions=(WorksheetNotFound,))
     def get_values(self, worksheet_id: int, cell_range=None) -> List[List[str]]:

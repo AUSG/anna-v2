@@ -23,6 +23,12 @@ class Emoji(BaseModel):
     name: str
 
 
+class Reaction(BaseModel):
+    name: str
+    users: List[str]
+    count: int
+
+
 class SlackClient:
     def __init__(self, say: Optional[Say], web_client: WebClient):
         """say 는 슬랙 이벤트 컨텍스트에서만 존재한다. 스케줄 발송처럼 이벤트 없이 쓸 땐
@@ -146,6 +152,35 @@ class SlackClient:
             if ex.response.data["error"] == "already_reacted":
                 return
             raise ex
+
+    def get_emoji(self, channel: str, ts: str, emoji_name: str) -> Optional[Reaction]:
+        """channel의 ts 메시지에 달린 emoji_name 반응(누른 사람 목록 포함)을 가져온다.
+
+        해당 반응이 없거나 메시지를 읽지 못하면 None을 반환한다.
+        """
+        for attempt in range(3):
+            try:
+                response = self.web_client.reactions_get(
+                    channel=channel, timestamp=ts, full=True
+                )
+                break
+            except SlackApiError as ex:
+                logger.warning(f"Failed to get reactions: {ex}")
+                return None
+            except OSError as ex:
+                if attempt >= 2:
+                    logger.warning(f"Failed to get reactions: {ex}")
+                    return None
+
+        message = response.get("message") or {}
+        for reaction in message.get("reactions", []):
+            if reaction["name"] == emoji_name:
+                return Reaction(
+                    name=reaction["name"],
+                    users=reaction["users"],
+                    count=reaction["count"],
+                )
+        return None
 
     def remove_emoji(self, channel, ts, emoji_name):
         try:

@@ -16,6 +16,8 @@ from handler.bigchat.create_bigchat_modal import (
     normalize_view_body,
 )
 from handler.bigchat.join_bigchat import SPREADSHEET_PAT
+from implementation.member_finder import Member
+from implementation.slack_client import Reaction
 from test.handler.bigchat.sample_data import (
     create_sample_message_shortcut_body,
     create_sample_view_submission_body,
@@ -94,11 +96,18 @@ class TestSubmitCreateBigchatModal(unittest.TestCase):
         event = normalize_view_body(body)
         mock_ack = MagicMock()
         mock_slack_client = MagicMock()
+        mock_slack_client.get_emoji.return_value = None  # 미리 눌린 이모지 없음
         mock_gs_client = MagicMock()
         mock_gs_client.create_bigchat_sheet.return_value = 987654321
         mock_gs_client.get_url.return_value = self.SHEET_URL
+        self.mock_member_manager = MagicMock()
         sut = SubmitCreateBigchatModal(
-            event, mock_ack, mock_slack_client, mock_gs_client
+            event,
+            mock_ack,
+            mock_slack_client,
+            mock_gs_client,
+            self.mock_member_manager,
+            "gogo",
         )
         return sut, mock_ack, mock_slack_client, mock_gs_client
 
@@ -167,6 +176,51 @@ class TestSubmitCreateBigchatModal(unittest.TestCase):
         kwargs = mock_slack_client.send_response_url_message.call_args.kwargs
         assert kwargs["response_url"] == sut.response_url
         assert self.SHEET_URL in kwargs["msg"]
+
+    def test_backfills_early_reactions_after_link_posted(self):
+        """모달로 만든 시트도 멘션 경로와 똑같이, 시트 생성 전에 모집글에
+        :gogo:를 누른 사람들을 일괄 등록해야 한다. (#89)"""
+        sut, _, mock_slack_client, mock_gs_client = self._build_sut()
+        mock_slack_client.get_emoji.return_value = Reaction(
+            name="gogo", users=["U01BN035Y6L"], count=1
+        )
+        member = Member(
+            kor_name="김동주",
+            eng_name="Kim Dongjoo",
+            email="email",
+            phone="phone",
+            school_name_or_company_name="school_name_or_company_name",
+        )
+        self.mock_member_manager.find.return_value = member
+        mock_gs_client.append_row_if_absent.return_value = True
+
+        assert sut.run()
+
+        # reaction 은 모달을 띄운 메시지가 속한 스레드의 첫 글(모집글)에서 읽는다
+        mock_slack_client.get_emoji.assert_called_once_with(
+            channel="C03SZTDEDK3", ts="1688801145.307229", emoji_name="gogo"
+        )
+        mock_gs_client.append_row_if_absent.assert_called_once_with(
+            987654321, member.transform_for_spreadsheet()
+        )
+        # 링크 안내 + 일괄 등록 안내
+        assert mock_slack_client.send_thread_message.call_count == 2
+        assert (
+            "지금 등록 완료했어"
+            in mock_slack_client.send_thread_message.call_args.kwargs["msg"]
+        )
+
+    def test_bot_not_in_channel_skips_backfill(self):
+        """봇이 채널에 없으면 스레드 답글도 reaction 조회도 불가능하므로
+        일괄 등록을 건너뛴다."""
+        sut, _, mock_slack_client, _ = self._build_sut()
+        mock_slack_client.send_thread_message.side_effect = SlackApiError(
+            "boom", {"error": "not_in_channel"}
+        )
+
+        assert sut.run()
+
+        mock_slack_client.get_emoji.assert_not_called()
 
     def test_unexpected_slack_error_is_raised(self):
         sut, _, mock_slack_client, _ = self._build_sut()
