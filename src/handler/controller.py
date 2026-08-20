@@ -12,6 +12,7 @@ from handler.bigchat.create_bigchat_modal import (
     SubmitCreateBigchatModal,
 )
 from handler.bigchat.create_bigchat_sheet import CreateBigchatSheet
+from handler.bigchat.create_issue import CreateIssue
 from handler.bigchat.join_bigchat import JoinBigchat
 from handler.bigchat.simple_response import SimpleResponse
 from handler.bigchat.shuffle_response import ShuffleResponse
@@ -23,6 +24,7 @@ from handler.bigchat.question_response import QuestionResponse
 from handler.bigchat.subin_like_response import SubinLikeResponse
 from handler.decorator import catch_global_error
 from handler.loading_emoji import LoadingEmoji
+from implementation.github_client import GithubClient
 from implementation.google_spreadsheet_client import GoogleSpreadsheetClient
 from implementation.qa_client import QAClient
 from implementation.member_finder import MemberManager
@@ -135,6 +137,11 @@ def mention_response(event, say, client):
         _get_member_manager(),
         envs.ANNA_ID,
     )
+    create_issue = CreateIssue(
+        event,
+        slack_client,
+        GithubClient(envs.GITHUB_TOKEN, envs.GITHUB_REPO),
+    )
     question_response = QuestionResponse(event, slack_client, _get_qa_client())
     # 어느 명령에도 걸리지 않은 멘션은 텍스트 전체를 질문으로 처리 (빈 멘션만 SimpleResponse 로)
     question_fallback = QuestionResponse(
@@ -150,6 +157,7 @@ def mention_response(event, say, client):
                 # "새로운 빅챗" 보다 먼저 봐야 한다 — 리마인더 명령 문구에도 '빅챗' 이 들어간다
                 remind_bigchat_command,
                 create_bigchat_sheet,
+                create_issue,
                 help_response,
                 question_fallback,
             ],

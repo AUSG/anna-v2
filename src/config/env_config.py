@@ -57,6 +57,11 @@ class Settings(BaseSettings):
     PUBLIC_BASE_URL: str = "https://anna-v2-2023.fly.dev"
     ICS_TOKEN_SECRET: str = ""  # 비어 있으면 ics 버튼/엔드포인트 비활성화
 
+    # GitHub issue creation (안나가 자기 레포에 이슈를 만든다)
+    # 토큰이 비어 있으면 이슈 생성 명령이 비활성화된다 (Issues: Read and write 권한이면 충분)
+    GITHUB_TOKEN: str = ""
+    GITHUB_REPO: str = "AUSG/anna-v2"
+
     # Bigchat reminder DM (빅챗 전날 저녁 신청자들에게 발송)
     # 로컬 개발 중 프로덕션과 중복 발송되지 않게 하려면 false 로 끈다
     BIGCHAT_REMINDER_ENABLED: bool = True
