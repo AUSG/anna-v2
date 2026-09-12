@@ -2,9 +2,12 @@
 # ruff: noqa: E501
 import logging
 import re
+from datetime import datetime, timezone
+from urllib.parse import urlsplit
+from zoneinfo import ZoneInfo
 
 from handler.bigchat.mention_handler import MentionHandler
-from implementation.qa_client import QAClient
+from implementation.qa_client import ChatResult, QAClient
 
 logger = logging.getLogger(__name__)
 
@@ -73,15 +76,44 @@ class QuestionResponse(MentionHandler):
             logger.info("[q)] no thread context (top-level mention)")
             augmented = question
 
-        answer = self.qa_client.chat(
+        result = self.qa_client.chat(
             question=augmented, system_prompt=DEFAULT_SYSTEM_PROMPT
         )
-        if answer is None:
-            answer = "흐음~ 나도 잘 모르는 일인걸? 오거나이저를 찾아가볼까?"
+        answer = self._render_result(result)
         logger.info("[q)] question=%r | answer=%r", question, answer)
         self.slack_client.send_message(msg=answer, ts=self.ts)
 
         return True
+
+    @staticmethod
+    def _render_result(result) -> str:
+        """Render a QA result while accepting the old answer-only return value."""
+        if result is None:
+            return "앗, 답변 서버가 잠시 응답하지 않아요. 잠시 후 다시 시도해 주세요."
+        if isinstance(result, str):
+            return result
+        if not isinstance(result, ChatResult):
+            return "앗, 답변 서버가 잠시 응답하지 않아요. 잠시 후 다시 시도해 주세요."
+
+        answer = result.answer or "흐음~ 나도 잘 모르는 일인걸? 오거나이저를 찾아가볼까?"
+        cited_ids = {citation for citation in result.citations if isinstance(citation, str)}
+        cited_sources = []
+        seen = set()
+        for source in result.sources:
+            if source.document_id not in cited_ids or source.document_id in seen:
+                continue
+            seen.add(source.document_id)
+            url = _safe_source_url(source.url)
+            if not url:
+                continue
+            label = _escape_slack_text(source.title or source.document_id)
+            if source.timestamp:
+                label = f"{label} · {_format_timestamp(source.timestamp)}"
+            cited_sources.append(f"<{url}|{label}>")
+        if cited_sources:
+            answer += "\n\n출처: " + ", ".join(cited_sources)
+        return answer
+
 
     def _fetch_thread_context(self) -> str:
         """멘션이 스레드 안에서 일어난 경우, 그 스레드의 대화를 맥락으로 수집."""
@@ -124,3 +156,31 @@ class QuestionResponse(MentionHandler):
         if self.require_prefix:
             return ""
         return clean_text
+
+
+def _safe_source_url(url: str) -> str:
+    """Only put ordinary web URLs into Slack's angle-bracket link syntax."""
+    if not isinstance(url, str) or any(char in url for char in "<>|"):
+        return ""
+    parsed = urlsplit(url)
+    if parsed.scheme.lower() not in {"http", "https"} or not parsed.netloc:
+        return ""
+    return url
+
+
+def _escape_slack_text(value: str) -> str:
+    return value.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+
+
+def _format_timestamp(value: str) -> str:
+    """Render ISO/Slack timestamps as a compact KST time, preserving bad input."""
+    try:
+        if re.fullmatch(r"\d+(?:\.\d+)?", value):
+            parsed = datetime.fromtimestamp(float(value), tz=timezone.utc)
+        else:
+            parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+            if parsed.tzinfo is None:
+                parsed = parsed.replace(tzinfo=timezone.utc)
+        return parsed.astimezone(ZoneInfo("Asia/Seoul")).strftime("%Y-%m-%d %H:%M KST")
+    except (TypeError, ValueError, OverflowError):
+        return value
