@@ -25,6 +25,7 @@ def test_chat_parses_structured_result_and_source_metadata():
                     "document_id": "doc-1",
                     "title": "#공지",
                     "url": "https://example.test/doc-1",
+                    "evidence_urls": ["https://example.test/evidence", 42],
                     "timestamp": "2026-09-12T00:00:00Z",
                     "truncated": True,
                 }
@@ -41,6 +42,14 @@ def test_chat_parses_structured_result_and_source_metadata():
     assert result.trace_id == "trace-123"
     assert result.sources[0].timestamp == "2026-09-12T00:00:00Z"
     assert result.sources[0].truncated is True
+    assert result.sources[0].evidence_urls == ["https://example.test/evidence"]
+
+
+def test_source_evidence_urls_default_and_malformed_value_is_ignored():
+    result = QAClient._parse_chat_response(
+        {"answer": "답변", "sources": [{"document_id": "doc-1", "evidence_urls": "bad"}]}
+    )
+    assert result.sources[0].evidence_urls == []
 
 
 def test_chat_accepts_legacy_answer_only_response():
