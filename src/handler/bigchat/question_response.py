@@ -23,10 +23,12 @@ logger = logging.getLogger(__name__)
 
 # q) 이후의 질문을 추출하는 정규식
 QUESTION_PATTERN = re.compile(r"q\)\s*(.+)", re.IGNORECASE | re.DOTALL)
-_ANSWER_MARKDOWN_LINK = re.compile(r"\[([^\]]+)\]\((https?://[^)\s]+)\)")
-_ANSWER_SLACK_LINK = re.compile(r"<(https?://[^>|\s]+)(?:\|([^>]*))?>")
-_ANSWER_MALFORMED_SLACK_LINK = re.compile(r"<(https?://[^>|\s]+)(?:\|([^>\n]*))?")
-_ANSWER_PLAIN_URL = re.compile(r"https?://[^\s<>|)]+")
+_ANSWER_MARKDOWN_LINK = re.compile(r"\[([^\]]+)\]\((https?://[^)\s]+)\)", re.IGNORECASE)
+_ANSWER_SLACK_LINK = re.compile(r"<(https?://[^>|\s]+)(?:\|([^>]*))?>", re.IGNORECASE)
+_ANSWER_MALFORMED_SLACK_LINK = re.compile(
+    r"<(https?://[^>|\s]+)(?:\|([^>\n]*))?", re.IGNORECASE
+)
+_ANSWER_PLAIN_URL = re.compile(r"(?:https?://|www\.)[^\s<>|)]+", re.IGNORECASE)
 UNTRUSTED_LINK_MARKER = "[확인되지 않은 링크 제거]"
 
 DEFAULT_SYSTEM_PROMPT = """너는 AUSG(AWSKRUG University Student Group) 커뮤니티의 멤버 같은 AI, ANNA야.
@@ -123,14 +125,18 @@ class QuestionResponse(MentionHandler):
             answer = "흐음~ 기록이 서로 달라서 확답하기 어렵네요."
         else:
             answer = "흐음~ 나도 잘 모르는 일인걸? 오거나이저를 찾아볼까?"
-        cited_ids = {citation for citation in result.citations if isinstance(citation, str)}
+        cited_ids = {
+            citation for citation in result.citations if isinstance(citation, str)
+        }
         source_counts = Counter(source.document_id for source in result.sources)
         cited_sources = []
         seen = set()
         for source in result.sources:
-            if (source.document_id not in cited_ids
-                    or source_counts[source.document_id] != 1
-                    or source.document_id in seen):
+            if (
+                source.document_id not in cited_ids
+                or source_counts[source.document_id] != 1
+                or source.document_id in seen
+            ):
                 continue
             seen.add(source.document_id)
             url = _safe_source_url(source.url)
@@ -146,7 +152,8 @@ class QuestionResponse(MentionHandler):
         allowed_answer_urls = {
             _safe_source_url(source.url)
             for source in result.sources
-            if source.document_id in cited_ids and source_counts[source.document_id] == 1
+            if source.document_id in cited_ids
+            and source_counts[source.document_id] == 1
         }
         answer = _strip_untrusted_answer_links(answer, allowed_answer_urls)
         if cited_sources:
@@ -180,7 +187,9 @@ class QuestionResponse(MentionHandler):
             author = self._message_value(message, "user") or self._message_value(
                 message, "author"
             )
-            role = "assistant" if self._is_assistant_message(message, author) else "user"
+            role = (
+                "assistant" if self._is_assistant_message(message, author) else "user"
+            )
             item = {"role": role, "content": text[:MAX_CONVERSATION_MESSAGE_CHARS]}
             if author:
                 item["author"] = author[:MAX_CONVERSATION_AUTHOR_CHARS]
@@ -206,7 +215,10 @@ class QuestionResponse(MentionHandler):
         kept, total = [], 0
         for item in candidates:
             content = item["content"]
-            if len(kept) >= MAX_CONVERSATION_MESSAGES or total + len(content) > MAX_CONVERSATION_CHARS:
+            if (
+                len(kept) >= MAX_CONVERSATION_MESSAGES
+                or total + len(content) > MAX_CONVERSATION_CHARS
+            ):
                 continue
             kept.append(item)
             total += len(content)
@@ -277,17 +289,26 @@ def _strip_untrusted_answer_links(answer: str, allowed_urls: set[str]) -> str:
     a clickable Slack link, while retaining a URL when it exactly matches a
     source the model cited.
     """
+
     def slack_link(match):
         url, label = match.group(1), match.group(2)
-        return match.group(0) if url in allowed_urls else (label or "")
+        return (
+            match.group(0)
+            if url in allowed_urls
+            else (label or "") + UNTRUSTED_LINK_MARKER
+        )
 
     def markdown_link(match):
-        return match.group(0) if match.group(2) in allowed_urls else match.group(1)
+        return (
+            match.group(0)
+            if match.group(2) in allowed_urls
+            else match.group(1) + UNTRUSTED_LINK_MARKER
+        )
 
     def plain_url(match):
         candidate = match.group(0)
         trimmed = candidate.rstrip(".,!?;:")
-        suffix = candidate[len(trimmed):]
+        suffix = candidate[len(trimmed) :]
         if trimmed in allowed_urls:
             return trimmed + suffix
         return UNTRUSTED_LINK_MARKER + suffix
@@ -296,7 +317,8 @@ def _strip_untrusted_answer_links(answer: str, allowed_urls: set[str]) -> str:
     # A missing closing ``>`` is not a valid Slack link, but leaving it in the
     # message still lets Slack interpret the URL unpredictably.
     answer = _ANSWER_MALFORMED_SLACK_LINK.sub(
-        lambda match: match.group(0) if match.group(1) in allowed_urls
+        lambda match: match.group(0)
+        if match.group(1) in allowed_urls
         else (match.group(2) or "") + UNTRUSTED_LINK_MARKER,
         answer,
     )

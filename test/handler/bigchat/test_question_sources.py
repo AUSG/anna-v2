@@ -27,16 +27,21 @@ def test_render_result_includes_only_cited_sources_with_title_and_time():
 def test_render_legacy_answer_does_not_claim_sources_are_cited():
     result = ChatResult(
         answer="답변",
-        sources=[Source(document_id="doc-1", title="#공지", url="https://example.test/1")],
+        sources=[
+            Source(document_id="doc-1", title="#공지", url="https://example.test/1")
+        ],
     )
 
     assert QuestionResponse._render_result(result) == "답변"
 
 
 def test_render_distinguishes_insufficient_evidence_from_service_failure():
-    assert QuestionResponse._render_result(
-        ChatResult(answer="", status="insufficient_evidence")
-    ) == "흐음~ 관련 기록에서는 확인하지 못했어요."
+    assert (
+        QuestionResponse._render_result(
+            ChatResult(answer="", status="insufficient_evidence")
+        )
+        == "흐음~ 관련 기록에서는 확인하지 못했어요."
+    )
     assert "서버" in QuestionResponse._render_result(None)
 
 
@@ -58,7 +63,9 @@ def test_render_escapes_title_rejects_unsafe_url_and_formats_timestamp_in_kst():
 
     rendered = QuestionResponse._render_result(result)
 
-    assert "<https://example.test/a|A&amp;B &lt;공지&gt; · 2026-09-12 09:00 KST>" in rendered
+    assert (
+        "<https://example.test/a|A&amp;B &lt;공지&gt; · 2026-09-12 09:00 KST>" in rendered
+    )
     assert "a|bad" not in rendered
     assert "javascript:" not in rendered
 
@@ -147,7 +154,12 @@ def test_handler_keeps_current_question_separate_and_preserves_identities():
     assert qa.chat.call_args.kwargs["question"] == "지금 뭐야?"
     assert qa.chat.call_args.kwargs["conversation"] == [
         {"role": "user", "content": "원래 질문", "author": "U1", "timestamp": "1"},
-        {"role": "assistant", "content": "제가 답했어요", "author": "UANNA", "timestamp": "2"},
+        {
+            "role": "assistant",
+            "content": "제가 답했어요",
+            "author": "UANNA",
+            "timestamp": "2",
+        },
     ]
 
 
@@ -170,9 +182,17 @@ def test_handler_bounds_history_to_root_and_recent_turns():
 
 
 def test_handler_prioritizes_a_relevant_middle_turn_before_filler():
-    event = {"text": "<@UANNA> q) Kubernetes 일정", "ts": "99", "channel": "C1", "thread_ts": "1"}
+    event = {
+        "text": "<@UANNA> q) Kubernetes 일정",
+        "ts": "99",
+        "channel": "C1",
+        "thread_ts": "1",
+    }
     slack = MagicMock()
-    messages = [MagicMock(ts=str(i), user=f"U{i}", text=f"무관한 메시지 {i}" * 1000) for i in range(20)]
+    messages = [
+        MagicMock(ts=str(i), user=f"U{i}", text=f"무관한 메시지 {i}" * 1000)
+        for i in range(20)
+    ]
     messages[10] = MagicMock(ts="10", user="U10", text="Kubernetes 일정은 10월이에요" * 1000)
     slack.get_replies.return_value = messages
     qa = MagicMock()
@@ -182,3 +202,16 @@ def test_handler_prioritizes_a_relevant_middle_turn_before_filler():
     conversation = qa.chat.call_args.kwargs["conversation"]
 
     assert any("Kubernetes" in item["content"] for item in conversation)
+
+
+def test_untrusted_uppercase_and_scheme_less_urls_are_marked():
+    rendered = QuestionResponse._render_result("HTTPS://wrong.test www.wrong.test")
+    assert "wrong.test" not in rendered
+    assert rendered.count(UNTRUSTED_LINK_MARKER) == 2
+
+
+def test_untrusted_named_links_leave_visible_marker():
+    rendered = QuestionResponse._render_result(
+        "<https://wrong.test|출처> [출처](https://wrong.test)"
+    )
+    assert rendered.count(UNTRUSTED_LINK_MARKER) == 2
