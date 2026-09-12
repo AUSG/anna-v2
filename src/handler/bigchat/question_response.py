@@ -153,7 +153,10 @@ class QuestionResponse(MentionHandler):
                 label = f"{label} · {_format_timestamp(source.timestamp)}"
             if url:
                 cited_sources.append(f"<{url}|{label}>")
-            elif source.document_id == "conversation:current" and source.url == "conversation:current":
+            elif (
+                source.document_id == "conversation:current"
+                and source.url == "conversation:current"
+            ):
                 # This is a synthetic source.  It has no external permalink.
                 cited_sources.append(label)
         # The model sees source URLs in its context and may copy or invent links
@@ -166,11 +169,16 @@ class QuestionResponse(MentionHandler):
             and source_counts[source.document_id] == 1
         }
         for source in result.sources:
-            if source.document_id not in cited_ids or source_counts[source.document_id] != 1:
+            if (
+                source.document_id not in cited_ids
+                or source_counts[source.document_id] != 1
+            ):
                 continue
             allowed_answer_urls.update(
                 url
-                for url in (_safe_source_url(candidate) for candidate in source.evidence_urls)
+                for url in (
+                    _safe_source_url(candidate) for candidate in source.evidence_urls
+                )
                 if url
             )
         answer = _strip_untrusted_answer_links(answer, allowed_answer_urls)
@@ -287,7 +295,11 @@ class QuestionResponse(MentionHandler):
 
 def _safe_source_url(url: str) -> str:
     """Only put ordinary web URLs into Slack's angle-bracket link syntax."""
-    if not isinstance(url, str) or any(char in url for char in "<>|`") or any(char.isspace() for char in url):
+    if (
+        not isinstance(url, str)
+        or any(char in url for char in "<>|`")
+        or any(char.isspace() for char in url)
+    ):
         return ""
     parsed = urlsplit(url)
     if parsed.scheme.lower() not in {"http", "https"} or not parsed.netloc:

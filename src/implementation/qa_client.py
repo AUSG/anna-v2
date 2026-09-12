@@ -98,7 +98,9 @@ class QAClient:
         raw_sources = data.get("sources", [])
         if isinstance(raw_sources, list):
             for raw_source in raw_sources:
-                if not isinstance(raw_source, dict) or not isinstance(raw_source.get("document_id"), str):
+                if not isinstance(raw_source, dict) or not isinstance(
+                    raw_source.get("document_id"), str
+                ):
                     continue
                 sources.append(
                     Source(
