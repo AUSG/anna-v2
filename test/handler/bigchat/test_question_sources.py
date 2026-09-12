@@ -63,6 +63,23 @@ def test_render_escapes_title_rejects_unsafe_url_and_formats_timestamp_in_kst():
     assert "javascript:" not in rendered
 
 
+def test_render_strips_untrusted_links_from_model_answer_but_keeps_cited_url():
+    result = ChatResult(
+        answer=(
+            "공식 문서는 <https://example.test/doc|여기>에 있고, "
+            "추가 정보는 [악성 링크](https://evil.test/phish) 또는 "
+            "https://evil.test/plain 을 보세요."
+        ),
+        citations=["doc-1"],
+        sources=[Source(document_id="doc-1", url="https://example.test/doc")],
+    )
+
+    rendered = QuestionResponse._render_result(result)
+
+    assert "<https://example.test/doc|여기>" in rendered
+    assert "evil.test" not in rendered
+
+
 def test_handler_keeps_current_question_separate_and_preserves_identities():
     event = {
         "text": "<@UANNA> q) 지금 뭐야?",

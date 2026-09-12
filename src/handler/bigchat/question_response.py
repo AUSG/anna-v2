@@ -22,6 +22,9 @@ logger = logging.getLogger(__name__)
 
 # q) 이후의 질문을 추출하는 정규식
 QUESTION_PATTERN = re.compile(r"q\)\s*(.+)", re.IGNORECASE | re.DOTALL)
+_ANSWER_MARKDOWN_LINK = re.compile(r"\[([^\]]+)\]\((https?://[^)\s]+)\)")
+_ANSWER_SLACK_LINK = re.compile(r"<(https?://[^>|\s]+)(?:\|([^>]*))?>")
+_ANSWER_PLAIN_URL = re.compile(r"https?://[^\s<>|]+")
 
 DEFAULT_SYSTEM_PROMPT = """너는 AUSG(AWSKRUG University Student Group) 커뮤니티의 멤버 같은 AI, ANNA야.
 딱딱한 봇이 아니라 센스 있고 유쾌한 커뮤니티 멤버 한 명처럼 답해.
@@ -131,6 +134,15 @@ class QuestionResponse(MentionHandler):
             if source.timestamp:
                 label = f"{label} · {_format_timestamp(source.timestamp)}"
             cited_sources.append(f"<{url}|{label}>")
+        # The model sees source URLs in its context and may copy or invent links
+        # in ``answer``.  Only links belonging to a cited source are trusted;
+        # source links are rendered below from structured metadata.
+        allowed_answer_urls = {
+            _safe_source_url(source.url)
+            for source in result.sources
+            if source.document_id in cited_ids
+        }
+        answer = _strip_untrusted_answer_links(answer, allowed_answer_urls)
         if cited_sources:
             answer += "\n\n출처: " + ", ".join(cited_sources)
         return answer
@@ -249,6 +261,29 @@ def _safe_source_url(url: str) -> str:
 
 def _escape_slack_text(value: str) -> str:
     return value.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+
+
+def _strip_untrusted_answer_links(answer: str, allowed_urls: set[str]) -> str:
+    """Keep only evidence-backed URLs copied into the generated answer.
+
+    Citation links are appended from ``sources`` separately.  This prevents a
+    malformed or hallucinated URL in the free-form model answer from becoming
+    a clickable Slack link, while retaining a URL when it exactly matches a
+    source the model cited.
+    """
+    def slack_link(match):
+        url, label = match.group(1), match.group(2)
+        return match.group(0) if url in allowed_urls else (label or "")
+
+    def markdown_link(match):
+        return match.group(0) if match.group(2) in allowed_urls else match.group(1)
+
+    answer = _ANSWER_SLACK_LINK.sub(slack_link, answer)
+    answer = _ANSWER_MARKDOWN_LINK.sub(markdown_link, answer)
+    return _ANSWER_PLAIN_URL.sub(
+        lambda match: match.group(0) if match.group(0) in allowed_urls else "",
+        answer,
+    )
 
 
 def _format_timestamp(value: str) -> str:
