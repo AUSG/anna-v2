@@ -2,14 +2,42 @@
 # ruff: noqa: E501
 import logging
 import re
+from collections import Counter
+from datetime import datetime, timezone
+from typing import Any, Dict, List, Optional
+from urllib.parse import urlsplit
+from zoneinfo import ZoneInfo
 
 from handler.bigchat.mention_handler import MentionHandler
-from implementation.qa_client import QAClient
+from implementation.qa_client import (
+    MAX_CONVERSATION_CHARS,
+    MAX_CONVERSATION_AUTHOR_CHARS,
+    MAX_CONVERSATION_MESSAGE_CHARS,
+    MAX_CONVERSATION_MESSAGES,
+    MAX_CONVERSATION_TIMESTAMP_CHARS,
+    ChatResult,
+    QAClient,
+)
 
 logger = logging.getLogger(__name__)
 
 # q) 이후의 질문을 추출하는 정규식
 QUESTION_PATTERN = re.compile(r"q\)\s*(.+)", re.IGNORECASE | re.DOTALL)
+# Permit balanced parentheses inside a Markdown URL (for example Wikipedia
+# paths) while keeping the final parenthesis as Markdown syntax.
+_URL_WITH_BALANCED_PARENS = r"https?://(?:[^()\s<>|`]+|\([^()\s<>|`]*\))+"
+_ANSWER_MARKDOWN_LINK = re.compile(
+    rf"\[([^\]]+)\]\(({_URL_WITH_BALANCED_PARENS})\)", re.IGNORECASE
+)
+_ANSWER_SLACK_LINK = re.compile(r"<(https?://[^>|\s]+)(?:\|([^>]*))?>", re.IGNORECASE)
+_ANSWER_MALFORMED_SLACK_LINK = re.compile(
+    r"<(https?://[^>|\s]+)(?:\|([^>\n]*))?", re.IGNORECASE
+)
+# Backticks are delimiters rather than part of a URL.  Keep closing
+# parentheses in the candidate so URLs such as ``/wiki/Foo_(bar)`` can be
+# balanced by the normalizer below.
+_ANSWER_PLAIN_URL = re.compile(r"(?:https?://|www\.)[^\s<>|`]+", re.IGNORECASE)
+UNTRUSTED_LINK_MARKER = "[확인되지 않은 링크 제거]"
 
 DEFAULT_SYSTEM_PROMPT = """너는 AUSG(AWSKRUG University Student Group) 커뮤니티의 멤버 같은 AI, ANNA야.
 딱딱한 봇이 아니라 센스 있고 유쾌한 커뮤니티 멤버 한 명처럼 답해.
@@ -29,7 +57,14 @@ class QuestionResponse(MentionHandler):
     # 스레드 맥락 과다 방지: 가장 최근부터 이 글자 수까지만 포함
     THREAD_CONTEXT_MAX_CHARS = 4000
 
-    def __init__(self, event, slack_client, qa_client: QAClient, require_prefix=True):
+    def __init__(
+        self,
+        event,
+        slack_client,
+        qa_client: QAClient,
+        require_prefix=True,
+        assistant_id: Optional[str] = None,
+    ):
         """require_prefix=True 면 `q)` 가 있을 때만 반응한다 (명령어보다 먼저 평가되는 명시적 질문).
 
         require_prefix=False 면 멘션 텍스트 전체를 질문으로 취급한다 — 셔플/새로운 빅챗/help
@@ -44,6 +79,7 @@ class QuestionResponse(MentionHandler):
         self.slack_client = slack_client
         self.qa_client = qa_client
         self.require_prefix = require_prefix
+        self.assistant_id = assistant_id or event.get("assistant_id")
 
     def handle_mention(self):
         if not self.can_handle():
@@ -59,57 +95,188 @@ class QuestionResponse(MentionHandler):
 
         logger.info(f"Processing question: {question[:100]}...")
 
-        thread_context = self._fetch_thread_context()
-        if thread_context:
+        conversation = self._fetch_conversation()
+        if conversation:
             logger.info(
-                "[q)] thread context (%d chars):\n%s",
-                len(thread_context),
-                thread_context,
-            )
-            augmented = (
-                f"[현재 진행 중인 대화]\n{thread_context}\n\n" f"[위 대화에 대한 질문] {question}"
+                "[q)] conversation context (%d messages)",
+                len(conversation),
             )
         else:
-            logger.info("[q)] no thread context (top-level mention)")
-            augmented = question
+            logger.info("[q)] no conversation context (top-level mention)")
 
-        answer = self.qa_client.chat(
-            question=augmented, system_prompt=DEFAULT_SYSTEM_PROMPT
+        result = self.qa_client.chat(
+            question=question,
+            conversation=conversation,
+            system_prompt=DEFAULT_SYSTEM_PROMPT,
         )
-        if answer is None:
-            answer = "흐음~ 나도 잘 모르는 일인걸? 오거나이저를 찾아가볼까?"
+        answer = self._render_result(result)
         logger.info("[q)] question=%r | answer=%r", question, answer)
         self.slack_client.send_message(msg=answer, ts=self.ts)
 
         return True
 
-    def _fetch_thread_context(self) -> str:
-        """멘션이 스레드 안에서 일어난 경우, 그 스레드의 대화를 맥락으로 수집."""
+    @staticmethod
+    def _render_result(result) -> str:
+        """Render a QA result while accepting the old answer-only return value."""
+        if result is None:
+            return "앗, 답변 서버가 잠시 응답하지 않아요. 잠시 후 다시 시도해 주세요."
+        if isinstance(result, str):
+            return _strip_untrusted_answer_links(result, set())
+        if not isinstance(result, ChatResult):
+            return "앗, 답변 서버가 잠시 응답하지 않아요. 잠시 후 다시 시도해 주세요."
+
+        if result.answer:
+            answer = result.answer
+        elif result.status == "insufficient_evidence":
+            answer = "흐음~ 관련 기록에서는 확인하지 못했어요."
+        elif result.status == "conflicting_evidence":
+            answer = "흐음~ 기록이 서로 달라서 확답하기 어렵네요."
+        else:
+            answer = "흐음~ 나도 잘 모르는 일인걸? 오거나이저를 찾아볼까?"
+        cited_ids = {
+            citation for citation in result.citations if isinstance(citation, str)
+        }
+        source_counts = Counter(source.document_id for source in result.sources)
+        cited_sources = []
+        seen = set()
+        for source in result.sources:
+            if (
+                source.document_id not in cited_ids
+                or source_counts[source.document_id] != 1
+                or source.document_id in seen
+            ):
+                continue
+            seen.add(source.document_id)
+            url = _safe_source_url(source.url)
+            label = _escape_slack_text(source.title or source.document_id)
+            if source.timestamp:
+                label = f"{label} · {_format_timestamp(source.timestamp)}"
+            if url:
+                cited_sources.append(f"<{url}|{label}>")
+            elif (
+                source.document_id == "conversation:current"
+                and source.url == "conversation:current"
+            ):
+                # This is a synthetic source.  It has no external permalink.
+                cited_sources.append(label)
+        # The model sees source URLs in its context and may copy or invent links
+        # in ``answer``.  Only links belonging to a cited source are trusted;
+        # source links are rendered below from structured metadata.
+        allowed_answer_urls = {
+            _safe_source_url(source.url)
+            for source in result.sources
+            if source.document_id in cited_ids
+            and source_counts[source.document_id] == 1
+        }
+        for source in result.sources:
+            if (
+                source.document_id not in cited_ids
+                or source_counts[source.document_id] != 1
+            ):
+                continue
+            allowed_answer_urls.update(
+                url
+                for url in (
+                    _safe_source_url(candidate) for candidate in source.evidence_urls
+                )
+                if url
+            )
+        answer = _strip_untrusted_answer_links(answer, allowed_answer_urls)
+        if cited_sources:
+            answer += "\n\n출처: " + ", ".join(cited_sources)
+        return answer
+
+    def _fetch_conversation(self) -> List[Dict[str, str]]:
+        """Gather bounded thread history as separately labeled conversation turns."""
         if not self.channel or not self.thread_ts:
-            return ""
+            return []
         try:
             messages = self.slack_client.get_replies(
                 channel=self.channel, thread_ts=self.thread_ts
             )
         except Exception as e:  # noqa: BLE001
             logger.warning("Failed to fetch thread context: %s", e)
-            return ""
+            return []
 
-        lines = []
-        for m in messages:
-            text = re.sub(r"<@[A-Z0-9]+>", "", m.text or "").strip()
-            if text:
-                lines.append(f"{m.user}: {text}")
+        normalized = []
+        for message in messages or []:
+            ts = self._message_value(message, "ts")
+            # Slack may include the event itself in replies. Comparing ts is
+            # stable even when the current text contains a different mention form.
+            if ts and ts == self.ts:
+                continue
+            text = self._message_value(message, "text").strip()
+            if not ts and text == self.text.strip():
+                continue
+            if not text:
+                continue
+            author = self._message_value(message, "user") or self._message_value(
+                message, "author"
+            )
+            role = (
+                "assistant" if self._is_assistant_message(message, author) else "user"
+            )
+            item = {"role": role, "content": text[:MAX_CONVERSATION_MESSAGE_CHARS]}
+            if author:
+                item["author"] = author[:MAX_CONVERSATION_AUTHOR_CHARS]
+            if ts:
+                item["timestamp"] = ts[:MAX_CONVERSATION_TIMESTAMP_CHARS]
+            normalized.append(item)
 
-        # 과다 방지: 글자수가 아니라 메시지 단위로 자른다 (메시지 중간이 끊기지 않도록).
-        # 최근 메시지부터 채우고, budget 을 넘기는 오래된 메시지는 통째로 제외.
+        if not normalized:
+            return []
+
+        # Keep the root, turns matching the current question, and newest turns.
+        # This retains both the topic and a useful middle reference when a long
+        # thread would otherwise leave only the most recent messages.
+        root = normalized[0]
+        terms = set(re.findall(r"[0-9A-Za-z가-힣]{2,}", self._extract_question().lower()))
+        relevant = [
+            item
+            for item in normalized[1:]
+            if any(term in item["content"].lower() for term in terms)
+        ]
+        recent = list(reversed(normalized[1:]))
+        candidates = [root] + relevant + recent
         kept, total = [], 0
-        for line in reversed(lines):
-            if kept and total + len(line) + 1 > self.THREAD_CONTEXT_MAX_CHARS:
+        for item in candidates:
+            content = item["content"]
+            if (
+                len(kept) >= MAX_CONVERSATION_MESSAGES
+                or total + len(content) > MAX_CONVERSATION_CHARS
+            ):
+                continue
+            kept.append(item)
+            total += len(content)
+        kept_ids = {id(item) for item in kept}
+        return [item for item in normalized if id(item) in kept_ids]
+
+    def _fetch_thread_context(self) -> str:
+        """Legacy text view retained for callers that used the old helper."""
+        lines = []
+        total = 0
+        for item in self._fetch_conversation():
+            line = f"{item.get('author', '')}: {item['content']}".strip(": ")
+            if lines and total + len(line) + 1 > self.THREAD_CONTEXT_MAX_CHARS:
                 break
-            kept.append(line)
+            lines.append(line)
             total += len(line) + 1
-        return "\n".join(reversed(kept))
+        return "\n".join(lines)
+
+    @staticmethod
+    def _message_value(message: Any, key: str) -> str:
+        if isinstance(message, dict):
+            value = message.get(key, "")
+        else:
+            value = getattr(message, key, "")
+        return value if isinstance(value, str) else ""
+
+    def _is_assistant_message(self, message: Any, author: str) -> bool:
+        return bool(
+            (self.assistant_id and author == self.assistant_id)
+            or self._message_value(message, "bot_id")
+            or self._message_value(message, "subtype") == "bot_message"
+        )
 
     def can_handle(self):
         if self.require_prefix:
@@ -124,3 +291,88 @@ class QuestionResponse(MentionHandler):
         if self.require_prefix:
             return ""
         return clean_text
+
+
+def _safe_source_url(url: str) -> str:
+    """Only put ordinary web URLs into Slack's angle-bracket link syntax."""
+    if (
+        not isinstance(url, str)
+        or any(char in url for char in "<>|`")
+        or any(char.isspace() for char in url)
+    ):
+        return ""
+    parsed = urlsplit(url)
+    if parsed.scheme.lower() not in {"http", "https"} or not parsed.netloc:
+        return ""
+    return url
+
+
+def _escape_slack_text(value: str) -> str:
+    return value.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+
+
+def _strip_untrusted_answer_links(answer: str, allowed_urls: set[str]) -> str:
+    """Keep only evidence-backed URLs copied into the generated answer.
+
+    Citation links are appended from ``sources`` separately.  This prevents a
+    malformed or hallucinated URL in the free-form model answer from becoming
+    a clickable Slack link, while retaining a URL when it exactly matches a
+    source the model cited.
+    """
+
+    def slack_link(match):
+        url, label = match.group(1), match.group(2)
+        return (
+            match.group(0)
+            if url in allowed_urls
+            else (label or "") + UNTRUSTED_LINK_MARKER
+        )
+
+    def markdown_link(match):
+        return (
+            match.group(0)
+            if match.group(2) in allowed_urls
+            else match.group(1) + UNTRUSTED_LINK_MARKER
+        )
+
+    def plain_url(match):
+        candidate = match.group(0)
+        trimmed = _normalize_answer_url(candidate)
+        suffix = candidate[len(trimmed) :]
+        if trimmed in allowed_urls:
+            return trimmed + suffix
+        return UNTRUSTED_LINK_MARKER + suffix
+
+    answer = _ANSWER_SLACK_LINK.sub(slack_link, answer)
+    # A missing closing ``>`` is not a valid Slack link, but leaving it in the
+    # message still lets Slack interpret the URL unpredictably.
+    answer = _ANSWER_MALFORMED_SLACK_LINK.sub(
+        lambda match: match.group(0)
+        if match.group(1) in allowed_urls
+        else (match.group(2) or "") + UNTRUSTED_LINK_MARKER,
+        answer,
+    )
+    answer = _ANSWER_MARKDOWN_LINK.sub(markdown_link, answer)
+    return _ANSWER_PLAIN_URL.sub(plain_url, answer)
+
+
+def _normalize_answer_url(candidate: str) -> str:
+    """Remove sentence punctuation and unmatched closing URL delimiters."""
+    trimmed = candidate.rstrip(".,!?;:")
+    while trimmed.endswith(")") and trimmed.count(")") > trimmed.count("("):
+        trimmed = trimmed[:-1]
+    return trimmed
+
+
+def _format_timestamp(value: str) -> str:
+    """Render ISO/Slack timestamps as a compact KST time, preserving bad input."""
+    try:
+        if re.fullmatch(r"\d+(?:\.\d+)?", value):
+            parsed = datetime.fromtimestamp(float(value), tz=timezone.utc)
+        else:
+            parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+            if parsed.tzinfo is None:
+                parsed = parsed.replace(tzinfo=timezone.utc)
+        return parsed.astimezone(ZoneInfo("Asia/Seoul")).strftime("%Y-%m-%d %H:%M KST")
+    except (TypeError, ValueError, OverflowError):
+        return value
