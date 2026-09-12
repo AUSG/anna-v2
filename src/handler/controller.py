@@ -142,10 +142,16 @@ def mention_response(event, say, client):
         slack_client,
         GithubClient(envs.GITHUB_TOKEN, envs.GITHUB_REPO),
     )
-    question_response = QuestionResponse(event, slack_client, _get_qa_client())
+    question_response = QuestionResponse(
+        event, slack_client, _get_qa_client(), assistant_id=envs.ANNA_ID
+    )
     # 어느 명령에도 걸리지 않은 멘션은 텍스트 전체를 질문으로 처리 (빈 멘션만 SimpleResponse 로)
     question_fallback = QuestionResponse(
-        event, slack_client, _get_qa_client(), require_prefix=False
+        event,
+        slack_client,
+        _get_qa_client(),
+        require_prefix=False,
+        assistant_id=envs.ANNA_ID,
     )
     # 멘션은 어느 명령에도 걸리지 않아도 폴백(SimpleResponse)이 답하므로 항상 실제 동작이 있다.
     # 따라서 run() 전체를 감싸도 no-op 에 이모지가 붙는 일이 없다.

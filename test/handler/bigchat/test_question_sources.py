@@ -1,5 +1,6 @@
 from handler.bigchat.question_response import QuestionResponse
 from implementation.qa_client import ChatResult, Source
+from unittest.mock import MagicMock
 
 
 def test_render_result_includes_only_cited_sources_with_title_and_time():
@@ -32,9 +33,11 @@ def test_render_legacy_answer_does_not_claim_sources_are_cited():
     assert QuestionResponse._render_result(result) == "답변"
 
 
-def test_render_service_failure_is_distinct_from_unknown_answer():
+def test_render_distinguishes_insufficient_evidence_from_service_failure():
+    assert QuestionResponse._render_result(
+        ChatResult(answer="", status="insufficient_evidence")
+    ) == "흐음~ 관련 기록에서는 확인하지 못했어요."
     assert "서버" in QuestionResponse._render_result(None)
-    assert "잘 모르는" in QuestionResponse._render_result(ChatResult(answer=""))
 
 
 def test_render_escapes_title_rejects_unsafe_url_and_formats_timestamp_in_kst():
@@ -58,3 +61,63 @@ def test_render_escapes_title_rejects_unsafe_url_and_formats_timestamp_in_kst():
     assert "<https://example.test/a|A&amp;B &lt;공지&gt; · 2026-09-12 09:00 KST>" in rendered
     assert "a|bad" not in rendered
     assert "javascript:" not in rendered
+
+
+def test_handler_keeps_current_question_separate_and_preserves_identities():
+    event = {
+        "text": "<@UANNA> q) 지금 뭐야?",
+        "ts": "3",
+        "channel": "C1",
+        "thread_ts": "1",
+        "user": "U2",
+    }
+    slack = MagicMock()
+    slack.get_replies.return_value = [
+        MagicMock(ts="1", user="U1", text="원래 질문"),
+        MagicMock(ts="2", user="UANNA", text="제가 답했어요", bot_id="B1"),
+        MagicMock(ts="3", user="U2", text="<@UANNA> q) 지금 뭐야?"),
+    ]
+    qa = MagicMock()
+    qa.chat.return_value = "답변"
+
+    handler = QuestionResponse(event, slack, qa, assistant_id="UANNA")
+    handler.handle_mention()
+
+    assert qa.chat.call_args.kwargs["question"] == "지금 뭐야?"
+    assert qa.chat.call_args.kwargs["conversation"] == [
+        {"role": "user", "content": "원래 질문", "author": "U1", "timestamp": "1"},
+        {"role": "assistant", "content": "제가 답했어요", "author": "UANNA", "timestamp": "2"},
+    ]
+
+
+def test_handler_bounds_history_to_root_and_recent_turns():
+    event = {"text": "<@UANNA> q) 질문", "ts": "99", "channel": "C1", "thread_ts": "1"}
+    slack = MagicMock()
+    slack.get_replies.return_value = [
+        MagicMock(ts=str(i), user=f"U{i}", text=f"메시지-{i}" * 2000) for i in range(50)
+    ]
+    qa = MagicMock()
+    qa.chat.return_value = "답변"
+
+    QuestionResponse(event, slack, qa).handle_mention()
+    conversation = qa.chat.call_args.kwargs["conversation"]
+
+    assert len(conversation) <= 40
+    assert sum(len(item["content"]) for item in conversation) <= 16000
+    assert conversation[0]["content"].startswith("메시지-0")
+    assert conversation[-1]["content"].startswith("메시지-49")
+
+
+def test_handler_prioritizes_a_relevant_middle_turn_before_filler():
+    event = {"text": "<@UANNA> q) Kubernetes 일정", "ts": "99", "channel": "C1", "thread_ts": "1"}
+    slack = MagicMock()
+    messages = [MagicMock(ts=str(i), user=f"U{i}", text=f"무관한 메시지 {i}" * 1000) for i in range(20)]
+    messages[10] = MagicMock(ts="10", user="U10", text="Kubernetes 일정은 10월이에요" * 1000)
+    slack.get_replies.return_value = messages
+    qa = MagicMock()
+    qa.chat.return_value = "답변"
+
+    QuestionResponse(event, slack, qa).handle_mention()
+    conversation = qa.chat.call_args.kwargs["conversation"]
+
+    assert any("Kubernetes" in item["content"] for item in conversation)

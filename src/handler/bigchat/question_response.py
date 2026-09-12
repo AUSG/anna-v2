@@ -3,11 +3,20 @@
 import logging
 import re
 from datetime import datetime, timezone
+from typing import Any, Dict, List, Optional
 from urllib.parse import urlsplit
 from zoneinfo import ZoneInfo
 
 from handler.bigchat.mention_handler import MentionHandler
-from implementation.qa_client import ChatResult, QAClient
+from implementation.qa_client import (
+    MAX_CONVERSATION_CHARS,
+    MAX_CONVERSATION_AUTHOR_CHARS,
+    MAX_CONVERSATION_MESSAGE_CHARS,
+    MAX_CONVERSATION_MESSAGES,
+    MAX_CONVERSATION_TIMESTAMP_CHARS,
+    ChatResult,
+    QAClient,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -32,7 +41,14 @@ class QuestionResponse(MentionHandler):
     # 스레드 맥락 과다 방지: 가장 최근부터 이 글자 수까지만 포함
     THREAD_CONTEXT_MAX_CHARS = 4000
 
-    def __init__(self, event, slack_client, qa_client: QAClient, require_prefix=True):
+    def __init__(
+        self,
+        event,
+        slack_client,
+        qa_client: QAClient,
+        require_prefix=True,
+        assistant_id: Optional[str] = None,
+    ):
         """require_prefix=True 면 `q)` 가 있을 때만 반응한다 (명령어보다 먼저 평가되는 명시적 질문).
 
         require_prefix=False 면 멘션 텍스트 전체를 질문으로 취급한다 — 셔플/새로운 빅챗/help
@@ -47,6 +63,7 @@ class QuestionResponse(MentionHandler):
         self.slack_client = slack_client
         self.qa_client = qa_client
         self.require_prefix = require_prefix
+        self.assistant_id = assistant_id or event.get("assistant_id")
 
     def handle_mention(self):
         if not self.can_handle():
@@ -62,22 +79,19 @@ class QuestionResponse(MentionHandler):
 
         logger.info(f"Processing question: {question[:100]}...")
 
-        thread_context = self._fetch_thread_context()
-        if thread_context:
+        conversation = self._fetch_conversation()
+        if conversation:
             logger.info(
-                "[q)] thread context (%d chars):\n%s",
-                len(thread_context),
-                thread_context,
-            )
-            augmented = (
-                f"[현재 진행 중인 대화]\n{thread_context}\n\n" f"[위 대화에 대한 질문] {question}"
+                "[q)] conversation context (%d messages)",
+                len(conversation),
             )
         else:
-            logger.info("[q)] no thread context (top-level mention)")
-            augmented = question
+            logger.info("[q)] no conversation context (top-level mention)")
 
         result = self.qa_client.chat(
-            question=augmented, system_prompt=DEFAULT_SYSTEM_PROMPT
+            question=question,
+            conversation=conversation,
+            system_prompt=DEFAULT_SYSTEM_PROMPT,
         )
         answer = self._render_result(result)
         logger.info("[q)] question=%r | answer=%r", question, answer)
@@ -95,7 +109,14 @@ class QuestionResponse(MentionHandler):
         if not isinstance(result, ChatResult):
             return "앗, 답변 서버가 잠시 응답하지 않아요. 잠시 후 다시 시도해 주세요."
 
-        answer = result.answer or "흐음~ 나도 잘 모르는 일인걸? 오거나이저를 찾아가볼까?"
+        if result.answer:
+            answer = result.answer
+        elif result.status == "insufficient_evidence":
+            answer = "흐음~ 관련 기록에서는 확인하지 못했어요."
+        elif result.status == "conflicting_evidence":
+            answer = "흐음~ 기록이 서로 달라서 확답하기 어렵네요."
+        else:
+            answer = "흐음~ 나도 잘 모르는 일인걸? 오거나이저를 찾아볼까?"
         cited_ids = {citation for citation in result.citations if isinstance(citation, str)}
         cited_sources = []
         seen = set()
@@ -114,34 +135,92 @@ class QuestionResponse(MentionHandler):
             answer += "\n\n출처: " + ", ".join(cited_sources)
         return answer
 
-
-    def _fetch_thread_context(self) -> str:
-        """멘션이 스레드 안에서 일어난 경우, 그 스레드의 대화를 맥락으로 수집."""
+    def _fetch_conversation(self) -> List[Dict[str, str]]:
+        """Gather bounded thread history as separately labeled conversation turns."""
         if not self.channel or not self.thread_ts:
-            return ""
+            return []
         try:
             messages = self.slack_client.get_replies(
                 channel=self.channel, thread_ts=self.thread_ts
             )
         except Exception as e:  # noqa: BLE001
             logger.warning("Failed to fetch thread context: %s", e)
-            return ""
+            return []
 
-        lines = []
-        for m in messages:
-            text = re.sub(r"<@[A-Z0-9]+>", "", m.text or "").strip()
-            if text:
-                lines.append(f"{m.user}: {text}")
+        normalized = []
+        for message in messages or []:
+            ts = self._message_value(message, "ts")
+            # Slack may include the event itself in replies. Comparing ts is
+            # stable even when the current text contains a different mention form.
+            if ts and ts == self.ts:
+                continue
+            text = self._message_value(message, "text").strip()
+            if not ts and text == self.text.strip():
+                continue
+            if not text:
+                continue
+            author = self._message_value(message, "user") or self._message_value(
+                message, "author"
+            )
+            role = "assistant" if self._is_assistant_message(message, author) else "user"
+            item = {"role": role, "content": text[:MAX_CONVERSATION_MESSAGE_CHARS]}
+            if author:
+                item["author"] = author[:MAX_CONVERSATION_AUTHOR_CHARS]
+            if ts:
+                item["timestamp"] = ts[:MAX_CONVERSATION_TIMESTAMP_CHARS]
+            normalized.append(item)
 
-        # 과다 방지: 글자수가 아니라 메시지 단위로 자른다 (메시지 중간이 끊기지 않도록).
-        # 최근 메시지부터 채우고, budget 을 넘기는 오래된 메시지는 통째로 제외.
+        if not normalized:
+            return []
+
+        # Keep the root, turns matching the current question, and newest turns.
+        # This retains both the topic and a useful middle reference when a long
+        # thread would otherwise leave only the most recent messages.
+        root = normalized[0]
+        terms = set(re.findall(r"[0-9A-Za-z가-힣]{2,}", self._extract_question().lower()))
+        relevant = [
+            item
+            for item in normalized[1:]
+            if any(term in item["content"].lower() for term in terms)
+        ]
+        recent = list(reversed(normalized[1:]))
+        candidates = [root] + relevant + recent
         kept, total = [], 0
-        for line in reversed(lines):
-            if kept and total + len(line) + 1 > self.THREAD_CONTEXT_MAX_CHARS:
+        for item in candidates:
+            content = item["content"]
+            if len(kept) >= MAX_CONVERSATION_MESSAGES or total + len(content) > MAX_CONVERSATION_CHARS:
+                continue
+            kept.append(item)
+            total += len(content)
+        kept_ids = {id(item) for item in kept}
+        return [item for item in normalized if id(item) in kept_ids]
+
+    def _fetch_thread_context(self) -> str:
+        """Legacy text view retained for callers that used the old helper."""
+        lines = []
+        total = 0
+        for item in self._fetch_conversation():
+            line = f"{item.get('author', '')}: {item['content']}".strip(": ")
+            if lines and total + len(line) + 1 > self.THREAD_CONTEXT_MAX_CHARS:
                 break
-            kept.append(line)
+            lines.append(line)
             total += len(line) + 1
-        return "\n".join(reversed(kept))
+        return "\n".join(lines)
+
+    @staticmethod
+    def _message_value(message: Any, key: str) -> str:
+        if isinstance(message, dict):
+            value = message.get(key, "")
+        else:
+            value = getattr(message, key, "")
+        return value if isinstance(value, str) else ""
+
+    def _is_assistant_message(self, message: Any, author: str) -> bool:
+        return bool(
+            (self.assistant_id and author == self.assistant_id)
+            or self._message_value(message, "bot_id")
+            or self._message_value(message, "subtype") == "bot_message"
+        )
 
     def can_handle(self):
         if self.require_prefix:

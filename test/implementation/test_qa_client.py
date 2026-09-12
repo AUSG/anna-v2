@@ -71,3 +71,21 @@ def test_chat_http_error_is_service_failure_and_not_insufficient_evidence():
     response.raise_for_status.side_effect = requests.HTTPError("503")
     with patch("implementation.qa_client.requests.post", return_value=response):
         assert QAClient("https://qa.test", "secret").chat("질문") is None
+
+
+def test_chat_sends_conversation_separately_and_bounds_it():
+    response = _response({"answer": "답변"})
+    conversation = [
+        {"role": "user", "content": "u" * 5000, "author": "U1" * 200},
+        {"role": "assistant", "content": "a", "timestamp": "123" * 100},
+        {"role": "system", "content": "should be dropped"},
+    ]
+    with patch("implementation.qa_client.requests.post", return_value=response) as post:
+        QAClient("https://qa.test", "secret").chat("현재 질문", conversation=conversation)
+
+    payload = post.call_args.kwargs["json"]
+    assert payload["question"] == "현재 질문"
+    assert payload["conversation"] == [
+        {"role": "user", "content": "u" * 4000, "author": "U1" * 100},
+        {"role": "assistant", "content": "a", "timestamp": "123" * 33 + "1"},
+    ]
