@@ -1,4 +1,4 @@
-from handler.bigchat.question_response import QuestionResponse
+from handler.bigchat.question_response import QuestionResponse, UNTRUSTED_LINK_MARKER
 from implementation.qa_client import ChatResult, Source
 from unittest.mock import MagicMock
 
@@ -78,6 +78,50 @@ def test_render_strips_untrusted_links_from_model_answer_but_keeps_cited_url():
 
     assert "<https://example.test/doc|여기>" in rendered
     assert "evil.test" not in rendered
+
+
+def test_render_preserves_allowed_markdown_url_and_punctuation():
+    result = ChatResult(
+        answer="문서는 [여기](https://example.test/doc), 에서 확인하세요.",
+        citations=["doc-1"],
+        sources=[Source(document_id="doc-1", url="https://example.test/doc")],
+    )
+
+    rendered = QuestionResponse._render_result(result)
+
+    assert "[여기](https://example.test/doc)," in rendered
+    assert UNTRUSTED_LINK_MARKER not in rendered
+
+
+def test_render_marks_malformed_and_plain_untrusted_links_and_legacy_strings():
+    result = ChatResult(
+        answer="깨진 <https://evil.test/no-close|링크\n일반 https://evil.test/plain.",
+        citations=[],
+    )
+
+    rendered = QuestionResponse._render_result(result)
+
+    assert "evil.test" not in rendered
+    assert rendered.count(UNTRUSTED_LINK_MARKER) == 2
+    assert rendered.endswith(".")
+    assert UNTRUSTED_LINK_MARKER in QuestionResponse._render_result(
+        "예전 답변 https://evil.test/plain"
+    )
+
+
+def test_render_omits_ambiguous_duplicate_document_ids():
+    result = ChatResult(
+        answer="답변",
+        citations=["same"],
+        sources=[
+            Source(document_id="same", title="#첫번째", url="https://example.test/1"),
+            Source(document_id="same", title="#두번째", url="https://example.test/2"),
+        ],
+    )
+
+    rendered = QuestionResponse._render_result(result)
+
+    assert rendered == "답변"
 
 
 def test_handler_keeps_current_question_separate_and_preserves_identities():

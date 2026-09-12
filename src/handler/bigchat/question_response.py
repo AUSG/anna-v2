@@ -2,6 +2,7 @@
 # ruff: noqa: E501
 import logging
 import re
+from collections import Counter
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 from urllib.parse import urlsplit
@@ -24,7 +25,9 @@ logger = logging.getLogger(__name__)
 QUESTION_PATTERN = re.compile(r"q\)\s*(.+)", re.IGNORECASE | re.DOTALL)
 _ANSWER_MARKDOWN_LINK = re.compile(r"\[([^\]]+)\]\((https?://[^)\s]+)\)")
 _ANSWER_SLACK_LINK = re.compile(r"<(https?://[^>|\s]+)(?:\|([^>]*))?>")
-_ANSWER_PLAIN_URL = re.compile(r"https?://[^\s<>|]+")
+_ANSWER_MALFORMED_SLACK_LINK = re.compile(r"<(https?://[^>|\s]+)(?:\|([^>\n]*))?")
+_ANSWER_PLAIN_URL = re.compile(r"https?://[^\s<>|)]+")
+UNTRUSTED_LINK_MARKER = "[확인되지 않은 링크 제거]"
 
 DEFAULT_SYSTEM_PROMPT = """너는 AUSG(AWSKRUG University Student Group) 커뮤니티의 멤버 같은 AI, ANNA야.
 딱딱한 봇이 아니라 센스 있고 유쾌한 커뮤니티 멤버 한 명처럼 답해.
@@ -108,7 +111,7 @@ class QuestionResponse(MentionHandler):
         if result is None:
             return "앗, 답변 서버가 잠시 응답하지 않아요. 잠시 후 다시 시도해 주세요."
         if isinstance(result, str):
-            return result
+            return _strip_untrusted_answer_links(result, set())
         if not isinstance(result, ChatResult):
             return "앗, 답변 서버가 잠시 응답하지 않아요. 잠시 후 다시 시도해 주세요."
 
@@ -121,10 +124,13 @@ class QuestionResponse(MentionHandler):
         else:
             answer = "흐음~ 나도 잘 모르는 일인걸? 오거나이저를 찾아볼까?"
         cited_ids = {citation for citation in result.citations if isinstance(citation, str)}
+        source_counts = Counter(source.document_id for source in result.sources)
         cited_sources = []
         seen = set()
         for source in result.sources:
-            if source.document_id not in cited_ids or source.document_id in seen:
+            if (source.document_id not in cited_ids
+                    or source_counts[source.document_id] != 1
+                    or source.document_id in seen):
                 continue
             seen.add(source.document_id)
             url = _safe_source_url(source.url)
@@ -140,7 +146,7 @@ class QuestionResponse(MentionHandler):
         allowed_answer_urls = {
             _safe_source_url(source.url)
             for source in result.sources
-            if source.document_id in cited_ids
+            if source.document_id in cited_ids and source_counts[source.document_id] == 1
         }
         answer = _strip_untrusted_answer_links(answer, allowed_answer_urls)
         if cited_sources:
@@ -278,12 +284,24 @@ def _strip_untrusted_answer_links(answer: str, allowed_urls: set[str]) -> str:
     def markdown_link(match):
         return match.group(0) if match.group(2) in allowed_urls else match.group(1)
 
+    def plain_url(match):
+        candidate = match.group(0)
+        trimmed = candidate.rstrip(".,!?;:")
+        suffix = candidate[len(trimmed):]
+        if trimmed in allowed_urls:
+            return trimmed + suffix
+        return UNTRUSTED_LINK_MARKER + suffix
+
     answer = _ANSWER_SLACK_LINK.sub(slack_link, answer)
-    answer = _ANSWER_MARKDOWN_LINK.sub(markdown_link, answer)
-    return _ANSWER_PLAIN_URL.sub(
-        lambda match: match.group(0) if match.group(0) in allowed_urls else "",
+    # A missing closing ``>`` is not a valid Slack link, but leaving it in the
+    # message still lets Slack interpret the URL unpredictably.
+    answer = _ANSWER_MALFORMED_SLACK_LINK.sub(
+        lambda match: match.group(0) if match.group(1) in allowed_urls
+        else (match.group(2) or "") + UNTRUSTED_LINK_MARKER,
         answer,
     )
+    answer = _ANSWER_MARKDOWN_LINK.sub(markdown_link, answer)
+    return _ANSWER_PLAIN_URL.sub(plain_url, answer)
 
 
 def _format_timestamp(value: str) -> str:
