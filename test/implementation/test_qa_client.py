@@ -25,6 +25,7 @@ def test_chat_parses_structured_result_and_source_metadata():
                     "document_id": "doc-1",
                     "title": "#공지",
                     "url": "https://example.test/doc-1",
+                    "evidence_urls": ["https://example.test/evidence", 42],
                     "timestamp": "2026-09-12T00:00:00Z",
                     "truncated": True,
                 }
@@ -41,6 +42,14 @@ def test_chat_parses_structured_result_and_source_metadata():
     assert result.trace_id == "trace-123"
     assert result.sources[0].timestamp == "2026-09-12T00:00:00Z"
     assert result.sources[0].truncated is True
+    assert result.sources[0].evidence_urls == ["https://example.test/evidence"]
+
+
+def test_source_evidence_urls_default_and_malformed_value_is_ignored():
+    result = QAClient._parse_chat_response(
+        {"answer": "답변", "sources": [{"document_id": "doc-1", "evidence_urls": "bad"}]}
+    )
+    assert result.sources[0].evidence_urls == []
 
 
 def test_chat_accepts_legacy_answer_only_response():
@@ -71,3 +80,21 @@ def test_chat_http_error_is_service_failure_and_not_insufficient_evidence():
     response.raise_for_status.side_effect = requests.HTTPError("503")
     with patch("implementation.qa_client.requests.post", return_value=response):
         assert QAClient("https://qa.test", "secret").chat("질문") is None
+
+
+def test_chat_sends_conversation_separately_and_bounds_it():
+    response = _response({"answer": "답변"})
+    conversation = [
+        {"role": "user", "content": "u" * 5000, "author": "U1" * 200},
+        {"role": "assistant", "content": "a", "timestamp": "123" * 100},
+        {"role": "system", "content": "should be dropped"},
+    ]
+    with patch("implementation.qa_client.requests.post", return_value=response) as post:
+        QAClient("https://qa.test", "secret").chat("현재 질문", conversation=conversation)
+
+    payload = post.call_args.kwargs["json"]
+    assert payload["question"] == "현재 질문"
+    assert payload["conversation"] == [
+        {"role": "user", "content": "u" * 4000, "author": "U1" * 100},
+        {"role": "assistant", "content": "a", "timestamp": "123" * 33 + "1"},
+    ]

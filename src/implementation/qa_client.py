@@ -6,6 +6,12 @@ import requests
 
 logger = logging.getLogger(__name__)
 
+MAX_CONVERSATION_MESSAGES = 40
+MAX_CONVERSATION_MESSAGE_CHARS = 4000
+MAX_CONVERSATION_CHARS = 16000
+MAX_CONVERSATION_AUTHOR_CHARS = 200
+MAX_CONVERSATION_TIMESTAMP_CHARS = 100
+
 
 @dataclass
 class Source:
@@ -21,6 +27,7 @@ class Source:
     user_id: Optional[str] = None
     timestamp: Optional[str] = None
     truncated: bool = False
+    evidence_urls: List[str] = field(default_factory=list)
 
 
 @dataclass
@@ -46,7 +53,12 @@ class QAClient:
         self.namespace = "default"
         self.timeout = timeout
 
-    def chat(self, question: str, system_prompt: Optional[str] = None) -> Optional[ChatResult]:
+    def chat(
+        self,
+        question: str,
+        system_prompt: Optional[str] = None,
+        conversation: Optional[List[Dict[str, str]]] = None,
+    ) -> Optional[ChatResult]:
         payload = {
             "question": question,
             "namespace": self.namespace,
@@ -55,6 +67,8 @@ class QAClient:
 
         if system_prompt:
             payload["system_prompt"] = system_prompt
+        if conversation is not None:
+            payload["conversation"] = _bound_conversation(conversation)
 
         headers = {"X-API-Key": self.api_key}
 
@@ -84,7 +98,9 @@ class QAClient:
         raw_sources = data.get("sources", [])
         if isinstance(raw_sources, list):
             for raw_source in raw_sources:
-                if not isinstance(raw_source, dict) or not isinstance(raw_source.get("document_id"), str):
+                if not isinstance(raw_source, dict) or not isinstance(
+                    raw_source.get("document_id"), str
+                ):
                     continue
                 sources.append(
                     Source(
@@ -92,6 +108,13 @@ class QAClient:
                         score=_as_float(raw_source.get("score")),
                         title=_as_string(raw_source.get("title")),
                         url=_as_string(raw_source.get("url")),
+                        evidence_urls=[
+                            url
+                            for url in raw_source.get("evidence_urls", [])
+                            if isinstance(url, str)
+                        ]
+                        if isinstance(raw_source.get("evidence_urls"), list)
+                        else [],
                         content_preview=_as_string(raw_source.get("content_preview")),
                         channel_id=_as_optional_string(raw_source.get("channel_id")),
                         thread_ts=_as_optional_string(raw_source.get("thread_ts")),
@@ -158,7 +181,7 @@ class QAClient:
         except requests.exceptions.RequestException as e:
             logger.error(f"QA server generate failed: {e}")
             return None
-        except (KeyError, ValueError) as e:
+        except (KeyError, TypeError, ValueError) as e:
             logger.error(f"QA server generate parsing failed: {e}")
             return None
 
@@ -192,3 +215,31 @@ def _as_float(value: Any) -> float:
         return float(value)
     except (TypeError, ValueError):
         return 0.0
+
+
+def _bound_conversation(conversation: Any) -> List[Dict[str, str]]:
+    """Keep conversation input within the crawler API's bounded contract."""
+    if not isinstance(conversation, list):
+        return []
+    bounded: List[Dict[str, str]] = []
+    total_chars = 0
+    for item in conversation[:MAX_CONVERSATION_MESSAGES]:
+        if not isinstance(item, dict) or item.get("role") not in {"user", "assistant"}:
+            continue
+        content = item.get("content")
+        if not isinstance(content, str) or not content:
+            continue
+        content = content[:MAX_CONVERSATION_MESSAGE_CHARS]
+        if total_chars + len(content) > MAX_CONVERSATION_CHARS:
+            break
+        normalized = {"role": item["role"], "content": content}
+        for key, max_chars in (
+            ("author", MAX_CONVERSATION_AUTHOR_CHARS),
+            ("timestamp", MAX_CONVERSATION_TIMESTAMP_CHARS),
+        ):
+            value = item.get(key)
+            if isinstance(value, str) and value:
+                normalized[key] = value[:max_chars]
+        bounded.append(normalized)
+        total_chars += len(content)
+    return bounded
