@@ -100,6 +100,53 @@ def test_render_preserves_allowed_markdown_url_and_punctuation():
     assert UNTRUSTED_LINK_MARKER not in rendered
 
 
+def test_render_preserves_backtick_url_before_korean_and_balanced_markdown_url():
+    github = "https://github.com/AUSG/anna-v2"
+    wiki = "https://example.test/wiki/Foo_(bar)"
+    result = ChatResult(
+        answer=f"`{github}`예요. [문서]({wiki})",
+        citations=["doc-1"],
+        sources=[Source(document_id="doc-1", url="https://example.test/doc", evidence_urls=[github, wiki])],
+    )
+
+    rendered = QuestionResponse._render_result(result)
+
+    assert f"`{github}`예요." in rendered
+    assert f"[문서]({wiki})" in rendered
+
+
+def test_render_rejects_unknown_and_uncited_evidence_urls():
+    result = ChatResult(
+        answer="[알 수 없음](https://evil.test/no) [미인용](https://example.test/evidence)",
+        citations=[],
+        sources=[
+            Source(
+                document_id="doc-1",
+                url="https://example.test/doc",
+                evidence_urls=["https://example.test/evidence"],
+            )
+        ],
+    )
+
+    rendered = QuestionResponse._render_result(result)
+
+    assert "evil.test" not in rendered
+    assert "example.test/evidence" not in rendered
+
+
+def test_render_cites_current_conversation_without_faking_a_link():
+    result = ChatResult(
+        answer="대화에서 확인했어요.",
+        citations=["conversation:current"],
+        sources=[Source(document_id="conversation:current", url="conversation:current", title="현재 대화")],
+    )
+
+    rendered = QuestionResponse._render_result(result)
+
+    assert rendered.endswith("출처: 현재 대화")
+    assert "<conversation:current|" not in rendered
+
+
 def test_render_marks_malformed_and_plain_untrusted_links_and_legacy_strings():
     result = ChatResult(
         answer="깨진 <https://evil.test/no-close|링크\n일반 https://evil.test/plain.",

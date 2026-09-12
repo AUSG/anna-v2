@@ -23,12 +23,20 @@ logger = logging.getLogger(__name__)
 
 # q) 이후의 질문을 추출하는 정규식
 QUESTION_PATTERN = re.compile(r"q\)\s*(.+)", re.IGNORECASE | re.DOTALL)
-_ANSWER_MARKDOWN_LINK = re.compile(r"\[([^\]]+)\]\((https?://[^)\s]+)\)", re.IGNORECASE)
+# Permit balanced parentheses inside a Markdown URL (for example Wikipedia
+# paths) while keeping the final parenthesis as Markdown syntax.
+_URL_WITH_BALANCED_PARENS = r"https?://(?:[^()\s<>|`]+|\([^()\s<>|`]*\))+"
+_ANSWER_MARKDOWN_LINK = re.compile(
+    rf"\[([^\]]+)\]\(({_URL_WITH_BALANCED_PARENS})\)", re.IGNORECASE
+)
 _ANSWER_SLACK_LINK = re.compile(r"<(https?://[^>|\s]+)(?:\|([^>]*))?>", re.IGNORECASE)
 _ANSWER_MALFORMED_SLACK_LINK = re.compile(
     r"<(https?://[^>|\s]+)(?:\|([^>\n]*))?", re.IGNORECASE
 )
-_ANSWER_PLAIN_URL = re.compile(r"(?:https?://|www\.)[^\s<>|)]+", re.IGNORECASE)
+# Backticks are delimiters rather than part of a URL.  Keep closing
+# parentheses in the candidate so URLs such as ``/wiki/Foo_(bar)`` can be
+# balanced by the normalizer below.
+_ANSWER_PLAIN_URL = re.compile(r"(?:https?://|www\.)[^\s<>|`]+", re.IGNORECASE)
 UNTRUSTED_LINK_MARKER = "[확인되지 않은 링크 제거]"
 
 DEFAULT_SYSTEM_PROMPT = """너는 AUSG(AWSKRUG University Student Group) 커뮤니티의 멤버 같은 AI, ANNA야.
@@ -140,12 +148,14 @@ class QuestionResponse(MentionHandler):
                 continue
             seen.add(source.document_id)
             url = _safe_source_url(source.url)
-            if not url:
-                continue
             label = _escape_slack_text(source.title or source.document_id)
             if source.timestamp:
                 label = f"{label} · {_format_timestamp(source.timestamp)}"
-            cited_sources.append(f"<{url}|{label}>")
+            if url:
+                cited_sources.append(f"<{url}|{label}>")
+            elif source.document_id == "conversation:current" and source.url == "conversation:current":
+                # This is a synthetic source.  It has no external permalink.
+                cited_sources.append(label)
         # The model sees source URLs in its context and may copy or invent links
         # in ``answer``.  Only links belonging to a cited source are trusted;
         # source links are rendered below from structured metadata.
@@ -155,6 +165,14 @@ class QuestionResponse(MentionHandler):
             if source.document_id in cited_ids
             and source_counts[source.document_id] == 1
         }
+        for source in result.sources:
+            if source.document_id not in cited_ids or source_counts[source.document_id] != 1:
+                continue
+            allowed_answer_urls.update(
+                url
+                for url in (_safe_source_url(candidate) for candidate in source.evidence_urls)
+                if url
+            )
         answer = _strip_untrusted_answer_links(answer, allowed_answer_urls)
         if cited_sources:
             answer += "\n\n출처: " + ", ".join(cited_sources)
@@ -269,7 +287,7 @@ class QuestionResponse(MentionHandler):
 
 def _safe_source_url(url: str) -> str:
     """Only put ordinary web URLs into Slack's angle-bracket link syntax."""
-    if not isinstance(url, str) or any(char in url for char in "<>|"):
+    if not isinstance(url, str) or any(char in url for char in "<>|`") or any(char.isspace() for char in url):
         return ""
     parsed = urlsplit(url)
     if parsed.scheme.lower() not in {"http", "https"} or not parsed.netloc:
@@ -307,7 +325,7 @@ def _strip_untrusted_answer_links(answer: str, allowed_urls: set[str]) -> str:
 
     def plain_url(match):
         candidate = match.group(0)
-        trimmed = candidate.rstrip(".,!?;:")
+        trimmed = _normalize_answer_url(candidate)
         suffix = candidate[len(trimmed) :]
         if trimmed in allowed_urls:
             return trimmed + suffix
@@ -324,6 +342,14 @@ def _strip_untrusted_answer_links(answer: str, allowed_urls: set[str]) -> str:
     )
     answer = _ANSWER_MARKDOWN_LINK.sub(markdown_link, answer)
     return _ANSWER_PLAIN_URL.sub(plain_url, answer)
+
+
+def _normalize_answer_url(candidate: str) -> str:
+    """Remove sentence punctuation and unmatched closing URL delimiters."""
+    trimmed = candidate.rstrip(".,!?;:")
+    while trimmed.endswith(")") and trimmed.count(")") > trimmed.count("("):
+        trimmed = trimmed[:-1]
+    return trimmed
 
 
 def _format_timestamp(value: str) -> str:

@@ -27,6 +27,7 @@ class Source:
     user_id: Optional[str] = None
     timestamp: Optional[str] = None
     truncated: bool = False
+    evidence_urls: List[str] = field(default_factory=list)
 
 
 @dataclass
@@ -105,6 +106,13 @@ class QAClient:
                         score=_as_float(raw_source.get("score")),
                         title=_as_string(raw_source.get("title")),
                         url=_as_string(raw_source.get("url")),
+                        evidence_urls=[
+                            url
+                            for url in raw_source.get("evidence_urls", [])
+                            if isinstance(url, str)
+                        ]
+                        if isinstance(raw_source.get("evidence_urls"), list)
+                        else [],
                         content_preview=_as_string(raw_source.get("content_preview")),
                         channel_id=_as_optional_string(raw_source.get("channel_id")),
                         thread_ts=_as_optional_string(raw_source.get("thread_ts")),
