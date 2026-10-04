@@ -89,3 +89,34 @@ class TestMentionRouting(unittest.TestCase):
 
         qa_client.chat.assert_not_called()
         assert "앗, 잘못입력한 것 같아" in slack_client.send_message.call_args.kwargs["msg"]
+
+
+class TestConversationRoles(unittest.TestCase):
+    def _conversation(self, replies, assistant_id="UANNA"):
+        event = {"text": "<@UANNA> 스레드 요약해줘", "ts": "9", "channel": "C", "thread_ts": "1"}
+        slack_client = MagicMock()
+        slack_client.get_replies.return_value = replies
+        sut = QuestionResponse(
+            event, slack_client, MagicMock(), require_prefix=False, assistant_id=assistant_id
+        )
+        return sut._fetch_conversation()
+
+    def test_other_bot_root_is_user_evidence_not_assistant(self):
+        turns = self._conversation(
+            [
+                {"ts": "1", "bot_id": "BGEEK", "username": "GeekNews", "text": "[GeekNews] 패스키"},
+                {"ts": "2", "user": "UANNA", "bot_id": "BANNA", "text": "예전 안나 답변"},
+                {"ts": "3", "user": "U1", "text": "사람 답글"},
+            ]
+        )
+        assert [(t["role"], t.get("author")) for t in turns] == [
+            ("user", "GeekNews"),
+            ("assistant", "UANNA"),
+            ("user", "U1"),
+        ]
+
+    def test_without_assistant_id_bots_are_still_assistant(self):
+        turns = self._conversation(
+            [{"ts": "1", "bot_id": "BGEEK", "text": "봇 글"}], assistant_id=""
+        )
+        assert turns[0]["role"] == "assistant"

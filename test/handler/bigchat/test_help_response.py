@@ -32,3 +32,16 @@ class TestHelpResponse(unittest.TestCase):
         assert mock_slack_client.send_message.call_args.kwargs["msg"].startswith(
             "나를 멘션했을 때, 사용할 수 있는 명령어야"
         )
+
+    def test_question_containing_help_word_is_not_a_command(self):
+        for text in [
+            "<@U01BN035Y6L> 오픈소스 이해하는데 도움주는 플랫폼 알려줘",
+            "<@U01BN035Y6L> how can I help the team?",
+        ]:
+            sut = HelpResponse(create_sample_app_mention_event(text), MagicMock())
+            assert sut.can_handle() is False, text
+
+    def test_command_forms(self):
+        for text in ["<@U01BN035Y6L> help", "<@U01BN035Y6L> /help", "<@U01BN035Y6L>  도움말 "]:
+            sut = HelpResponse(create_sample_app_mention_event(text), MagicMock())
+            assert sut.can_handle() is True, text

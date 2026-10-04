@@ -213,8 +213,11 @@ class QuestionResponse(MentionHandler):
                 continue
             if not text:
                 continue
-            author = self._message_value(message, "user") or self._message_value(
-                message, "author"
+            author = (
+                self._message_value(message, "user")
+                or self._message_value(message, "author")
+                # 다른 봇(GeekNews 등)은 user 가 없다. 이름이라도 남겨야 누가 쓴 글인지 안다
+                or self._message_value(message, "username")
             )
             role = (
                 "assistant" if self._is_assistant_message(message, author) else "user"
@@ -275,9 +278,15 @@ class QuestionResponse(MentionHandler):
         return value if isinstance(value, str) else ""
 
     def _is_assistant_message(self, message: Any, author: str) -> bool:
+        """안나 자신의 발화만 assistant 다.
+
+        다른 봇의 글(GeekNews 스레드 첫 글 등)을 assistant 로 넣으면 요약할 원문이
+        '안나가 했던 말'이 되어 근거에서 빠진다. 안나 id 를 모를 때만 봇 여부로 추정한다.
+        """
+        if self.assistant_id:
+            return author == self.assistant_id
         return bool(
-            (self.assistant_id and author == self.assistant_id)
-            or self._message_value(message, "bot_id")
+            self._message_value(message, "bot_id")
             or self._message_value(message, "subtype") == "bot_message"
         )
 
