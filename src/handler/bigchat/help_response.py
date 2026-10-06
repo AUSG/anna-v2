@@ -1,5 +1,3 @@
-import re
-
 from handler.bigchat.mention_handler import MentionHandler
 from util.utils import strip_multiline
 
@@ -34,7 +32,4 @@ class HelpResponse(MentionHandler):
         return True
 
     def can_handle(self):
-        # "도움말 보여줘"처럼 help/도움으로 시작하는 짧은 요청만 명령이다.
-        # "도움주는 플랫폼 알려줘" 같은 질문은 질문으로 간다
-        command = re.sub(r"<@[A-Z0-9]+>|[^\w가-힣]", "", self.text).lower()
-        return command.startswith(("help", "도움")) and len(command) <= 8
+        return "help" in self.text or "도움" in self.text.lower()
