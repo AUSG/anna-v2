@@ -28,7 +28,8 @@ class TestQuestionResponse(unittest.TestCase):
         assert sut.can_handle() is True
         assert sut.handle_mention() is True
         assert qa_client.chat.call_args.kwargs["question"] == "RAG가 뭐야"
-        slack_client.send_message.assert_called_once()
+        slack_client.send_answer.assert_called_once()
+        assert slack_client.send_answer.call_args.kwargs["answer"] == "답변이야!"
 
     def test_prefix_mode_ignores_plain_text(self):
         sut, _, _ = _make("<@U01BN035Y6L> RAG가 뭐야")

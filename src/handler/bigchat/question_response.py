@@ -4,7 +4,7 @@ import logging
 import re
 from collections import Counter
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 from urllib.parse import urlsplit
 from zoneinfo import ZoneInfo
 
@@ -53,7 +53,12 @@ DEFAULT_SYSTEM_PROMPT = """너는 AUSG(AWSKRUG University Student Group) 커뮤�
 - 출처 표기는 함께 제공되는 인용 규칙을 따른다.
 - 'Context'·'문서'·'ID' 같은 내부 표현은 노출하지 말고 자연스러운 문장으로 답한다.
 - 인사·정체성 질문('살아있어?' 등)엔 근거 뒤지지 말고 ANNA답게 센스 있게 짧게 받아친다.
-- 장황하지 않게, 간결하게."""
+- 장황하지 않게, 간결하게.
+
+Slack 답변 형식:
+- 첫 줄에 결론을 쓴다. 사실 하나를 묻는 질문은 1~3문장으로 끝낸다.
+- 목록은 7개 이하로 쓴다. 표는 쓰지 않는다. 제목(#)은 여러 묶음으로 나뉘는 긴 답변에서만 쓴다.
+- 링크는 [이름](URL) 형식으로 쓴다. 이모지는 답변 하나에 하나까지만 쓴다."""
 
 
 class QuestionResponse(MentionHandler):
@@ -112,21 +117,32 @@ class QuestionResponse(MentionHandler):
             conversation=conversation,
             system_prompt=DEFAULT_SYSTEM_PROMPT,
         )
-        answer = self._render_result(result)
+        answer, sources = self._render_parts(result)
         logger.info("[q)] question=%r | answer=%r", question, answer)
-        self.slack_client.send_message(msg=answer, ts=self.ts)
+        self.slack_client.send_answer(answer=answer, sources=sources, ts=self.ts)
 
         return True
 
     @staticmethod
     def _render_result(result) -> str:
-        """Render a QA result while accepting the old answer-only return value."""
+        """Render a QA result as one plain message (answer + source line)."""
+        answer, sources = QuestionResponse._render_parts(result)
+        if sources:
+            answer += "\n\n출처: " + ", ".join(sources)
+        return answer
+
+    @staticmethod
+    def _render_parts(result) -> Tuple[str, List[str]]:
+        """Return the cleaned answer and its Slack-formatted cited source links.
+
+        The old answer-only return value is still accepted.
+        """
         if result is None:
-            return "앗, 답변 서버가 잠시 응답하지 않아요. 잠시 후 다시 시도해 주세요."
+            return "앗, 답변 서버가 잠시 응답하지 않아요. 잠시 후 다시 시도해 주세요.", []
         if isinstance(result, str):
-            return _strip_untrusted_answer_links(result, set())
+            return _strip_untrusted_answer_links(result, set()), []
         if not isinstance(result, ChatResult):
-            return "앗, 답변 서버가 잠시 응답하지 않아요. 잠시 후 다시 시도해 주세요."
+            return "앗, 답변 서버가 잠시 응답하지 않아요. 잠시 후 다시 시도해 주세요.", []
 
         if result.answer:
             answer = result.answer
@@ -184,10 +200,7 @@ class QuestionResponse(MentionHandler):
                 )
                 if url
             )
-        answer = _strip_untrusted_answer_links(answer, allowed_answer_urls)
-        if cited_sources:
-            answer += "\n\n출처: " + ", ".join(cited_sources)
-        return answer
+        return _strip_untrusted_answer_links(answer, allowed_answer_urls), cited_sources
 
     def _fetch_conversation(self) -> List[Dict[str, str]]:
         """Gather bounded thread history as separately labeled conversation turns."""
