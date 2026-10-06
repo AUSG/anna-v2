@@ -18,6 +18,7 @@ from implementation.qa_client import (
     ChatResult,
     QAClient,
 )
+from implementation.web_search_client import WebSearchClient, WebSearchResult
 
 logger = logging.getLogger(__name__)
 
@@ -37,6 +38,7 @@ _ANSWER_MALFORMED_SLACK_LINK = re.compile(
 # parentheses in the candidate so URLs such as ``/wiki/Foo_(bar)`` can be
 # balanced by the normalizer below.
 _ANSWER_PLAIN_URL = re.compile(r"(?:https?://|www\.)[^\s<>|`]+", re.IGNORECASE)
+_TRAILING_HANGUL = re.compile(r"[가-힣ㄱ-ㅎㅏ-ㅣ]+$")
 UNTRUSTED_LINK_MARKER = "[확인되지 않은 링크 제거]"
 
 DEFAULT_SYSTEM_PROMPT = """너는 AUSG(AWSKRUG University Student Group) 커뮤니티의 멤버 같은 AI, ANNA야.
@@ -60,6 +62,29 @@ Slack 답변 형식:
 - 목록은 7개 이하로 쓴다. 표는 쓰지 않는다. 제목(#)은 여러 묶음으로 나뉘는 긴 답변에서만 쓴다.
 - 링크는 [이름](URL) 형식으로 쓴다. 이모지는 답변 하나에 하나까지만 쓴다."""
 
+# 웹 검색이 필요한지와 검색어를 LLM 이 정한다. 커뮤니티 기록에서 답을 못 찾은 질문에만 묻는다.
+WEB_SEARCH_QUERY_PROMPT = """너는 질문을 웹 검색어로 바꾸는 도우미다.
+주어지는 질문은 AUSG 커뮤니티의 슬랙 대화 기록에서는 답을 찾지 못한 질문이다.
+웹 검색으로 답을 찾을 수 있는 질문이면 검색어 한 줄만 출력한다.
+
+규칙:
+- 앞선 대화에서 생략된 대상·기간·이름을 검색어에 보충한다. 검색어는 질문의 언어를 따른다.
+- 커뮤니티 내부 일정·사람·채널·빅챗처럼 슬랙 기록에만 있을 내용, 인사·잡담·안나에 대한 질문처럼 웹 검색이 도움이 되지 않는 질문이면 NONE 만 출력한다.
+- 설명·따옴표·접두어 없이 검색어 또는 NONE 만 출력한다."""
+
+WEB_EVIDENCE_PROMPT = """
+
+웹 검색 결과:
+커뮤니티 대화 기록에서는 답을 찾지 못해 웹을 검색했다. 아래 결과를 근거로 답할 수 있으며, 그때는 웹에서 찾은 내용임을 짧게 밝힌다.
+아래 결과의 URL 은 확인된 링크로 취급해 그대로 쓸 수 있다. 결과가 질문과 맞지 않으면 억지로 답하지 말고 확인하지 못했다고 한다.
+검색어: {query}
+
+{results}"""
+
+# 검색어 결정에 함께 보내는 앞선 대화 길이. 생략된 지시어를 푸는 용도라 길 필요가 없다
+WEB_SEARCH_CONTEXT_MAX_CHARS = 1500
+WEB_SEARCH_QUERY_MAX_CHARS = 200
+
 
 class QuestionResponse(MentionHandler):
     # 스레드 맥락 과다 방지: 가장 최근부터 이 글자 수까지만 포함
@@ -72,12 +97,16 @@ class QuestionResponse(MentionHandler):
         qa_client: QAClient,
         require_prefix=True,
         assistant_id: Optional[str] = None,
+        web_search_client: Optional[WebSearchClient] = None,
     ):
         """require_prefix=True 면 `q)` 가 있을 때만 반응한다 (명령어보다 먼저 평가되는 명시적 질문).
 
         require_prefix=False 면 멘션 텍스트 전체를 질문으로 취급한다 — 셔플/새로운 빅챗/help
         등 어느 명령에도 걸리지 않은 멘션을 받아주는 체인 마지막 자리 전용. 빈 멘션은
         can_handle 이 False 라 기존 폴백(SimpleResponse)으로 넘어간다.
+
+        web_search_client 가 있으면, 커뮤니티 기록에서 답을 못 찾은 질문(insufficient_evidence)에
+        한해 웹을 검색하고 그 결과를 근거로 한 번 더 답한다. None 이면 웹 검색 없이 동작한다.
         """
         self.text = event["text"]
         self.ts = event["ts"]
@@ -88,6 +117,7 @@ class QuestionResponse(MentionHandler):
         self.qa_client = qa_client
         self.require_prefix = require_prefix
         self.assistant_id = assistant_id or event.get("assistant_id")
+        self.web_search_client = web_search_client
 
     def handle_mention(self):
         if not self.can_handle():
@@ -117,26 +147,97 @@ class QuestionResponse(MentionHandler):
             conversation=conversation,
             system_prompt=DEFAULT_SYSTEM_PROMPT,
         )
-        answer, sources = self._render_parts(result)
+
+        web_results: List[WebSearchResult] = []
+        if self._needs_web_search(result):
+            web_query, web_results = self._search_web(question, conversation)
+            if web_results:
+                logger.info(
+                    "[q)] web search query=%r (%d results); asking again",
+                    web_query,
+                    len(web_results),
+                )
+                result = self.qa_client.chat(
+                    question=question,
+                    conversation=conversation,
+                    system_prompt=DEFAULT_SYSTEM_PROMPT
+                    + _format_web_evidence(web_query, web_results),
+                )
+
+        answer, sources = self._render_parts(result, web_results)
         logger.info("[q)] question=%r | answer=%r", question, answer)
         self.slack_client.send_answer(answer=answer, sources=sources, ts=self.ts)
 
         return True
 
+    def _needs_web_search(self, result) -> bool:
+        """QA 서버가 '기록에서 확인하지 못했다'고 판단한 질문만 웹으로 넘긴다.
+
+        서버 장애(None)는 웹으로 메울 일이 아니고, 인사(no_search_needed)나 기록끼리 충돌하는
+        경우(conflicting_evidence)는 웹이 답을 주지 않는다.
+        """
+        return (
+            self.web_search_client is not None
+            and isinstance(result, ChatResult)
+            and result.status == "insufficient_evidence"
+        )
+
+    def _search_web(
+        self, question: str, conversation: List[Dict[str, str]]
+    ) -> Tuple[str, List[WebSearchResult]]:
+        query = self._decide_web_query(question, conversation)
+        if not query:
+            logger.info("[q)] web search skipped: not a web-searchable question")
+            return "", []
+        try:
+            results = self.web_search_client.search(query)
+        except Exception as e:  # noqa: BLE001
+            logger.warning("Web search failed: %s", e)
+            return query, []
+        if not results:
+            logger.info("[q)] web search query=%r returned nothing", query)
+        return query, results
+
+    def _decide_web_query(
+        self, question: str, conversation: List[Dict[str, str]]
+    ) -> str:
+        """LLM 에게 검색이 도움이 될지와 검색어를 묻는다. 판단에 실패하면 질문 그대로 검색한다."""
+        content = f"질문: {question}"
+        context = _recent_conversation_text(conversation)
+        if context:
+            content = f"앞선 대화:\n{context}\n\n{content}"
+        try:
+            decision = self.qa_client.generate(
+                content=content, system_prompt=WEB_SEARCH_QUERY_PROMPT, max_tokens=64
+            )
+        except Exception as e:  # noqa: BLE001
+            logger.warning("Web search query decision failed: %s", e)
+            decision = None
+        if decision is None:
+            return question[:WEB_SEARCH_QUERY_MAX_CHARS]
+        return _parse_web_query(decision)
+
     @staticmethod
-    def _render_result(result) -> str:
+    def _render_result(
+        result, web_results: Optional[List[WebSearchResult]] = None
+    ) -> str:
         """Render a QA result as one plain message (answer + source line)."""
-        answer, sources = QuestionResponse._render_parts(result)
+        answer, sources = QuestionResponse._render_parts(result, web_results)
         if sources:
             answer += "\n\n출처: " + ", ".join(sources)
         return answer
 
     @staticmethod
-    def _render_parts(result) -> Tuple[str, List[str]]:
+    def _render_parts(
+        result, web_results: Optional[List[WebSearchResult]] = None
+    ) -> Tuple[str, List[str]]:
         """Return the cleaned answer and its Slack-formatted cited source links.
 
-        The old answer-only return value is still accepted.
+        The old answer-only return value is still accepted. ``web_results`` are the
+        web pages the answer was given as evidence: their URLs are trusted in the
+        answer and listed after the community sources.
         """
+        web_results = list(web_results or [])
         if result is None:
             return "앗, 답변 서버가 잠시 응답하지 않아요. 잠시 후 다시 시도해 주세요.", []
         if isinstance(result, str):
@@ -146,6 +247,8 @@ class QuestionResponse(MentionHandler):
 
         if result.answer:
             answer = result.answer
+        elif result.status == "insufficient_evidence" and web_results:
+            answer = "흐음~ 관련 기록과 웹에서도 확인하지 못했어요."
         elif result.status == "insufficient_evidence":
             answer = "흐음~ 관련 기록에서는 확인하지 못했어요."
         elif result.status == "conflicting_evidence":
@@ -200,6 +303,13 @@ class QuestionResponse(MentionHandler):
                 )
                 if url
             )
+        # 웹 검색 결과는 모델에게 근거로 준 페이지들이다. 답변 안의 링크로 허용하고,
+        # 답변이 실제로 인용한 페이지만 출처 줄에 붙인다.
+        web_urls = {
+            url for url in (_safe_source_url(r.url) for r in web_results) if url
+        }
+        allowed_answer_urls.update(web_urls)
+        cited_sources.extend(_cited_web_sources(answer, web_results))
         return _strip_untrusted_answer_links(answer, allowed_answer_urls), cited_sources
 
     def _fetch_conversation(self) -> List[Dict[str, str]]:
@@ -318,6 +428,69 @@ class QuestionResponse(MentionHandler):
         return clean_text
 
 
+def _format_web_evidence(query: str, results: List[WebSearchResult]) -> str:
+    """시스템 프롬프트 끝에 붙일 웹 검색 결과 블록."""
+    lines = []
+    for index, result in enumerate(results, start=1):
+        head = f"{index}. {result.title or result.url}"
+        if result.published_date:
+            head += f" ({result.published_date})"
+        lines.append(head)
+        lines.append(f"   URL: {result.url}")
+        if result.content:
+            lines.append(f"   {result.content}")
+    return WEB_EVIDENCE_PROMPT.format(query=query, results="\n".join(lines))
+
+
+def _cited_web_sources(answer: str, results: List[WebSearchResult]) -> List[str]:
+    """답변 본문이 링크로 인용한 웹 페이지만 출처 링크로 만든다.
+
+    커뮤니티 출처는 서버가 citations 로 알려주지만 웹 결과는 그런 신호가 없다. 검색 결과 전부를
+    출처로 달면 답과 무관한 페이지까지 섞이므로, 모델이 답변에 실제로 넣은 URL 만 고른다.
+    """
+    cited = []
+    seen = set()
+    for result in results:
+        url = _safe_source_url(result.url)
+        if not url or url in seen or url not in answer:
+            continue
+        seen.add(url)
+        label = _escape_slack_text(result.title or url)
+        cited.append(f"<{url}|{label} · 웹>")
+    return cited
+
+
+def _recent_conversation_text(conversation: List[Dict[str, str]]) -> str:
+    """검색어 결정용으로 최근 대화를 짧게 요약한 텍스트 (최근 발화부터 거꾸로 채운다)."""
+    lines: List[str] = []
+    total = 0
+    for item in reversed(conversation or []):
+        content = item.get("content", "")
+        if not content:
+            continue
+        line = f"{item.get('author', item.get('role', ''))}: {content}".strip(": ")
+        if lines and total + len(line) + 1 > WEB_SEARCH_CONTEXT_MAX_CHARS:
+            break
+        lines.append(line[:WEB_SEARCH_CONTEXT_MAX_CHARS])
+        total += len(line) + 1
+    return "\n".join(reversed(lines))
+
+
+def _parse_web_query(decision: str) -> str:
+    """LLM 의 검색어 응답에서 첫 줄만 취한다. NONE 이면 빈 문자열(검색 안 함)."""
+    for line in (decision or "").splitlines():
+        line = line.strip().strip("`\"'“”‘’").strip()
+        if not line:
+            continue
+        for prefix in ("검색어:", "query:", "Query:"):
+            if line.startswith(prefix):
+                line = line[len(prefix) :].strip()
+        if line.upper() == "NONE" or not line:
+            return ""
+        return line[:WEB_SEARCH_QUERY_MAX_CHARS]
+    return ""
+
+
 def _safe_source_url(url: str) -> str:
     """Only put ordinary web URLs into Slack's angle-bracket link syntax."""
     if (
@@ -382,8 +555,12 @@ def _strip_untrusted_answer_links(answer: str, allowed_urls: set[str]) -> str:
 
 
 def _normalize_answer_url(candidate: str) -> str:
-    """Remove sentence punctuation and unmatched closing URL delimiters."""
-    trimmed = candidate.rstrip(".,!?;:")
+    """Remove sentence punctuation and unmatched closing URL delimiters.
+
+    Korean text glued to a URL (``[링크](https://a.test/)은``) is a particle, not
+    part of the URL, so it is dropped before the delimiter check.
+    """
+    trimmed = _TRAILING_HANGUL.sub("", candidate).rstrip(".,!?;:")
     while trimmed.endswith(")") and trimmed.count(")") > trimmed.count("("):
         trimmed = trimmed[:-1]
     return trimmed

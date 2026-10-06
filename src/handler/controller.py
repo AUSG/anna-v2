@@ -27,12 +27,14 @@ from handler.loading_emoji import LoadingEmoji
 from implementation.github_client import GithubClient
 from implementation.google_spreadsheet_client import GoogleSpreadsheetClient
 from implementation.qa_client import QAClient
+from implementation.web_search_client import WebSearchClient
 from implementation.member_finder import MemberManager
 from implementation.slack_client import NO_UNFURL, SlackClient
 from util.utils import search_value
 
 MEMBER_MANAGER = None
 QA_CLIENT = None
+WEB_SEARCH_CLIENT = None
 
 
 def _loading_emoji(slack_client, event) -> LoadingEmoji:
@@ -61,6 +63,16 @@ def _get_qa_client():
             api_key=envs.QA_API_KEY,
         )
     return QA_CLIENT
+
+
+def _get_web_search_client():
+    """웹 검색 클라이언트. 키가 비어 있으면 None 을 돌려주고 질답은 웹 검색 없이 동작한다."""
+    global WEB_SEARCH_CLIENT
+    if not envs.TAVILY_API_KEY:
+        return None
+    if not WEB_SEARCH_CLIENT:
+        WEB_SEARCH_CLIENT = WebSearchClient(api_key=envs.TAVILY_API_KEY)
+    return WEB_SEARCH_CLIENT
 
 
 # reaction_added event sample:
@@ -143,7 +155,11 @@ def mention_response(event, say, client):
         GithubClient(envs.GITHUB_TOKEN, envs.GITHUB_REPO),
     )
     question_response = QuestionResponse(
-        event, slack_client, _get_qa_client(), assistant_id=envs.ANNA_ID
+        event,
+        slack_client,
+        _get_qa_client(),
+        assistant_id=envs.ANNA_ID,
+        web_search_client=_get_web_search_client(),
     )
     # 어느 명령에도 걸리지 않은 멘션은 텍스트 전체를 질문으로 처리 (빈 멘션만 SimpleResponse 로)
     question_fallback = QuestionResponse(
@@ -152,6 +168,7 @@ def mention_response(event, say, client):
         _get_qa_client(),
         require_prefix=False,
         assistant_id=envs.ANNA_ID,
+        web_search_client=_get_web_search_client(),
     )
     # 멘션은 어느 명령에도 걸리지 않아도 폴백(SimpleResponse)이 답하므로 항상 실제 동작이 있다.
     # 따라서 run() 전체를 감싸도 no-op 에 이모지가 붙는 일이 없다.

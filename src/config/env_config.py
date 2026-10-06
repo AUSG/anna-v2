@@ -52,6 +52,8 @@ class Settings(BaseSettings):
     # QnA API settings
     QA_SERVER_BASE_URL: str = ""
     QA_API_KEY: str = ""
+    # 질답 웹 검색 (Tavily). 비어 있으면 웹 검색 없이 커뮤니티 기록만으로 답한다
+    TAVILY_API_KEY: str = ""
 
     # Bigchat calendar buttons (#112)
     PUBLIC_BASE_URL: str = "https://anna-v2-2023.fly.dev"
