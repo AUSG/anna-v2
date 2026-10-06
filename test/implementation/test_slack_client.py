@@ -129,3 +129,48 @@ class TestSlackClientGetEmoji(unittest.TestCase):
 
         assert self.sut.get_emoji(channel="C1", ts="123.456", emoji_name="gogo") is None
         assert self.mock_web_client.reactions_get.call_count == 3
+
+
+class TestSendAnswer(unittest.TestCase):
+    def test_answer_goes_to_markdown_block_and_sources_to_context(self):
+        say = MagicMock()
+        sut = SlackClient(say, MagicMock())
+
+        sut.send_answer(
+            answer="### 결론\n<https://a.test|문서> 참고",
+            sources=["<https://slack.ausg.me/c/C?t=1|#general>"],
+            ts="1.0",
+        )
+
+        kwargs = say.call_args.kwargs
+        assert kwargs["blocks"] == [
+            {"type": "markdown", "text": "### 결론\n[문서](https://a.test) 참고"},
+            {
+                "type": "context",
+                "elements": [
+                    {"type": "mrkdwn", "text": "출처: <https://slack.ausg.me/c/C?t=1|#general>"}
+                ],
+            },
+        ]
+        assert kwargs["text"].endswith("출처: <https://slack.ausg.me/c/C?t=1|#general>")
+        assert kwargs["thread_ts"] == "1.0" and kwargs["unfurl_links"] is False
+
+    def test_rejected_blocks_fall_back_to_plain_text(self):
+        say = MagicMock(
+            side_effect=[SlackApiError("invalid", {"error": "invalid_blocks"}), None]
+        )
+        sut = SlackClient(say, MagicMock())
+
+        sut.send_answer(answer="답", sources=[], ts="1.0")
+
+        assert say.call_count == 2
+        assert say.call_args.args == ("답",) and "blocks" not in say.call_args.kwargs
+
+    def test_too_long_answer_is_sent_as_text(self):
+        say = MagicMock()
+        sut = SlackClient(say, MagicMock())
+
+        sut.send_answer(answer="가" * 12001, sources=[], ts="1.0")
+
+        say.assert_called_once()
+        assert "blocks" not in say.call_args.kwargs

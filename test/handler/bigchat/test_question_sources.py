@@ -1,5 +1,10 @@
 from handler.bigchat.question_response import QuestionResponse, UNTRUSTED_LINK_MARKER
-from implementation.qa_client import ChatResult, Source
+from implementation.qa_client import (
+    MAX_CONVERSATION_CHARS,
+    MAX_CONVERSATION_MESSAGES,
+    ChatResult,
+    Source,
+)
 from unittest.mock import MagicMock
 
 
@@ -222,8 +227,8 @@ def test_handler_bounds_history_to_root_and_recent_turns():
     QuestionResponse(event, slack, qa).handle_mention()
     conversation = qa.chat.call_args.kwargs["conversation"]
 
-    assert len(conversation) <= 40
-    assert sum(len(item["content"]) for item in conversation) <= 16000
+    assert len(conversation) <= MAX_CONVERSATION_MESSAGES
+    assert sum(len(item["content"]) for item in conversation) <= MAX_CONVERSATION_CHARS
     assert conversation[0]["content"].startswith("메시지-0")
     assert conversation[-1]["content"].startswith("메시지-49")
 

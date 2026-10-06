@@ -1,4 +1,5 @@
 import logging
+import re
 from typing import List, Optional
 
 import requests
@@ -14,6 +15,17 @@ logger = logging.getLogger(__name__)
 # 지저분해진다. chat.postMessage / say 에 그대로 펼쳐서 넘긴다.
 # XXX: chat.postEphemeral 은 unfurl 옵션을 지원하지 않아 적용 대상이 아니다.
 NO_UNFURL = {"unfurl_links": False, "unfurl_media": False}
+
+# markdown 블록 한 개에 넣을 수 있는 글자 수. 넘으면 text 한 덩어리로 보낸다
+MARKDOWN_BLOCK_LIMIT = 12000
+_SLACK_LINK = re.compile(r"<(https?://[^>|\s]+)(?:\|([^>]*))?>")
+
+
+def to_markdown_links(text: str) -> str:
+    """markdown 블록은 표준 마크다운만 그린다. 본문에 남은 Slack 링크(<url|이름>)를 [이름](url) 로 바꾼다."""
+    return _SLACK_LINK.sub(
+        lambda m: f"[{m.group(2)}]({m.group(1)})" if m.group(2) else m.group(1), text
+    )
 
 
 class Message(BaseModel):
@@ -44,6 +56,32 @@ class SlackClient:
 
     def send_message(self, msg: str, ts: str):
         self.say(msg, thread_ts=ts, **NO_UNFURL)
+
+    def send_answer(self, answer: str, sources: List[str], ts: str):
+        """질문 답변. 본문은 표준 마크다운을 그리는 markdown 블록, 출처는 회색 작은 글씨(context 블록)로 보낸다.
+
+        text 는 알림·검색용 대체 문자열이다. 블록이 거절되면 예전처럼 text 한 덩어리로 보낸다.
+        """
+        source_line = ("출처: " + " · ".join(sources)) if sources else ""
+        text = answer + (f"\n\n{source_line}" if source_line else "")
+        if len(answer) <= MARKDOWN_BLOCK_LIMIT:
+            blocks = [{"type": "markdown", "text": to_markdown_links(answer)}]
+            if source_line:
+                blocks.append(
+                    {
+                        "type": "context",
+                        "elements": [{"type": "mrkdwn", "text": source_line}],
+                    }
+                )
+            try:
+                self.say(text=text, blocks=blocks, thread_ts=ts, **NO_UNFURL)
+                return
+            except SlackApiError as ex:
+                logger.warning(
+                    "markdown blocks rejected (%s); sending plain text",
+                    ex.response.get("error") if ex.response else ex,
+                )
+        self.send_message(text, ts)
 
     def send_direct_message(self, user_id: str, msg: str):
         """유저와 앱 사이의 DM 으로 메시지를 보낸다. channel 에 user id 를 주면 슬랙이 DM 채널로 라우팅한다."""
