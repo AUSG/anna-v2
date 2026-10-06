@@ -267,3 +267,15 @@ def test_untrusted_named_links_leave_visible_marker():
         "<https://wrong.test|출처> [출처](https://wrong.test)"
     )
     assert rendered.count(UNTRUSTED_LINK_MARKER) == 2
+
+
+def test_markdown_link_followed_by_korean_particle_keeps_trusted_url():
+    result = ChatResult(
+        answer="[공지](https://example.test/1)은 여기, https://example.test/1은 같은 링크.",
+        citations=["doc-1"],
+        sources=[Source(document_id="doc-1", title="#공지", url="https://example.test/1")],
+    )
+
+    answer, _ = QuestionResponse._render_parts(result)
+
+    assert answer == result.answer
