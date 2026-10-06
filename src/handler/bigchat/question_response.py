@@ -37,6 +37,7 @@ _ANSWER_MALFORMED_SLACK_LINK = re.compile(
 # parentheses in the candidate so URLs such as ``/wiki/Foo_(bar)`` can be
 # balanced by the normalizer below.
 _ANSWER_PLAIN_URL = re.compile(r"(?:https?://|www\.)[^\s<>|`]+", re.IGNORECASE)
+_TRAILING_HANGUL = re.compile(r"[가-힣ㄱ-ㅎㅏ-ㅣ]+$")
 UNTRUSTED_LINK_MARKER = "[확인되지 않은 링크 제거]"
 
 DEFAULT_SYSTEM_PROMPT = """너는 AUSG(AWSKRUG University Student Group) 커뮤니티의 멤버 같은 AI, ANNA야.
@@ -382,8 +383,12 @@ def _strip_untrusted_answer_links(answer: str, allowed_urls: set[str]) -> str:
 
 
 def _normalize_answer_url(candidate: str) -> str:
-    """Remove sentence punctuation and unmatched closing URL delimiters."""
-    trimmed = candidate.rstrip(".,!?;:")
+    """Remove sentence punctuation and unmatched closing URL delimiters.
+
+    Korean text glued to a URL (``[링크](https://a.test/)은``) is a particle, not
+    part of the URL, so it is dropped before the delimiter check.
+    """
+    trimmed = _TRAILING_HANGUL.sub("", candidate).rstrip(".,!?;:")
     while trimmed.endswith(")") and trimmed.count(")") > trimmed.count("("):
         trimmed = trimmed[:-1]
     return trimmed
