@@ -83,6 +83,22 @@ class SlackClient:
                 )
         self.send_message(text, ts)
 
+    def post_markdown(self, channel: str, text: str):
+        """채널에 새 글을 markdown 블록으로 올린다. 블록이 거절되면 text 한 덩어리로 보낸다."""
+        try:
+            self.web_client.chat_postMessage(
+                channel=channel,
+                text=text,
+                blocks=[{"type": "markdown", "text": to_markdown_links(text)}],
+                **NO_UNFURL,
+            )
+        except SlackApiError as ex:
+            logger.warning(
+                "markdown blocks rejected (%s); sending plain text",
+                ex.response.get("error") if ex.response else ex,
+            )
+            self.web_client.chat_postMessage(channel=channel, text=text, **NO_UNFURL)
+
     def send_direct_message(self, user_id: str, msg: str):
         """유저와 앱 사이의 DM 으로 메시지를 보낸다. channel 에 user id 를 주면 슬랙이 DM 채널로 라우팅한다."""
         self.web_client.chat_postMessage(channel=user_id, text=msg, **NO_UNFURL)

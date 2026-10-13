@@ -66,5 +66,10 @@ class Settings(BaseSettings):
     # 로컬 개발 중 프로덕션과 중복 발송되지 않게 하려면 false 로 끈다
     BIGCHAT_REMINDER_ENABLED: bool = True
 
+    # 어제의 핫스레드 다이제스트 (매일 10:00 KST, crawler 가 글을 쓰고 안나가 올린다)
+    # 로컬 개발 중 프로덕션과 중복 게시되지 않게 하려면 false 로 끈다
+    DAILY_DIGEST_ENABLED: bool = True
+    DAILY_DIGEST_CHANNEL_ID: str = "C03SZTDEDK3"  # fun-anna-house
+
 
 envs = Settings()  # Singleton

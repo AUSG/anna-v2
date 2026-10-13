@@ -186,6 +186,20 @@ class QAClient:
             logger.error(f"QA server generate parsing failed: {e}")
             return None
 
+    def daily_digest(self) -> str:
+        """어제의 핫스레드 다이제스트 글(crawler 가 고르고 쓴다). 소개할 게 없으면 빈 문자열.
+
+        스케줄러 잡이 관리자 채널에 알릴 수 있도록 실패는 예외로 올린다.
+        """
+        response = requests.post(
+            f"{self.qa_server_base_url}/api/v1/digest/daily",
+            json={},
+            headers={"X-API-Key": self.api_key},
+            timeout=300,
+        )
+        response.raise_for_status()
+        return response.json().get("text") or ""
+
     def is_healthy(self) -> bool:
         headers = {"X-API-Key": self.api_key}
 
