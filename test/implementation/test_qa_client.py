@@ -75,6 +75,7 @@ def test_chat_malformed_status_is_treated_as_answered():
 
     assert result.status == "answered"
 
+
 def test_chat_http_error_is_service_failure_and_not_insufficient_evidence():
     response = MagicMock()
     response.raise_for_status.side_effect = requests.HTTPError("503")
@@ -98,3 +99,21 @@ def test_chat_sends_conversation_separately_and_bounds_it():
         {"role": "user", "content": "u" * 4000, "author": "U1" * 100},
         {"role": "assistant", "content": "a", "timestamp": "123" * 33 + "1"},
     ]
+
+
+def test_daily_digest_returns_text_and_raises_on_http_error():
+    with patch(
+        "implementation.qa_client.requests.post",
+        return_value=_response({"text": "핫스레드"}),
+    ) as post:
+        assert QAClient("https://qa.test/", "secret").daily_digest() == "핫스레드"
+    assert post.call_args.args[0] == "https://qa.test/api/v1/digest/daily"
+
+    failed = _response({}, status_code=503)
+    failed.raise_for_status.side_effect = requests.exceptions.HTTPError("503")
+    with patch("implementation.qa_client.requests.post", return_value=failed):
+        try:
+            QAClient("https://qa.test", "secret").daily_digest()
+            raise AssertionError("expected HTTPError")
+        except requests.exceptions.HTTPError:
+            pass

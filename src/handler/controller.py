@@ -290,6 +290,28 @@ def remind_bigchat():
             logger.exception("Failed to notify admin channel")
 
 
+def post_daily_digest():
+    logger = logging.getLogger(__name__)
+    web_client = WebClient(token=envs.SLACK_BOT_TOKEN)
+    try:
+        text = _get_qa_client().daily_digest()
+        if not text:
+            logger.info("Daily digest: nothing to post")
+            return
+        SlackClient(None, web_client).post_markdown(envs.DAILY_DIGEST_CHANNEL_ID, text)
+        logger.info("Daily digest posted")
+    except Exception:
+        logger.exception("Failed to post daily digest")
+        try:
+            web_client.chat_postMessage(
+                channel=envs.ADMIN_CHANNEL,
+                text=f":blob-fearful: 데일리 핫스레드 게시 중 에러가 발생했어!\n```\n{traceback.format_exc()}\n```",
+                **NO_UNFURL,
+            )
+        except Exception:
+            logger.exception("Failed to notify admin channel")
+
+
 # message event: 지정 채널(fun-anna-house)의 새 글(스레드 제외)에
 # 김수빈 말투로 자동 답글 (대상 채널은 SubinLikeResponse 에 하드코딩)
 @catch_global_error()

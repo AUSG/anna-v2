@@ -19,6 +19,7 @@ from handler.controller import (
     announce_new_channel_created,
     mention_response,
     open_create_bigchat_modal,
+    post_daily_digest,
     remind_bigchat,
     submit_create_bigchat_modal,
     subin_like_response,
@@ -47,6 +48,13 @@ if envs.BIGCHAT_REMINDER_ENABLED:
     logging.getLogger(__name__).info(
         "Bigchat reminder scheduler started (daily 18:00 KST)"
     )
+
+# 어제의 핫스레드를 매일 아침 10시(KST)에 fun-anna-house 에 올린다
+if envs.DAILY_DIGEST_ENABLED:
+    DailyScheduler(
+        job=post_daily_digest, hour=10, minute=0, tz=KST, name="daily-digest"
+    ).start()
+    logging.getLogger(__name__).info("Daily digest scheduler started (daily 10:00 KST)")
 
 
 @app.event("reaction_added")

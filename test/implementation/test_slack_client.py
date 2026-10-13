@@ -148,7 +148,10 @@ class TestSendAnswer(unittest.TestCase):
             {
                 "type": "context",
                 "elements": [
-                    {"type": "mrkdwn", "text": "출처: <https://slack.ausg.me/c/C?t=1|#general>"}
+                    {
+                        "type": "mrkdwn",
+                        "text": "출처: <https://slack.ausg.me/c/C?t=1|#general>",
+                    }
                 ],
             },
         ]
@@ -174,3 +177,28 @@ class TestSendAnswer(unittest.TestCase):
 
         say.assert_called_once()
         assert "blocks" not in say.call_args.kwargs
+
+
+class TestPostMarkdown(unittest.TestCase):
+    def test_posts_markdown_block_without_unfurl(self):
+        web_client = MagicMock()
+        SlackClient(None, web_client).post_markdown(
+            "C1", "**핫스레드** <https://a.test|보기>"
+        )
+
+        kwargs = web_client.chat_postMessage.call_args.kwargs
+        assert kwargs["channel"] == "C1" and kwargs["unfurl_links"] is False
+        assert kwargs["blocks"] == [
+            {"type": "markdown", "text": "**핫스레드** [보기](https://a.test)"}
+        ]
+
+    def test_rejected_blocks_fall_back_to_plain_text(self):
+        web_client = MagicMock()
+        web_client.chat_postMessage.side_effect = [
+            SlackApiError("invalid", {"error": "invalid_blocks"}),
+            None,
+        ]
+        SlackClient(None, web_client).post_markdown("C1", "글")
+
+        assert web_client.chat_postMessage.call_count == 2
+        assert "blocks" not in web_client.chat_postMessage.call_args.kwargs
