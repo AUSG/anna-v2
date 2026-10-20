@@ -163,7 +163,8 @@ class SlackClient:
                 ts=msg["ts"],
                 thread_ts=msg.get("thread_ts") or msg.get("ts"),
                 channel=channel,
-                user=msg["user"],
+                # 봇 글(RSS 피드 등)에는 user 가 없고 bot_id 만 있다
+                user=msg.get("user") or msg.get("bot_id") or "",
                 text=msg["text"],
             )
             for msg in messages
