@@ -18,6 +18,24 @@ class TestSlackClient(unittest.TestCase):
             channel="U0001", text="내일 만나!", unfurl_links=False, unfurl_media=False
         )
 
+    def test_get_replies_accepts_bot_messages(self):
+        mock_web_client = MagicMock()
+        mock_web_client.conversations_replies.return_value = MagicMock(
+            status_code=200,
+            data=None,
+            __getitem__=lambda _, k: {
+                "messages": [
+                    {"ts": "1.0", "thread_ts": "1.0", "bot_id": "B0450NN7ESV", "text": "피드"},
+                    {"ts": "1.1", "thread_ts": "1.0", "user": "U0001", "text": "gogo"},
+                ]
+            }[k],
+        )
+        sut = SlackClient(MagicMock(), mock_web_client)
+
+        messages = sut.get_replies(channel="C045BQPFT08", thread_ts="1.0")
+
+        self.assertEqual([m.user for m in messages], ["B0450NN7ESV", "U0001"])
+
     def test_send_thread_message(self):
         mock_web_client = MagicMock()
         sut = SlackClient(MagicMock(), mock_web_client)
