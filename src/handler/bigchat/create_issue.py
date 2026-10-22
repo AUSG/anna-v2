@@ -1,18 +1,15 @@
 import logging
-import re
 
 from handler.bigchat.mention_handler import MentionHandler
+from handler.mention_router import (
+    ISSUE_TRIGGER_PATTERN as TRIGGER_PAT,
+    MENTION_PATTERN as MENTION_PAT,
+    matches_mention,
+)
 from implementation.github_client import GithubApiError
 from util.utils import strip_multiline
 
 logger = logging.getLogger(__name__)
-
-# "새로운 이슈 ...", "이슈 만들어줘 ...", "이슈 등록해줘 ...", "이슈 파줘 ..." 를 모두 받는다.
-# [가-힣]* 는 '만들어줘'/'만들자' 같은 어미를 통째로 먹어서, 남는 부분이 곧 제목이 되게 한다.
-TRIGGER_PAT = re.compile(
-    r"(?:새로운\s*이슈|새\s*이슈|이슈\s*(?:만들|만드|등록|생성)[가-힣]*|이슈\s*(?:파|따)(?:줘|자|줄래|주라|주세요))"
-)
-MENTION_PAT = re.compile(r"<@[A-Z0-9]+>")
 
 # 슬랙 한 줄이 그대로 제목이 되므로, 깃허브 제한(256자)보다 짧게 잘라 목록에서 읽히게 한다
 MAX_TITLE_LEN = 120
@@ -53,7 +50,7 @@ class CreateIssue(MentionHandler):
         self.github_client = github_client
 
     def can_handle(self):
-        return bool(TRIGGER_PAT.search(self.text))
+        return matches_mention("create_issue", self.text)
 
     def handle_mention(self):
         if not self.can_handle():

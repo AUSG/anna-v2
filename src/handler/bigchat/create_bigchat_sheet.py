@@ -4,6 +4,7 @@ from slack_sdk.errors import SlackApiError
 
 from handler.bigchat.join_bigchat import build_registration_info_message
 from handler.bigchat.mention_handler import MentionHandler
+from handler.mention_router import matches_mention
 from implementation.member_finder import MemberLackInfo, MemberNotFound
 from util.bigchat_event import parse_sheet_name
 from util.utils import strip_multiline
@@ -152,4 +153,4 @@ class CreateBigchatSheet(MentionHandler):
         return True
 
     def can_handle(self):
-        return "새로운 빅챗" in self.text
+        return matches_mention("create_bigchat", self.text)

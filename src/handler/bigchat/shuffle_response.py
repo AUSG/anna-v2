@@ -1,6 +1,7 @@
 import random
 import re
 from handler.bigchat.mention_handler import MentionHandler
+from handler.mention_router import matches_mention
 
 
 class ShuffleResponse(MentionHandler):
@@ -18,7 +19,7 @@ class ShuffleResponse(MentionHandler):
         return True
 
     def can_handle(self):
-        return "섞어줘" in self.text or "shuffle" in self.text.lower()
+        return matches_mention("shuffle", self.text)
 
     def _shuffle(self, text):
         # 유저 이름들을 정규표현식 (<@Uxxx>) 로 추출하고 셔플한 뒤 스트링화

@@ -3,11 +3,11 @@ import re
 
 from handler.bigchat.mention_handler import MentionHandler
 from handler.bigchat.remind_bigchat import RemindBigchat, ReminderResult
+from handler.mention_router import REMINDER_TRIGGER as TRIGGER, matches_mention
 from util.utils import strip_multiline
 
 logger = logging.getLogger(__name__)
 
-TRIGGER = "빅챗 리마인더"
 TEST_PHRASE = "테스트"
 # 전원 발송은 되돌릴 수 없어서, 이 문구를 통째로 쳐야만 실행된다
 BROADCAST_PHRASE = "지금 전원 발송"
@@ -40,7 +40,7 @@ class RemindBigchatCommand(MentionHandler):
         self.anna_id = anna_id
 
     def can_handle(self):
-        return TRIGGER in self.text
+        return matches_mention("reminder", self.text)
 
     def handle_mention(self):
         if not self.can_handle():

@@ -16,7 +16,6 @@ from handler.bigchat.create_issue import CreateIssue
 from handler.bigchat.join_bigchat import JoinBigchat
 from handler.bigchat.simple_response import SimpleResponse
 from handler.bigchat.shuffle_response import ShuffleResponse
-from handler.bigchat.mention_response import MentionResponse
 from handler.bigchat.remind_bigchat import RemindBigchat
 from handler.bigchat.remind_bigchat_command import RemindBigchatCommand
 from handler.bigchat.help_response import HelpResponse
@@ -24,6 +23,7 @@ from handler.bigchat.question_response import QuestionResponse
 from handler.bigchat.subin_like_response import SubinLikeResponse
 from handler.decorator import catch_global_error
 from handler.loading_emoji import LoadingEmoji
+from handler.mention_router import classify_mention
 from implementation.github_client import GithubClient
 from implementation.google_spreadsheet_client import GoogleSpreadsheetClient
 from implementation.qa_client import QAClient
@@ -120,55 +120,51 @@ def abandon_bigchat(event, say, client):
 @catch_global_error()
 def mention_response(event, say, client):
     slack_client = SlackClient(say, client)
-    help_response = HelpResponse(event, slack_client)
-    shuffle_response = ShuffleResponse(event, slack_client)
-    simple_response = SimpleResponse(event, slack_client)
-    create_bigchat_sheet = CreateBigchatSheet(
-        event,
-        slack_client,
-        GoogleSpreadsheetClient(),
-        _get_member_manager(),
-        envs.JOIN_BIGCHAT_EMOJI,
-    )
-    remind_bigchat_command = RemindBigchatCommand(
-        event,
-        slack_client,
-        GoogleSpreadsheetClient(),
-        _get_member_manager(),
-        envs.ANNA_ID,
-    )
-    create_issue = CreateIssue(
-        event,
-        slack_client,
-        GithubClient(envs.GITHUB_TOKEN, envs.GITHUB_REPO),
-    )
-    question_response = QuestionResponse(
-        event, slack_client, _get_qa_client(), assistant_id=envs.ANNA_ID
-    )
-    # 어느 명령에도 걸리지 않은 멘션은 텍스트 전체를 질문으로 처리 (빈 멘션만 SimpleResponse 로)
-    question_fallback = QuestionResponse(
-        event,
-        slack_client,
-        _get_qa_client(),
-        require_prefix=False,
-        assistant_id=envs.ANNA_ID,
-    )
-    # 멘션은 어느 명령에도 걸리지 않아도 폴백(SimpleResponse)이 답하므로 항상 실제 동작이 있다.
-    # 따라서 run() 전체를 감싸도 no-op 에 이모지가 붙는 일이 없다.
+    command = classify_mention(event["text"])
+
+    match command:
+        case "help":
+            handler = HelpResponse(event, slack_client)
+        case "shuffle":
+            handler = ShuffleResponse(event, slack_client)
+        case "explicit_question" | "question":
+            handler = QuestionResponse(
+                event,
+                slack_client,
+                _get_qa_client(),
+                require_prefix=(command == "explicit_question"),
+                assistant_id=envs.ANNA_ID,
+            )
+        case "create_issue":
+            handler = CreateIssue(
+                event,
+                slack_client,
+                GithubClient(envs.GITHUB_TOKEN, envs.GITHUB_REPO),
+            )
+        case "create_bigchat":
+            handler = CreateBigchatSheet(
+                event,
+                slack_client,
+                GoogleSpreadsheetClient(),
+                _get_member_manager(),
+                envs.JOIN_BIGCHAT_EMOJI,
+            )
+        case "reminder":
+            handler = RemindBigchatCommand(
+                event,
+                slack_client,
+                GoogleSpreadsheetClient(),
+                _get_member_manager(),
+                envs.ANNA_ID,
+            )
+        case "empty":
+            handler = SimpleResponse(event, slack_client)
+        case _:
+            raise ValueError(f"Unknown mention command: {command}")
+
+    # 선택된 핸들러만 실행하며, 실패하거나 False 를 반환해도 다른 명령으로 넘어가지 않는다.
     with _loading_emoji(slack_client, event):
-        MentionResponse(
-            [
-                question_response,
-                shuffle_response,
-                # "새로운 빅챗" 보다 먼저 봐야 한다 — 리마인더 명령 문구에도 '빅챗' 이 들어간다
-                remind_bigchat_command,
-                create_bigchat_sheet,
-                create_issue,
-                help_response,
-                question_fallback,
-            ],
-            simple_response,
-        ).run()
+        return handler.handle_mention()
 
 
 # message shortcut(message_action) payload sample (normalize_shortcut_body 적용 후):
