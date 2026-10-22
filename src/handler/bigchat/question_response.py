@@ -9,6 +9,7 @@ from urllib.parse import urlsplit
 from zoneinfo import ZoneInfo
 
 from handler.bigchat.mention_handler import MentionHandler
+from handler.mention_router import extract_question, matches_mention
 from implementation.qa_client import (
     MAX_CONVERSATION_CHARS,
     MAX_CONVERSATION_AUTHOR_CHARS,
@@ -21,8 +22,6 @@ from implementation.qa_client import (
 
 logger = logging.getLogger(__name__)
 
-# q) 이후의 질문을 추출하는 정규식
-QUESTION_PATTERN = re.compile(r"q\)\s*(.+)", re.IGNORECASE | re.DOTALL)
 # Permit balanced parentheses inside a Markdown URL (for example Wikipedia
 # paths) while keeping the final parenthesis as Markdown syntax.
 _URL_WITH_BALANCED_PARENS = r"https?://(?:[^()\s<>|`]+|\([^()\s<>|`]*\))+"
@@ -77,7 +76,7 @@ class QuestionResponse(MentionHandler):
         """require_prefix=True 면 `q)` 가 있을 때만 반응한다 (명령어보다 먼저 평가되는 명시적 질문).
 
         require_prefix=False 면 멘션 텍스트 전체를 질문으로 취급한다 — 셔플/새로운 빅챗/help
-        등 어느 명령에도 걸리지 않은 멘션을 받아주는 체인 마지막 자리 전용. 빈 멘션은
+        등 어느 명령에도 걸리지 않은 멘션을 받아주는 폴백 전용. 빈 멘션은
         can_handle 이 False 라 기존 폴백(SimpleResponse)으로 넘어간다.
         """
         self.text = event["text"]
@@ -305,18 +304,11 @@ class QuestionResponse(MentionHandler):
         )
 
     def can_handle(self):
-        if self.require_prefix:
-            return "q)" in self.text.lower()
-        return bool(self._extract_question())
+        command = "explicit_question" if self.require_prefix else "question"
+        return matches_mention(command, self.text)
 
     def _extract_question(self) -> str:
-        clean_text = re.sub(r"<@[A-Z0-9]+>", "", self.text).strip()
-        match = QUESTION_PATTERN.search(clean_text)
-        if match:
-            return match.group(1).strip()
-        if self.require_prefix:
-            return ""
-        return clean_text
+        return extract_question(self.text, require_prefix=self.require_prefix)
 
 
 def _safe_source_url(url: str) -> str:

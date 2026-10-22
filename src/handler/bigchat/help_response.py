@@ -1,4 +1,5 @@
 from handler.bigchat.mention_handler import MentionHandler
+from handler.mention_router import matches_mention
 from util.utils import strip_multiline
 
 
@@ -32,4 +33,4 @@ class HelpResponse(MentionHandler):
         return True
 
     def can_handle(self):
-        return "help" in self.text or "도움" in self.text.lower()
+        return matches_mention("help", self.text)
