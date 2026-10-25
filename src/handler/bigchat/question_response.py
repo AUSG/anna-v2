@@ -1,43 +1,31 @@
 # 다국어(한국어) 시스템 프롬프트 문자열이 길어, 이 파일은 줄길이(E501) 검사를 예외 처리한다.
 # ruff: noqa: E501
 import logging
-import re
-from collections import Counter
-from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Tuple
-from urllib.parse import urlsplit
-from zoneinfo import ZoneInfo
 
 from handler.bigchat.mention_handler import MentionHandler
+from handler.bigchat.question_conversation import select_conversation
+from handler.bigchat.question_presentation import (
+    UNTRUSTED_LINK_MARKER as UNTRUSTED_LINK_MARKER,
+    _escape_slack_text as _escape_slack_text,
+    _format_timestamp as _format_timestamp,
+    _normalize_answer_url as _normalize_answer_url,
+    _safe_source_url as _safe_source_url,
+    _strip_untrusted_answer_links as _strip_untrusted_answer_links,
+    render_parts,
+)
 from handler.mention_router import extract_question, matches_mention
 from implementation.qa_client import (
-    MAX_CONVERSATION_CHARS,
+    MAX_CONVERSATION_CHARS as MAX_CONVERSATION_CHARS,
     MAX_CONVERSATION_AUTHOR_CHARS,
     MAX_CONVERSATION_MESSAGE_CHARS,
-    MAX_CONVERSATION_MESSAGES,
+    MAX_CONVERSATION_MESSAGES as MAX_CONVERSATION_MESSAGES,
     MAX_CONVERSATION_TIMESTAMP_CHARS,
-    ChatResult,
+    ChatResult as ChatResult,
     QAClient,
 )
 
 logger = logging.getLogger(__name__)
-
-# Permit balanced parentheses inside a Markdown URL (for example Wikipedia
-# paths) while keeping the final parenthesis as Markdown syntax.
-_URL_WITH_BALANCED_PARENS = r"https?://(?:[^()\s<>|`]+|\([^()\s<>|`]*\))+"
-_ANSWER_MARKDOWN_LINK = re.compile(
-    rf"\[([^\]]+)\]\(({_URL_WITH_BALANCED_PARENS})\)", re.IGNORECASE
-)
-_ANSWER_SLACK_LINK = re.compile(r"<(https?://[^>|\s]+)(?:\|([^>]*))?>", re.IGNORECASE)
-_ANSWER_MALFORMED_SLACK_LINK = re.compile(
-    r"<(https?://[^>|\s]+)(?:\|([^>\n]*))?", re.IGNORECASE
-)
-# Backticks are delimiters rather than part of a URL.  Keep closing
-# parentheses in the candidate so URLs such as ``/wiki/Foo_(bar)`` can be
-# balanced by the normalizer below.
-_ANSWER_PLAIN_URL = re.compile(r"(?:https?://|www\.)[^\s<>|`]+", re.IGNORECASE)
-_TRAILING_HANGUL = re.compile(r"[가-힣ㄱ-ㅎㅏ-ㅣ]+$")
-UNTRUSTED_LINK_MARKER = "[확인되지 않은 링크 제거]"
 
 DEFAULT_SYSTEM_PROMPT = """너는 AUSG(AWSKRUG University Student Group) 커뮤니티의 멤버 같은 AI, ANNA야.
 딱딱한 봇이 아니라 센스 있고 유쾌한 커뮤니티 멤버 한 명처럼 답해.
@@ -137,70 +125,7 @@ class QuestionResponse(MentionHandler):
 
         The old answer-only return value is still accepted.
         """
-        if result is None:
-            return "앗, 답변 서버가 잠시 응답하지 않아요. 잠시 후 다시 시도해 주세요.", []
-        if isinstance(result, str):
-            return _strip_untrusted_answer_links(result, set()), []
-        if not isinstance(result, ChatResult):
-            return "앗, 답변 서버가 잠시 응답하지 않아요. 잠시 후 다시 시도해 주세요.", []
-
-        if result.answer:
-            answer = result.answer
-        elif result.status == "insufficient_evidence":
-            answer = "흐음~ 관련 기록에서는 확인하지 못했어요."
-        elif result.status == "conflicting_evidence":
-            answer = "흐음~ 기록이 서로 달라서 확답하기 어렵네요."
-        else:
-            answer = "흐음~ 나도 잘 모르는 일인걸? 오거나이저를 찾아볼까?"
-        cited_ids = {
-            citation for citation in result.citations if isinstance(citation, str)
-        }
-        source_counts = Counter(source.document_id for source in result.sources)
-        cited_sources = []
-        seen = set()
-        for source in result.sources:
-            if (
-                source.document_id not in cited_ids
-                or source_counts[source.document_id] != 1
-                or source.document_id in seen
-            ):
-                continue
-            seen.add(source.document_id)
-            url = _safe_source_url(source.url)
-            label = _escape_slack_text(source.title or source.document_id)
-            if source.timestamp:
-                label = f"{label} · {_format_timestamp(source.timestamp)}"
-            if url:
-                cited_sources.append(f"<{url}|{label}>")
-            elif (
-                source.document_id == "conversation:current"
-                and source.url == "conversation:current"
-            ):
-                # This is a synthetic source.  It has no external permalink.
-                cited_sources.append(label)
-        # The model sees source URLs in its context and may copy or invent links
-        # in ``answer``.  Only links belonging to a cited source are trusted;
-        # source links are rendered below from structured metadata.
-        allowed_answer_urls = {
-            _safe_source_url(source.url)
-            for source in result.sources
-            if source.document_id in cited_ids
-            and source_counts[source.document_id] == 1
-        }
-        for source in result.sources:
-            if (
-                source.document_id not in cited_ids
-                or source_counts[source.document_id] != 1
-            ):
-                continue
-            allowed_answer_urls.update(
-                url
-                for url in (
-                    _safe_source_url(candidate) for candidate in source.evidence_urls
-                )
-                if url
-            )
-        return _strip_untrusted_answer_links(answer, allowed_answer_urls), cited_sources
+        return render_parts(result)
 
     def _fetch_conversation(self) -> List[Dict[str, str]]:
         """Gather bounded thread history as separately labeled conversation turns."""
@@ -214,6 +139,13 @@ class QuestionResponse(MentionHandler):
             logger.warning("Failed to fetch thread context: %s", e)
             return []
 
+        normalized = self._normalize_conversation(messages)
+        if not normalized:
+            return []
+        return select_conversation(normalized, self._extract_question())
+
+    def _normalize_conversation(self, messages) -> List[Dict[str, str]]:
+        """Convert SDK replies to bounded plain conversation turns."""
         normalized = []
         for message in messages or []:
             ts = self._message_value(message, "ts")
@@ -241,34 +173,7 @@ class QuestionResponse(MentionHandler):
             if ts:
                 item["timestamp"] = ts[:MAX_CONVERSATION_TIMESTAMP_CHARS]
             normalized.append(item)
-
-        if not normalized:
-            return []
-
-        # Keep the root, turns matching the current question, and newest turns.
-        # This retains both the topic and a useful middle reference when a long
-        # thread would otherwise leave only the most recent messages.
-        root = normalized[0]
-        terms = set(re.findall(r"[0-9A-Za-z가-힣]{2,}", self._extract_question().lower()))
-        relevant = [
-            item
-            for item in normalized[1:]
-            if any(term in item["content"].lower() for term in terms)
-        ]
-        recent = list(reversed(normalized[1:]))
-        candidates = [root] + relevant + recent
-        kept, total = [], 0
-        for item in candidates:
-            content = item["content"]
-            if (
-                len(kept) >= MAX_CONVERSATION_MESSAGES
-                or total + len(content) > MAX_CONVERSATION_CHARS
-            ):
-                continue
-            kept.append(item)
-            total += len(content)
-        kept_ids = {id(item) for item in kept}
-        return [item for item in normalized if id(item) in kept_ids]
+        return normalized
 
     def _fetch_thread_context(self) -> str:
         """Legacy text view retained for callers that used the old helper."""
@@ -309,92 +214,3 @@ class QuestionResponse(MentionHandler):
 
     def _extract_question(self) -> str:
         return extract_question(self.text, require_prefix=self.require_prefix)
-
-
-def _safe_source_url(url: str) -> str:
-    """Only put ordinary web URLs into Slack's angle-bracket link syntax."""
-    if (
-        not isinstance(url, str)
-        or any(char in url for char in "<>|`")
-        or any(char.isspace() for char in url)
-    ):
-        return ""
-    parsed = urlsplit(url)
-    if parsed.scheme.lower() not in {"http", "https"} or not parsed.netloc:
-        return ""
-    return url
-
-
-def _escape_slack_text(value: str) -> str:
-    return value.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
-
-
-def _strip_untrusted_answer_links(answer: str, allowed_urls: set[str]) -> str:
-    """Keep only evidence-backed URLs copied into the generated answer.
-
-    Citation links are appended from ``sources`` separately.  This prevents a
-    malformed or hallucinated URL in the free-form model answer from becoming
-    a clickable Slack link, while retaining a URL when it exactly matches a
-    source the model cited.
-    """
-
-    def slack_link(match):
-        url, label = match.group(1), match.group(2)
-        return (
-            match.group(0)
-            if url in allowed_urls
-            else (label or "") + UNTRUSTED_LINK_MARKER
-        )
-
-    def markdown_link(match):
-        return (
-            match.group(0)
-            if match.group(2) in allowed_urls
-            else match.group(1) + UNTRUSTED_LINK_MARKER
-        )
-
-    def plain_url(match):
-        candidate = match.group(0)
-        trimmed = _normalize_answer_url(candidate)
-        suffix = candidate[len(trimmed) :]
-        if trimmed in allowed_urls:
-            return trimmed + suffix
-        return UNTRUSTED_LINK_MARKER + suffix
-
-    answer = _ANSWER_SLACK_LINK.sub(slack_link, answer)
-    # A missing closing ``>`` is not a valid Slack link, but leaving it in the
-    # message still lets Slack interpret the URL unpredictably.
-    answer = _ANSWER_MALFORMED_SLACK_LINK.sub(
-        lambda match: match.group(0)
-        if match.group(1) in allowed_urls
-        else (match.group(2) or "") + UNTRUSTED_LINK_MARKER,
-        answer,
-    )
-    answer = _ANSWER_MARKDOWN_LINK.sub(markdown_link, answer)
-    return _ANSWER_PLAIN_URL.sub(plain_url, answer)
-
-
-def _normalize_answer_url(candidate: str) -> str:
-    """Remove sentence punctuation and unmatched closing URL delimiters.
-
-    Korean text glued to a URL (``[링크](https://a.test/)은``) is a particle, not
-    part of the URL, so it is dropped before the delimiter check.
-    """
-    trimmed = _TRAILING_HANGUL.sub("", candidate).rstrip(".,!?;:")
-    while trimmed.endswith(")") and trimmed.count(")") > trimmed.count("("):
-        trimmed = trimmed[:-1]
-    return trimmed
-
-
-def _format_timestamp(value: str) -> str:
-    """Render ISO/Slack timestamps as a compact KST time, preserving bad input."""
-    try:
-        if re.fullmatch(r"\d+(?:\.\d+)?", value):
-            parsed = datetime.fromtimestamp(float(value), tz=timezone.utc)
-        else:
-            parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
-            if parsed.tzinfo is None:
-                parsed = parsed.replace(tzinfo=timezone.utc)
-        return parsed.astimezone(ZoneInfo("Asia/Seoul")).strftime("%Y-%m-%d %H:%M KST")
-    except (TypeError, ValueError, OverflowError):
-        return value
