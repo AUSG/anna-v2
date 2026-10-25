@@ -7,7 +7,7 @@ from typing import List, Tuple
 from urllib.parse import urlsplit
 from zoneinfo import ZoneInfo
 
-from implementation.qa_client import ChatResult
+from application.question import ChatResult
 
 # Permit balanced parentheses inside a Markdown URL (for example Wikipedia
 # paths) while keeping the final parenthesis as Markdown syntax.

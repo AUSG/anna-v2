@@ -6,13 +6,13 @@ import pytest
 
 from test.handler.bigchat.sample_data import create_sample_app_mention_event
 
-from handler.bigchat.question_response import DEFAULT_SYSTEM_PROMPT, QuestionResponse
-from implementation.qa_client import (
+from application.question import (
     MAX_CONVERSATION_CHARS,
     MAX_CONVERSATION_MESSAGES,
     ChatResult,
     Source,
 )
+from handler.bigchat.question_response import DEFAULT_SYSTEM_PROMPT, QuestionResponse
 from implementation.slack_client import Message
 
 _DEFAULT_ANSWER = "답변이야!"

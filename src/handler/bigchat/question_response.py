@@ -3,8 +3,16 @@
 import logging
 from typing import Any, Dict, List, Optional, Tuple
 
+from application.question import (
+    MAX_CONVERSATION_CHARS as MAX_CONVERSATION_CHARS,
+    MAX_CONVERSATION_AUTHOR_CHARS,
+    MAX_CONVERSATION_MESSAGE_CHARS,
+    MAX_CONVERSATION_MESSAGES as MAX_CONVERSATION_MESSAGES,
+    MAX_CONVERSATION_TIMESTAMP_CHARS,
+    ChatResult as ChatResult,
+    select_conversation,
+)
 from handler.bigchat.mention_handler import MentionHandler
-from handler.bigchat.question_conversation import select_conversation
 from handler.bigchat.question_presentation import (
     UNTRUSTED_LINK_MARKER as UNTRUSTED_LINK_MARKER,
     _escape_slack_text as _escape_slack_text,
@@ -15,15 +23,7 @@ from handler.bigchat.question_presentation import (
     render_parts,
 )
 from handler.mention_router import extract_question, matches_mention
-from implementation.qa_client import (
-    MAX_CONVERSATION_CHARS as MAX_CONVERSATION_CHARS,
-    MAX_CONVERSATION_AUTHOR_CHARS,
-    MAX_CONVERSATION_MESSAGE_CHARS,
-    MAX_CONVERSATION_MESSAGES as MAX_CONVERSATION_MESSAGES,
-    MAX_CONVERSATION_TIMESTAMP_CHARS,
-    ChatResult as ChatResult,
-    QAClient,
-)
+from implementation.qa_client import QAClient
 
 logger = logging.getLogger(__name__)
 

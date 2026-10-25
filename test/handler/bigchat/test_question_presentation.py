@@ -1,5 +1,6 @@
 import pytest
 
+from application.question import ChatResult, Source
 from handler.bigchat.question_response import QuestionResponse
 from handler.bigchat.question_presentation import (
     _escape_slack_text,
@@ -9,7 +10,6 @@ from handler.bigchat.question_presentation import (
     _strip_untrusted_answer_links,
     render_parts,
 )
-from implementation.qa_client import ChatResult, Source
 
 _GITHUB_URL = "https://github.com/AUSG/anna-v2"
 _WIKI_URL = "https://example.test/wiki/Foo_(bar)"

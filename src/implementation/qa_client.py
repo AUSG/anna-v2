@@ -1,50 +1,19 @@
 import logging
-from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
 import requests
 
+from application.question import (
+    MAX_CONVERSATION_AUTHOR_CHARS as MAX_CONVERSATION_AUTHOR_CHARS,
+    MAX_CONVERSATION_CHARS as MAX_CONVERSATION_CHARS,
+    MAX_CONVERSATION_MESSAGE_CHARS as MAX_CONVERSATION_MESSAGE_CHARS,
+    MAX_CONVERSATION_MESSAGES as MAX_CONVERSATION_MESSAGES,
+    MAX_CONVERSATION_TIMESTAMP_CHARS as MAX_CONVERSATION_TIMESTAMP_CHARS,
+    ChatResult as ChatResult,
+    Source as Source,
+)
+
 logger = logging.getLogger(__name__)
-
-# crawler 의 /api/v1/chat 상한(services/conversation.py)과 맞춘다
-MAX_CONVERSATION_MESSAGES = 100
-MAX_CONVERSATION_MESSAGE_CHARS = 4000
-MAX_CONVERSATION_CHARS = 40000
-MAX_CONVERSATION_AUTHOR_CHARS = 200
-MAX_CONVERSATION_TIMESTAMP_CHARS = 100
-
-
-@dataclass
-class Source:
-    """A document returned by the QA service."""
-
-    document_id: str
-    score: float = 0.0
-    title: str = ""
-    url: str = ""
-    content_preview: str = ""
-    channel_id: Optional[str] = None
-    thread_ts: Optional[str] = None
-    user_id: Optional[str] = None
-    timestamp: Optional[str] = None
-    truncated: bool = False
-    evidence_urls: List[str] = field(default_factory=list)
-
-
-@dataclass
-class ChatResult:
-    """Structured chat response from crawler-rag.
-
-    ``status``, ``citations`` and ``trace_id`` were added after the original
-    answer-only endpoint. Defaults keep callers compatible with old responses.
-    """
-
-    answer: str
-    sources: List[Source] = field(default_factory=list)
-    timing: Dict[str, Any] = field(default_factory=dict)
-    status: str = "answered"
-    citations: List[str] = field(default_factory=list)
-    trace_id: str = ""
 
 
 class QAClient:
