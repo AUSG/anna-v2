@@ -95,7 +95,9 @@ class TestTestMode(RemindBigchatCommandTestBase):
         reply = self._reply()
         assert "받을 사람을 같이 멘션해줘" in reply
         self.mock_slack_client.send_message_only_visible_to_user.assert_called_once_with(
-            msg=reply,
+            msg="받을 사람을 같이 멘션해줘! 실수로 신청자 전원에게 나가지 않게 대상 지정을 필수로 해뒀어.\n"
+            "예) `빅챗 리마인더 테스트 <@U01BN035Y6L>`\n"
+            "(진짜로 전원에게 보내려면 `빅챗 리마인더 지금 전원 발송` 라고 해줘!)",
             channel="C03SZTDEDK3",
             ts="1689403771.805849",
             user_id="U01BN035Y6L",
@@ -241,3 +243,14 @@ class TestReminderCommandBoundaries(RemindBigchatCommandTestBase):
             with self.assertRaisesRegex(RuntimeError, "reply failed"):
                 sut.handle_mention()
         reminder.return_value.run.assert_called_once_with(only_user_ids=["U1"])
+
+    def test_report_facade_keeps_original_unresolved_note_indentation(self):
+        result = _result(
+            bigchat_names=["빅챗"], applicant_cnt=2, resolved_cnt=1, sent_cnt=1
+        )
+        assert RemindBigchatCommand._build_report(result, None) == (
+            "                2026-08-20 빅챗 `빅챗` 신청자들에게 리마인더를 보냈어!\n"
+            "                - 신청 시트에서 찾은 신청자: 2명\n"
+            "                - 실제로 DM 을 보낸 사람: 1명\n"
+            "신청자 1명은 멤버 시트에서 슬랙 계정을 못 찾아서 못 보냈어. (누군지는 로그에 남겼어!)"
+        )

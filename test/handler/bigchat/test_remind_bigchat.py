@@ -325,11 +325,28 @@ class TestReminderBoundaries(unittest.TestCase):
             (22,),
             (11,),
         ]
-        dm_calls = self.mock_slack_client.send_direct_message.call_args_list
-        assert [c.kwargs["user_id"] for c in dm_calls] == ["U1", "U1", "U1"]
-        assert dm_calls[0].kwargs["msg"] == dm_calls[1].kwargs["msg"]
-        for dm_call, event_name in zip(dm_calls, ["저녁 빅챗", "저녁 빅챗", "오전 빅챗"]):
-            assert f"*{event_name}*" in dm_call.kwargs["msg"]
+        assert [
+            c.kwargs for c in self.mock_slack_client.send_direct_message.call_args_list
+        ] == [
+            {
+                "user_id": "U1",
+                "msg": ":wave: 안녕! 내일 *저녁 빅챗*이 열리는 날이야.\n"
+                ":calendar: 8월 20일 (목) 19:00~21:00\n"
+                "잊지 말고 꼭 와줘! 내일 만나 :raised_hands:",
+            },
+            {
+                "user_id": "U1",
+                "msg": ":wave: 안녕! 내일 *저녁 빅챗*이 열리는 날이야.\n"
+                ":calendar: 8월 20일 (목) 19:00~21:00\n"
+                "잊지 말고 꼭 와줘! 내일 만나 :raised_hands:",
+            },
+            {
+                "user_id": "U1",
+                "msg": ":wave: 안녕! 내일 *오전 빅챗*이 열리는 날이야.\n"
+                ":calendar: 8월 20일 (목) 10:00~12:00\n"
+                "잊지 말고 꼭 와줘! 내일 만나 :raised_hands:",
+            },
+        ]
 
     def test_empty_targets_still_count_applicants_without_sending(self):
         self.mock_gs_client.list_worksheets.return_value = [
@@ -557,3 +574,16 @@ class TestReminderBoundaries(unittest.TestCase):
                     self.sut.run(now=NOW)
                 failing_method.side_effect = None
         self.mock_slack_client.send_direct_message.assert_not_called()
+
+    def test_build_reminder_facade_keeps_internal_unicode_line_indentation(self):
+        event = BigchatEvent(
+            "첫\u2028둘",
+            datetime(2026, 8, 20, 19, tzinfo=KST),
+            datetime(2026, 8, 20, 21, tzinfo=KST),
+        )
+        assert self.sut._build_reminder(event) == (
+            "            :wave: 안녕! 내일 *첫\n"
+            "둘* 빅챗이 열리는 날이야.\n"
+            "            :calendar: 8월 20일 (목) 19:00~21:00\n"
+            "            잊지 말고 꼭 와줘! 내일 만나 :raised_hands:"
+        )

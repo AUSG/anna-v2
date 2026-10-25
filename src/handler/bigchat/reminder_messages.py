@@ -1,11 +1,9 @@
-from typing import TYPE_CHECKING, List, Optional
+from typing import List, Optional
 
+from application.bigchat import ReminderResult
 from handler.mention_router import REMINDER_TRIGGER as TRIGGER
 from util.bigchat_event import BigchatEvent
 from util.utils import strip_multiline
-
-if TYPE_CHECKING:
-    from handler.bigchat.remind_bigchat import ReminderResult
 
 # 이름 안의 줄구분자도 처리하므로 multiline literal 들여쓰기는 기존 값을 유지한다.
 WEEKDAYS_KO = ["월", "화", "수", "목", "금", "토", "일"]

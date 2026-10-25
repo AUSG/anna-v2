@@ -1,8 +1,9 @@
 import logging
 import re
 
+from application.bigchat import ReminderResult
 from handler.bigchat.mention_handler import MentionHandler
-from handler.bigchat.remind_bigchat import RemindBigchat, ReminderResult
+from handler.bigchat.remind_bigchat import RemindBigchat
 from handler.bigchat.reminder_messages import (
     BROADCAST_PHRASE,
     TEST_PHRASE,

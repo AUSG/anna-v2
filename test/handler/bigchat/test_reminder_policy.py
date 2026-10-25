@@ -1,72 +1,10 @@
-from datetime import date, datetime
+import importlib
+from typing import get_type_hints
 
 import pytest
 
-from handler.bigchat.reminder_policy import applicant_email, select_bigchats
-from util.bigchat_event import KST, BigchatEvent
-
-
-def test_select_bigchats_preserves_sheet_order_and_scan_details():
-    worksheets = [
-        (9, "MEMBERS_INFO"),
-        (4, " 저녁 빅챗 26-08-20 19:00~21:00 "),
-        (3, "모레 빅챗 26-08-21 10:00~12:00"),
-        (4, "오전 빅챗 26-08-20 10:00~12:00"),
-        (5, "빅챗 23-07-31"),
-    ]
-
-    matched, parsed, ignored = select_bigchats(worksheets, date(2026, 8, 20))
-
-    assert matched == [
-        (
-            4,
-            BigchatEvent(
-                "저녁 빅챗",
-                datetime(2026, 8, 20, 19, tzinfo=KST),
-                datetime(2026, 8, 20, 21, tzinfo=KST),
-            ),
-        ),
-        (
-            4,
-            BigchatEvent(
-                "오전 빅챗",
-                datetime(2026, 8, 20, 10, tzinfo=KST),
-                datetime(2026, 8, 20, 12, tzinfo=KST),
-            ),
-        ),
-    ]
-    assert parsed == [
-        "' 저녁 빅챗 26-08-20 19:00~21:00 ' -> starts 2026-08-20",
-        "'모레 빅챗 26-08-21 10:00~12:00' -> starts 2026-08-21",
-        "'오전 빅챗 26-08-20 10:00~12:00' -> starts 2026-08-20",
-    ]
-    assert ignored == ["MEMBERS_INFO", "빅챗 23-07-31"]
-    assert worksheets[1] == (4, " 저녁 빅챗 26-08-20 19:00~21:00 ")
-
-
-def test_select_bigchats_empty():
-    assert select_bigchats([], date(2026, 8, 20)) == ([], [], [])
-
-
-@pytest.mark.parametrize(
-    "title",
-    [
-        "",
-        "빅챗 26-02-30 19:00~21:00",
-        "빅챗 26-08-20 25:00~26:00",
-        "빅챗 26-08-20 21:00~19:00",
-        "빅챗 26-08-20 19:00~19:00",
-        "줄\n바꿈 26-08-20 19:00~21:00",
-    ],
-)
-def test_select_bigchats_keeps_invalid_titles_in_ignored(title):
-    assert select_bigchats([(1, title)], date(2026, 8, 20)) == ([], [], [title])
-
-
-@pytest.mark.parametrize("title", [None, 123])
-def test_select_bigchats_does_not_swallow_invalid_title_types(title):
-    with pytest.raises(AttributeError):
-        select_bigchats([(1, title)], date(2026, 8, 20))
+from application.bigchat import ReminderResult, select_bigchats
+from handler.bigchat.reminder_policy import applicant_email
 
 
 @pytest.mark.parametrize(
@@ -99,3 +37,22 @@ def test_applicant_email_keeps_invalid_cell_errors(cell):
 def test_applicant_email_keeps_invalid_row_error():
     with pytest.raises(TypeError):
         applicant_email(None)
+
+
+def test_reminder_exports_and_runtime_type_hints_share_application_identity():
+    reminder = importlib.import_module("handler.bigchat.remind_bigchat")
+    command = importlib.import_module("handler.bigchat.remind_bigchat_command")
+    messages = importlib.import_module("handler.bigchat.reminder_messages")
+    policy = importlib.import_module("handler.bigchat.reminder_policy")
+    for module in (reminder, command, messages):
+        assert module.ReminderResult is ReminderResult
+    assert reminder.select_bigchats is policy.select_bigchats is select_bigchats
+    assert select_bigchats.__module__ == "application.bigchat"
+    for method in (reminder.RemindBigchat.run, command.RemindBigchatCommand._run):
+        assert get_type_hints(method)["return"] is ReminderResult
+    for method in (
+        reminder.RemindBigchat._remind_applicants,
+        command.RemindBigchatCommand._build_report,
+        messages.build_report,
+    ):
+        assert get_type_hints(method)["result"] is ReminderResult

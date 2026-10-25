@@ -1,30 +1,13 @@
 import logging
-from dataclasses import dataclass, field
-from datetime import date, datetime, timedelta
+from datetime import datetime, timedelta
 from typing import List, Optional
 
+from application.bigchat import ReminderResult as ReminderResult, select_bigchats
 from handler.bigchat.reminder_messages import WEEKDAYS_KO as WEEKDAYS_KO, build_reminder
-from handler.bigchat.reminder_policy import (
-    EMAIL_PAT as EMAIL_PAT,
-    applicant_email,
-    select_bigchats,
-)
+from handler.bigchat.reminder_policy import EMAIL_PAT as EMAIL_PAT, applicant_email
 from util.bigchat_event import KST, BigchatEvent
 
 logger = logging.getLogger(__name__)
-
-
-@dataclass
-class ReminderResult:
-    """한 번의 발송 시도 요약. 수동 트리거가 이걸로 결과 메시지를 만든다."""
-
-    target_date: date
-    bigchat_names: List[str] = field(default_factory=list)
-    parsed_sheet_cnt: int = 0
-    ignored_sheet_cnt: int = 0
-    applicant_cnt: int = 0  # 신청 시트에서 찾은 이메일 수
-    resolved_cnt: int = 0  # 그 중 멤버 시트에서 슬랙 계정을 찾은 수
-    sent_cnt: int = 0
 
 
 class RemindBigchat:
