@@ -1,18 +1,17 @@
 import logging
-import re
 from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta
 from typing import List, Optional
 
-from util.bigchat_event import KST, BigchatEvent, parse_sheet_name
-from util.utils import strip_multiline
+from handler.bigchat.reminder_messages import WEEKDAYS_KO as WEEKDAYS_KO, build_reminder
+from handler.bigchat.reminder_policy import (
+    EMAIL_PAT as EMAIL_PAT,
+    applicant_email,
+    select_bigchats,
+)
+from util.bigchat_event import KST, BigchatEvent
 
 logger = logging.getLogger(__name__)
-
-WEEKDAYS_KO = ["월", "화", "수", "목", "금", "토", "일"]
-
-# 소속(회사명 등)에 '@' 가 들어가는 경우와 구분하기 위해, 이메일 형태인 셀만 집는다
-EMAIL_PAT = re.compile(r"^\S+@\S+\.\S+$")
 
 
 @dataclass
@@ -60,15 +59,7 @@ class RemindBigchat:
         )
 
         worksheets = self.gs_client.list_worksheets()
-        matched, parsed, ignored = [], [], []
-        for worksheet_id, title in worksheets:
-            event = parse_sheet_name(title)
-            if not event:
-                ignored.append(title)
-                continue
-            parsed.append(f"{title!r} -> starts {event.start.date()}")
-            if event.start.date() == tomorrow:
-                matched.append((worksheet_id, event))
+        matched, parsed, ignored = select_bigchats(worksheets, tomorrow)
 
         # 시트 이름이 곧 이벤트 정보라, 왜 매칭이 안 됐는지는 이 두 줄이면 판단할 수 있다
         logger.info(
@@ -185,10 +176,7 @@ class RemindBigchat:
         rows = self.gs_client.get_values(worksheet_id)
         emails, skipped_rows = [], 0
         for row in rows:
-            email = next(
-                (cell.strip().lower() for cell in row if EMAIL_PAT.match(cell.strip())),
-                None,
-            )
+            email = applicant_email(row)
             if not email:
                 skipped_rows += 1  # 빈 헤더 행이 보통 하나 있고, 그 외는 수기 편집 흔적일 수 있다
                 logger.debug("Worksheet %s: no email in row %r", worksheet_id, row)
@@ -210,20 +198,4 @@ class RemindBigchat:
 
     @staticmethod
     def _build_reminder(event: BigchatEvent) -> str:
-        d = event.start
-        when = (
-            f"{d.month}월 {d.day}일 ({WEEKDAYS_KO[d.weekday()]}) "
-            f"{d.strftime('%H:%M')}~{event.end.strftime('%H:%M')}"
-        )
-        # 시트 이름이 "빅챗 26-08-18 ..." 이면 이벤트 이름이 그냥 "빅챗" 이라
-        # 그대로 쓰면 "*빅챗* 빅챗이 열리는 날이야" 처럼 겹친다.
-        # 어느 쪽이든 '빅챗' 으로 끝나므로 뒤에 붙는 조사는 항상 '이'.
-        subject = (
-            f"*{event.name}*" if event.name.endswith("빅챗") else f"*{event.name}* 빅챗"
-        )
-        return strip_multiline(
-            f"""
-            :wave: 안녕! 내일 {subject}이 열리는 날이야.
-            :calendar: {when}
-            잊지 말고 꼭 와줘! 내일 만나 :raised_hands:"""
-        )
+        return build_reminder(event)

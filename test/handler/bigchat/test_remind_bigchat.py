@@ -1,10 +1,11 @@
 import unittest
-from datetime import datetime
-from unittest.mock import MagicMock
+from datetime import date, datetime, timezone
+from unittest.mock import MagicMock, patch
 
 from dateutil.tz import gettz
 
-from handler.bigchat.remind_bigchat import RemindBigchat
+from handler.bigchat.remind_bigchat import RemindBigchat, ReminderResult
+from util.bigchat_event import BigchatEvent
 
 KST = gettz("Asia/Seoul")
 
@@ -242,3 +243,317 @@ class TestRemindBigchatTestMode(unittest.TestCase):
 
         assert result.sent_cnt == 1
         assert result.resolved_cnt == 0  # 신청자는 아무도 매칭 안 됐지만
+
+
+class TestReminderBoundaries(unittest.TestCase):
+    def setUp(self):
+        self.mock_slack_client = MagicMock()
+        self.mock_gs_client = MagicMock()
+        self.mock_member_manager = MagicMock()
+        self.sut = RemindBigchat(
+            self.mock_slack_client, self.mock_gs_client, self.mock_member_manager
+        )
+
+    def test_tomorrow_at_calendar_and_timezone_boundaries(self):
+        for now, target in [
+            (datetime(2026, 12, 31, 23, 59, 59, tzinfo=KST), date(2027, 1, 1)),
+            (datetime(2028, 2, 28, 23, 59, 59, tzinfo=KST), date(2028, 2, 29)),
+            (datetime(2028, 2, 29, 0, 0, tzinfo=KST), date(2028, 3, 1)),
+            (datetime(2026, 8, 19, 0, 0, tzinfo=KST), date(2026, 8, 20)),
+            (datetime(2026, 8, 19, 23, 59, tzinfo=timezone.utc), date(2026, 8, 20)),
+            (datetime(2026, 8, 19, 23, 59), date(2026, 8, 20)),
+        ]:
+            with self.subTest(now=now):
+                self.mock_gs_client.list_worksheets.return_value = []
+                assert self.sut.run(now=now).target_date == target
+
+    def test_default_clock_is_kst(self):
+        self.mock_gs_client.list_worksheets.return_value = []
+        with patch("handler.bigchat.remind_bigchat.datetime") as clock:
+            clock.now.return_value = NOW
+            result = self.sut.run()
+        clock.now.assert_called_once_with(KST)
+        assert result.target_date == date(2026, 8, 20)
+
+    def test_sheet_row_and_call_order_with_shared_slack_accounts(self):
+        calls = MagicMock()
+        calls.attach_mock(self.mock_gs_client, "sheets")
+        calls.attach_mock(self.mock_member_manager, "members")
+        calls.attach_mock(self.mock_slack_client, "slack")
+        self.mock_gs_client.list_worksheets.return_value = [
+            (22, "저녁 빅챗 26-08-20 19:00~21:00"),
+            (99, "MEMBERS_INFO"),
+            (11, "오전 빅챗 26-08-20 10:00~12:00"),
+        ]
+        self.mock_gs_client.get_values.side_effect = [
+            [
+                [],
+                [" A@Example.com ", "unused@example.com"],
+                ["b@example.com"],
+                ["a@example.com"],
+                ["guest@example.com"],
+            ],
+            [["a@example.com"]],
+        ]
+        self.mock_member_manager.email_to_slack_ids.return_value = {
+            "a@example.com": "U1",
+            "b@example.com": "U1",
+        }
+
+        result = self.sut.run(now=NOW)
+
+        assert result == ReminderResult(
+            target_date=date(2026, 8, 20),
+            bigchat_names=["저녁 빅챗", "오전 빅챗"],
+            parsed_sheet_cnt=2,
+            ignored_sheet_cnt=1,
+            applicant_cnt=4,
+            resolved_cnt=3,
+            sent_cnt=3,
+        )
+        assert [c[0] for c in calls.mock_calls] == [
+            "sheets.list_worksheets",
+            "members.email_to_slack_ids",
+            "sheets.get_values",
+            "slack.send_direct_message",
+            "slack.send_direct_message",
+            "members.email_to_slack_ids",
+            "sheets.get_values",
+            "slack.send_direct_message",
+        ]
+        assert [c.args for c in self.mock_gs_client.get_values.call_args_list] == [
+            (22,),
+            (11,),
+        ]
+        dm_calls = self.mock_slack_client.send_direct_message.call_args_list
+        assert [c.kwargs["user_id"] for c in dm_calls] == ["U1", "U1", "U1"]
+        assert dm_calls[0].kwargs["msg"] == dm_calls[1].kwargs["msg"]
+        for dm_call, event_name in zip(dm_calls, ["저녁 빅챗", "저녁 빅챗", "오전 빅챗"]):
+            assert f"*{event_name}*" in dm_call.kwargs["msg"]
+
+    def test_empty_targets_still_count_applicants_without_sending(self):
+        self.mock_gs_client.list_worksheets.return_value = [
+            (111, "빅챗 26-08-20 19:00~21:00")
+        ]
+        self.mock_gs_client.get_values.return_value = [
+            ["a@example.com"],
+            ["guest@example.com"],
+        ]
+        self.mock_member_manager.email_to_slack_ids.return_value = {
+            "a@example.com": "U1"
+        }
+
+        with self.assertLogs("handler.bigchat.remind_bigchat", level="INFO") as logs:
+            result = self.sut.run(now=NOW, only_user_ids=[])
+
+        assert result.applicant_cnt == 2
+        assert result.resolved_cnt == 1
+        assert result.sent_cnt == 0
+        self.mock_slack_client.send_direct_message.assert_not_called()
+        assert "TEST MODE: sending to [] instead of the 1 resolved applicant(s)" in [
+            record.getMessage() for record in logs.records
+        ]
+        assert "TEST MODE -> only" not in logs.records[0].getMessage()
+
+    def test_repeated_test_targets_are_sent_for_each_bigchat_even_after_failure(self):
+        self.mock_gs_client.list_worksheets.return_value = [
+            (1, "첫 빅챗 26-08-20 19:00~21:00"),
+            (2, "둘 빅챗 26-08-20 19:00~21:00"),
+        ]
+        self.mock_gs_client.get_values.return_value = []
+        self.mock_member_manager.email_to_slack_ids.return_value = {}
+        self.mock_slack_client.send_direct_message.side_effect = [
+            RuntimeError("inactive"),
+            None,
+            None,
+            None,
+        ]
+
+        with self.assertLogs("handler.bigchat.remind_bigchat", level="INFO") as logs:
+            result = self.sut.run(now=NOW, only_user_ids=["U9", "U9"])
+
+        assert result.applicant_cnt == result.resolved_cnt == 0
+        assert result.sent_cnt == 3
+        assert [
+            c.kwargs["user_id"]
+            for c in self.mock_slack_client.send_direct_message.call_args_list
+        ] == ["U9", "U9", "U9", "U9"]
+        errors = [r for r in logs.records if r.levelname == "ERROR"]
+        assert [r.getMessage() for r in errors] == ["Failed to DM U9 <?> (첫 빅챗)"]
+        assert errors[0].exc_info[0] is RuntimeError
+
+    def test_applicant_email_helper_preserves_deduplication_and_logs(self):
+        self.mock_gs_client.get_values.return_value = [
+            [],
+            [" A@Example.com ", "unused@example.com"],
+            ["a@example.com"],
+            ["@company", "b@example.com"],
+            ["no email"],
+        ]
+        with self.assertLogs("handler.bigchat.remind_bigchat", level="DEBUG") as logs:
+            assert self.sut._applicant_emails(111) == ["a@example.com", "b@example.com"]
+        assert [r.getMessage() for r in logs.records] == [
+            "Worksheet 111: no email in row []",
+            "Worksheet 111: duplicated applicant a@example.com",
+            "Worksheet 111: no email in row ['no email']",
+            "Worksheet 111: 5 row(s) -> 2 unique applicant email(s), 2 row(s) without an email",
+        ]
+
+    def test_account_lookups_preserve_order_case_duplicates_and_shared_accounts(self):
+        emails = [
+            "a@example.com",
+            "missing@example.com",
+            "b@example.com",
+            "A@example.com",
+            "a@example.com",
+            "empty@example.com",
+        ]
+        lookups = []
+
+        class RecordingMapping(dict):
+            def get(self, email):
+                slack_id = super().get(email)
+                lookups.append((slack_id, email))
+                return slack_id
+
+        mapping = RecordingMapping(
+            {"a@example.com": "U1", "b@example.com": "U1", "empty@example.com": ""}
+        )
+        self.mock_member_manager.email_to_slack_ids.return_value = mapping
+        event = BigchatEvent(
+            "빅챗",
+            datetime(2026, 8, 20, 19, tzinfo=KST),
+            datetime(2026, 8, 20, 21, tzinfo=KST),
+        )
+        result = ReminderResult(date(2026, 8, 20))
+
+        with patch.object(
+            self.sut, "_applicant_emails", return_value=emails
+        ) as applicants:
+            with self.assertLogs(
+                "handler.bigchat.remind_bigchat", level="INFO"
+            ) as logs:
+                assert self.sut._remind_applicants(111, event, None, result) is None
+
+        applicants.assert_called_once_with(111)
+        assert lookups == [
+            ("U1", "a@example.com"),
+            (None, "missing@example.com"),
+            ("U1", "b@example.com"),
+            (None, "A@example.com"),
+            ("U1", "a@example.com"),
+            ("", "empty@example.com"),
+        ]
+        assert mapping == {
+            "a@example.com": "U1",
+            "b@example.com": "U1",
+            "empty@example.com": "",
+        }
+        assert emails[0] == "a@example.com"
+        assert result == ReminderResult(
+            date(2026, 8, 20), applicant_cnt=6, resolved_cnt=3, sent_cnt=3
+        )
+        assert [
+            c.kwargs["user_id"]
+            for c in self.mock_slack_client.send_direct_message.call_args_list
+        ] == ["U1", "U1", "U1"]
+        assert [r.getMessage() for r in logs.records if r.levelname == "WARNING"] == [
+            "Applicant not found in members sheet, skipping DM: missing@example.com (빅챗)",
+            "Applicant not found in members sheet, skipping DM: A@example.com (빅챗)",
+            "Applicant not found in members sheet, skipping DM: empty@example.com (빅챗)",
+        ]
+        assert [
+            r.getMessage()
+            for r in logs.records
+            if r.getMessage().startswith("Sent reminder DM to ")
+        ] == [
+            "Sent reminder DM to U1 <a@example.com> (빅챗)",
+            "Sent reminder DM to U1 <b@example.com> (빅챗)",
+            "Sent reminder DM to U1 <a@example.com> (빅챗)",
+        ]
+
+    def test_mapping_failure_follows_warning_without_updating_counts_or_sending(self):
+        lookups = []
+        warning = "Applicant not found in members sheet, skipping DM: missing@example.com (빅챗)"
+
+        class FailingMapping(dict):
+            def get(self, email):
+                lookups.append(email)
+                if email == "fail@example.com":
+                    assert [r.getMessage() for r in logs.records] == [warning]
+                    raise ValueError("member lookup failed")
+                return super().get(email)
+
+        self.mock_member_manager.email_to_slack_ids.return_value = FailingMapping()
+        event = BigchatEvent(
+            "빅챗",
+            datetime(2026, 8, 20, 19, tzinfo=KST),
+            datetime(2026, 8, 20, 21, tzinfo=KST),
+        )
+        result = ReminderResult(
+            date(2026, 8, 20), applicant_cnt=5, resolved_cnt=2, sent_cnt=4
+        )
+        with patch.object(
+            self.sut,
+            "_applicant_emails",
+            return_value=["missing@example.com", "fail@example.com"],
+        ):
+            with self.assertLogs(
+                "handler.bigchat.remind_bigchat", level="WARNING"
+            ) as logs:
+                with self.assertRaisesRegex(ValueError, "member lookup failed"):
+                    self.sut._remind_applicants(111, event, None, result)
+
+        assert lookups == ["missing@example.com", "fail@example.com"]
+        assert [r.getMessage() for r in logs.records] == [warning]
+        assert result == ReminderResult(
+            date(2026, 8, 20), applicant_cnt=5, resolved_cnt=2, sent_cnt=4
+        )
+        self.mock_slack_client.send_direct_message.assert_not_called()
+
+    def test_invalid_row_propagates_after_prior_row_logs_without_updating_counts(self):
+        event = BigchatEvent(
+            "빅챗",
+            datetime(2026, 8, 20, 19, tzinfo=KST),
+            datetime(2026, 8, 20, 21, tzinfo=KST),
+        )
+        result = ReminderResult(date(2026, 8, 20))
+        self.mock_member_manager.email_to_slack_ids.return_value = {
+            "a@example.com": "U1"
+        }
+        self.mock_gs_client.get_values.return_value = [[], ["a@example.com"], [None]]
+
+        with self.assertLogs("handler.bigchat.remind_bigchat", level="DEBUG") as logs:
+            with self.assertRaises(AttributeError):
+                self.sut._remind_applicants(111, event, None, result)
+
+        assert [r.getMessage() for r in logs.records] == [
+            "Worksheet 111: no email in row []"
+        ]
+        assert result.applicant_cnt == result.resolved_cnt == result.sent_cnt == 0
+        self.mock_slack_client.send_direct_message.assert_not_called()
+
+    def test_invalid_sheet_title_propagates_before_scan_summary(self):
+        self.mock_gs_client.list_worksheets.return_value = [(1, None)]
+        with self.assertLogs("handler.bigchat.remind_bigchat", level="INFO") as logs:
+            with self.assertRaises(AttributeError):
+                self.sut.run(now=NOW)
+        assert len(logs.records) == 1
+        self.mock_member_manager.email_to_slack_ids.assert_not_called()
+        self.mock_gs_client.get_values.assert_not_called()
+
+    def test_lookup_errors_are_not_swallowed_as_dm_failures(self):
+        for failing_method in [
+            self.mock_gs_client.list_worksheets,
+            self.mock_member_manager.email_to_slack_ids,
+            self.mock_gs_client.get_values,
+        ]:
+            with self.subTest(method=failing_method):
+                self.mock_gs_client.list_worksheets.return_value = [
+                    (1, "빅챗 26-08-20 19:00~21:00")
+                ]
+                failing_method.side_effect = RuntimeError("lookup failed")
+                with self.assertRaisesRegex(RuntimeError, "lookup failed"):
+                    self.sut.run(now=NOW)
+                failing_method.side_effect = None
+        self.mock_slack_client.send_direct_message.assert_not_called()
