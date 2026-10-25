@@ -1,10 +1,13 @@
 import logging
-import re
 from contextlib import nullcontext
 from typing import List, Optional
 
 from config.env_config import envs
 from handler.bigchat.messages import build_registration_info_message
+from handler.bigchat.sheet_link import (
+    SPREADSHEET_PAT as SPREADSHEET_PAT,
+    extract_worksheet_id,
+)
 from implementation.google_spreadsheet_client import WorksheetNotFound
 from implementation.member_finder import MemberNotFound, MemberLackInfo
 from implementation.slack_client import Message
@@ -18,10 +21,6 @@ from util.bigchat_event import (
 )
 
 logger = logging.getLogger(__name__)
-
-SPREADSHEET_PAT = re.compile(
-    r"https://docs.google.com/spreadsheets/d/.*/edit#gid=(\d*)"
-)
 
 
 class JoinBigchat:
@@ -48,11 +47,7 @@ class JoinBigchat:
 
     @staticmethod
     def _extract_worksheet_id(messages: List[Message]):
-        for message in messages:
-            pat = SPREADSHEET_PAT.search(message.text)
-            if pat is not None and len(pat.groups()) > 0:
-                return int(pat.groups()[0])
-        return None
+        return extract_worksheet_id(message.text for message in messages)
 
     def _build_calendar_blocks(
         self, msg: str, worksheet_id: int, intro_text: str

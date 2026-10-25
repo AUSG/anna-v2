@@ -1,14 +1,13 @@
-import re
 from contextlib import nullcontext
 from typing import List
 
+from handler.bigchat.sheet_link import (
+    SPREADSHEET_PAT as SPREADSHEET_PAT,
+    extract_worksheet_id,
+)
 from implementation.google_spreadsheet_client import WorksheetNotFound
 from implementation.member_finder import MemberNotFound, MemberLackInfo
 from implementation.slack_client import Message
-
-SPREADSHEET_PAT = re.compile(
-    r"https://docs.google.com/spreadsheets/d/.*/edit#gid=(\d*)"
-)
 
 
 class AbandonBigchat:
@@ -37,11 +36,7 @@ class AbandonBigchat:
 
     @staticmethod
     def _extract_worksheet_id(messages: List[Message]):
-        for message in messages:
-            pat = SPREADSHEET_PAT.search(message.text)
-            if pat is not None and len(pat.groups()) > 0:
-                return int(pat.groups()[0])
-        return None
+        return extract_worksheet_id(message.text for message in messages)
 
     def run(self):
         if self.type != "reaction_removed" or self.reaction != self.target_emoji:
