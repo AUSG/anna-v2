@@ -1,50 +1,19 @@
 import logging
-from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
 import requests
 
+from application.question import (
+    MAX_CONVERSATION_AUTHOR_CHARS as MAX_CONVERSATION_AUTHOR_CHARS,
+    MAX_CONVERSATION_CHARS as MAX_CONVERSATION_CHARS,
+    MAX_CONVERSATION_MESSAGE_CHARS as MAX_CONVERSATION_MESSAGE_CHARS,
+    MAX_CONVERSATION_MESSAGES as MAX_CONVERSATION_MESSAGES,
+    MAX_CONVERSATION_TIMESTAMP_CHARS as MAX_CONVERSATION_TIMESTAMP_CHARS,
+    ChatResult as ChatResult,
+    Source as Source,
+)
+
 logger = logging.getLogger(__name__)
-
-# crawler 의 /api/v1/chat 상한(services/conversation.py)과 맞춘다
-MAX_CONVERSATION_MESSAGES = 100
-MAX_CONVERSATION_MESSAGE_CHARS = 4000
-MAX_CONVERSATION_CHARS = 40000
-MAX_CONVERSATION_AUTHOR_CHARS = 200
-MAX_CONVERSATION_TIMESTAMP_CHARS = 100
-
-
-@dataclass
-class Source:
-    """A document returned by the QA service."""
-
-    document_id: str
-    score: float = 0.0
-    title: str = ""
-    url: str = ""
-    content_preview: str = ""
-    channel_id: Optional[str] = None
-    thread_ts: Optional[str] = None
-    user_id: Optional[str] = None
-    timestamp: Optional[str] = None
-    truncated: bool = False
-    evidence_urls: List[str] = field(default_factory=list)
-
-
-@dataclass
-class ChatResult:
-    """Structured chat response from crawler-rag.
-
-    ``status``, ``citations`` and ``trace_id`` were added after the original
-    answer-only endpoint. Defaults keep callers compatible with old responses.
-    """
-
-    answer: str
-    sources: List[Source] = field(default_factory=list)
-    timing: Dict[str, Any] = field(default_factory=dict)
-    status: str = "answered"
-    citations: List[str] = field(default_factory=list)
-    trace_id: str = ""
 
 
 class QAClient:
@@ -91,7 +60,7 @@ class QAClient:
 
     @staticmethod
     def _parse_chat_response(data: Any) -> Optional[ChatResult]:
-        """Parse current and legacy response shapes without raising on bad JSON."""
+        """응답을 파싱하고 answer가 문자열인지 검사한다."""
         if not isinstance(data, dict) or not isinstance(data.get("answer"), str):
             raise ValueError("chat response must contain a string answer")
 
@@ -158,10 +127,7 @@ class QAClient:
         max_tokens: int = 512,
         images: Optional[List[str]] = None,
     ) -> Optional[str]:
-        """검색(RAG) 없이 순수 LLM 생성. 페르소나 기반 답글 등에 사용.
-
-        images: 이미지 data URL 리스트 (예: "data:image/png;base64,...") — 있으면 비전 입력.
-        """
+        """검색 없이 답변을 생성한다. images는 비전 입력용 data URL 목록이다."""
         payload = {"content": content, "max_tokens": max_tokens}
         if system_prompt:
             payload["system_prompt"] = system_prompt
@@ -187,10 +153,7 @@ class QAClient:
             return None
 
     def daily_digest(self) -> str:
-        """어제의 핫스레드 다이제스트 글(crawler 가 고르고 쓴다). 소개할 게 없으면 빈 문자열.
-
-        스케줄러 잡이 관리자 채널에 알릴 수 있도록 실패는 예외로 올린다.
-        """
+        """어제의 다이제스트를 받는다. 실패는 호출자에게 전달한다."""
         response = requests.post(
             f"{self.qa_server_base_url}/api/v1/digest/daily",
             json={},
@@ -233,7 +196,7 @@ def _as_float(value: Any) -> float:
 
 
 def _bound_conversation(conversation: Any) -> List[Dict[str, str]]:
-    """Keep conversation input within the crawler API's bounded contract."""
+    """대화 입력을 API 개수와 길이 제한에 맞춘다."""
     if not isinstance(conversation, list):
         return []
     bounded: List[Dict[str, str]] = []

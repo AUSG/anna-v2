@@ -1,8 +1,45 @@
+from typing import Dict, List, Optional, get_type_hints
 from unittest.mock import MagicMock, patch
 
 import requests
 
+from application import question
+from implementation import qa_client
 from implementation.qa_client import ChatResult, QAClient
+
+
+def test_legacy_value_and_limit_exports_are_the_application_objects():
+    assert qa_client.Source is question.Source
+    assert ChatResult is question.ChatResult
+    assert qa_client.Source.__module__ == "application.question"
+    assert ChatResult.__module__ == "application.question"
+    for name in (
+        "MAX_CONVERSATION_MESSAGES",
+        "MAX_CONVERSATION_MESSAGE_CHARS",
+        "MAX_CONVERSATION_CHARS",
+        "MAX_CONVERSATION_AUTHOR_CHARS",
+        "MAX_CONVERSATION_TIMESTAMP_CHARS",
+    ):
+        assert getattr(qa_client, name) is getattr(question, name)
+
+    result = QAClient._parse_chat_response(
+        {"answer": "답변", "sources": [{"document_id": "doc-1"}]}
+    )
+    assert type(result) is question.ChatResult
+    assert type(result.sources[0]) is question.Source
+
+
+def test_client_runtime_type_hints_resolve_the_application_result():
+    assert get_type_hints(QAClient.chat) == {
+        "question": str,
+        "system_prompt": Optional[str],
+        "conversation": Optional[List[Dict[str, str]]],
+        "return": Optional[question.ChatResult],
+    }
+    assert (
+        get_type_hints(QAClient._parse_chat_response)["return"]
+        == Optional[question.ChatResult]
+    )
 
 
 def _response(payload, status_code=200):
