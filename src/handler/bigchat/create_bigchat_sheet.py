@@ -1,14 +1,12 @@
 from application.bigchat import CreateBigchatCommand, InvalidBigchatName
-from handler.bigchat.creation import (
-    SpreadsheetBigchatRepository,
-    register_early_reacted_users,
-)
+from handler.bigchat.creation import register_early_reacted_users
 from handler.bigchat.messages import (
     bigchat_created_message,
     invalid_bigchat_name_message,
 )
 from handler.bigchat.mention_handler import MentionHandler
 from handler.mention_router import matches_mention
+from implementation.bigchat_repository import SpreadsheetBigchatRepository
 
 
 class CreateBigchatSheet(MentionHandler):
@@ -34,7 +32,7 @@ class CreateBigchatSheet(MentionHandler):
         except InvalidBigchatName:
             command = None
 
-        # 안내 전송 오류에 검증 예외가 context로 남지 않도록 except 밖에서 보낸다.
+        # 전송 오류에 검증 예외가 섞이지 않게 한다.
         if command is None:
             self.slack_client.send_message_only_visible_to_user(
                 msg=invalid_bigchat_name_message(self.user),

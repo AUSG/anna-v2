@@ -2,25 +2,13 @@ import logging
 
 from slack_sdk.errors import SlackApiError
 
-from application.bigchat import BigchatCreated
 from handler.bigchat.messages import build_registration_info_message
-from implementation.google_spreadsheet_client import GoogleSpreadsheetClient
+from implementation.bigchat_repository import (
+    SpreadsheetBigchatRepository as SpreadsheetBigchatRepository,
+)
 from implementation.member_finder import MemberLackInfo, MemberNotFound
 
 logger = logging.getLogger(__name__)
-
-
-class SpreadsheetBigchatRepository:
-    def __init__(self, client: GoogleSpreadsheetClient):
-        self._client = client
-
-    def create(self, sheet_name: str) -> BigchatCreated:
-        worksheet_id = self._client.create_bigchat_sheet(sheet_name)
-        return BigchatCreated(
-            worksheet_id=worksheet_id,
-            sheet_name=sheet_name,
-            sheet_url=self._client.get_url(worksheet_id),
-        )
 
 
 def register_early_reacted_users(
@@ -32,14 +20,9 @@ def register_early_reacted_users(
     channel,
     thread_ts,
 ):
-    """시트가 생기기 전에 모집글에 :gogo:를 누른 사람들을 일괄 등록한다. (#89)
+    """시트 게시 뒤 미리 달린 참여 반응을 등록한다. (#89)
 
-    멘션·모달 두 경로 모두 시트 링크 답글을 올린 직후에 호출해야 한다.
-    링크 게시 이후의 반응은 JoinBigchat이 처리하며, 거의 동시에 같은 사람을
-    처리해도 append_row_if_absent가 중복 등록을 막는다.
-
-    시트 생성과 링크 안내는 이미 성공했으므로, 일괄 등록 실패는 스레드에 경고만
-    남긴다. 전체 요청을 실패 처리하면 사용자가 같은 시트를 다시 만들 수 있다.
+    등록 중 오류는 재생성 대신 스레드 경고를 시도한다.
     """
     reaction = slack_client.get_emoji(
         channel=channel, ts=thread_ts, emoji_name=target_emoji
@@ -88,8 +71,7 @@ def register_early_reacted_users(
                     user_id=user,
                 )
             except SlackApiError as ex:
-                # 채널을 떠났거나 비활성화된 반응자에게는 ephemeral을 못 보낸다.
-                # 등록 자체는 이미 끝났으므로 나머지 인원 안내를 계속한다.
+                # 슬랙 API 오류로 안내하지 못해도 다음 사용자로 진행한다.
                 logger.warning(f"Failed to send registration info to {user}: {ex}")
     except Exception:
         logger.exception("Failed to backfill early reactions")
