@@ -1,4 +1,4 @@
-"""QA response values and bounded conversation selection."""
+"""QA 응답 값과 대화 선택 정책."""
 
 import re
 from dataclasses import dataclass, field
@@ -14,7 +14,7 @@ MAX_CONVERSATION_TIMESTAMP_CHARS = 100
 
 @dataclass
 class Source:
-    """A document returned by the QA service."""
+    """QA 응답의 출처 문서."""
 
     document_id: str
     score: float = 0.0
@@ -31,11 +31,7 @@ class Source:
 
 @dataclass
 class ChatResult:
-    """Structured chat response from crawler-rag.
-
-    ``status``, ``citations`` and ``trace_id`` were added after the original
-    answer-only endpoint. Defaults keep callers compatible with old responses.
-    """
+    """답변과 출처를 담는다. 추가 필드의 기본값은 구형 응답을 지원한다."""
 
     answer: str
     sources: List[Source] = field(default_factory=list)
@@ -48,13 +44,11 @@ class ChatResult:
 def select_conversation(
     normalized: List[Dict[str, str]], question: str
 ) -> List[Dict[str, str]]:
-    """Keep selected objects in input order without copying or mutating them."""
+    """선택한 원본 객체를 입력 순서로 반환한다."""
     if not normalized:
         return []
 
-    # Keep the root, turns matching the current question, and newest turns.
-    # This retains both the topic and a useful middle reference when a long
-    # thread would otherwise leave only the most recent messages.
+    # 첫 글, 질문 관련 글, 최근 글 순으로 후보를 고른다.
     root = normalized[0]
     terms = set(re.findall(r"[0-9A-Za-z가-힣]{2,}", question.lower()))
     relevant = [

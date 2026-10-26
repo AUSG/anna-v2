@@ -1,4 +1,4 @@
-"""Render QA answers and cited sources without external I/O."""
+"""QA 답변과 인용 출처를 슬랙 형식으로 만든다."""
 
 import re
 from collections import Counter
@@ -9,8 +9,7 @@ from zoneinfo import ZoneInfo
 
 from application.question import ChatResult
 
-# Permit balanced parentheses inside a Markdown URL (for example Wikipedia
-# paths) while keeping the final parenthesis as Markdown syntax.
+# URL 안의 한 겹 괄호를 허용한다.
 _URL_WITH_BALANCED_PARENS = r"https?://(?:[^()\s<>|`]+|\([^()\s<>|`]*\))+"
 _ANSWER_MARKDOWN_LINK = re.compile(
     rf"\[([^\]]+)\]\(({_URL_WITH_BALANCED_PARENS})\)", re.IGNORECASE
@@ -19,19 +18,14 @@ _ANSWER_SLACK_LINK = re.compile(r"<(https?://[^>|\s]+)(?:\|([^>]*))?>", re.IGNOR
 _ANSWER_MALFORMED_SLACK_LINK = re.compile(
     r"<(https?://[^>|\s]+)(?:\|([^>\n]*))?", re.IGNORECASE
 )
-# Backticks are delimiters rather than part of a URL.  Keep closing
-# parentheses in the candidate so URLs such as ``/wiki/Foo_(bar)`` can be
-# balanced by the normalizer below.
+# 백틱은 제외하고 남는 닫는 괄호는 아래에서 정리한다.
 _ANSWER_PLAIN_URL = re.compile(r"(?:https?://|www\.)[^\s<>|`]+", re.IGNORECASE)
 _TRAILING_HANGUL = re.compile(r"[가-힣ㄱ-ㅎㅏ-ㅣ]+$")
 UNTRUSTED_LINK_MARKER = "[확인되지 않은 링크 제거]"
 
 
 def render_parts(result) -> Tuple[str, List[str]]:
-    """Return the cleaned answer and its Slack-formatted cited source links.
-
-    The old answer-only return value is still accepted.
-    """
+    """답변과 인용 출처 링크를 만든다. 구형 문자열 응답도 받는다."""
     if result is None:
         return "앗, 답변 서버가 잠시 응답하지 않아요. 잠시 후 다시 시도해 주세요.", []
     if isinstance(result, str):
@@ -66,11 +60,9 @@ def render_parts(result) -> Tuple[str, List[str]]:
             source.document_id == "conversation:current"
             and source.url == "conversation:current"
         ):
-            # This is a synthetic source.  It has no external permalink.
+            # 현재 대화 출처에는 외부 링크가 없다.
             cited_sources.append(label)
-    # The model sees source URLs in its context and may copy or invent links
-    # in ``answer``.  Only links belonging to a cited source are trusted;
-    # source links are rendered below from structured metadata.
+    # 인용된 고유 출처의 URL과 근거 URL만 답변에 허용한다.
     allowed_answer_urls = {
         _safe_source_url(source.url) for source in unique_cited_sources
     }
@@ -86,7 +78,7 @@ def render_parts(result) -> Tuple[str, List[str]]:
 
 
 def _safe_source_url(url: str) -> str:
-    """Only put ordinary web URLs into Slack's angle-bracket link syntax."""
+    """스킴과 구분자를 검사해 출처 URL을 고른다."""
     if (
         not isinstance(url, str)
         or any(char in url for char in "<>|`")
@@ -104,13 +96,7 @@ def _escape_slack_text(value: str) -> str:
 
 
 def _strip_untrusted_answer_links(answer: str, allowed_urls: set[str]) -> str:
-    """Keep only evidence-backed URLs copied into the generated answer.
-
-    Citation links are appended from ``sources`` separately.  This prevents a
-    malformed or hallucinated URL in the free-form model answer from becoming
-    a clickable Slack link, while retaining a URL when it exactly matches a
-    source the model cited.
-    """
+    """답변에서 찾은 URL을 인용 출처의 허용 목록과 대조한다."""
 
     def slack_link(match):
         url, label = match.group(1), match.group(2)
@@ -136,8 +122,7 @@ def _strip_untrusted_answer_links(answer: str, allowed_urls: set[str]) -> str:
         return UNTRUSTED_LINK_MARKER + suffix
 
     answer = _ANSWER_SLACK_LINK.sub(slack_link, answer)
-    # A missing closing ``>`` is not a valid Slack link, but leaving it in the
-    # message still lets Slack interpret the URL unpredictably.
+    # 닫는 꺾쇠가 빠진 링크도 허용 목록으로 검사한다.
     answer = _ANSWER_MALFORMED_SLACK_LINK.sub(
         lambda match: match.group(0)
         if match.group(1) in allowed_urls
@@ -149,11 +134,7 @@ def _strip_untrusted_answer_links(answer: str, allowed_urls: set[str]) -> str:
 
 
 def _normalize_answer_url(candidate: str) -> str:
-    """Remove sentence punctuation and unmatched closing URL delimiters.
-
-    Korean text glued to a URL (``[링크](https://a.test/)은``) is a particle, not
-    part of the URL, so it is dropped before the delimiter check.
-    """
+    """끝 한글, 문장부호, 남는 닫는 괄호 순으로 정리한다."""
     trimmed = _TRAILING_HANGUL.sub("", candidate).rstrip(".,!?;:")
     while trimmed.endswith(")") and trimmed.count(")") > trimmed.count("("):
         trimmed = trimmed[:-1]
@@ -161,7 +142,7 @@ def _normalize_answer_url(candidate: str) -> str:
 
 
 def _format_timestamp(value: str) -> str:
-    """Render ISO/Slack timestamps as a compact KST time, preserving bad input."""
+    """시각을 KST로 표시하며 형식이나 범위 오류면 원문을 남긴다."""
     try:
         if re.fullmatch(r"\d+(?:\.\d+)?", value):
             parsed = datetime.fromtimestamp(float(value), tz=timezone.utc)

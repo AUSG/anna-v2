@@ -1,4 +1,4 @@
-"""Compatibility imports for conversation selection."""
+"""대화 선택의 기존 import 경로를 유지한다."""
 
 from application.question import (
     MAX_CONVERSATION_CHARS as MAX_CONVERSATION_CHARS,

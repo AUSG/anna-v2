@@ -50,7 +50,7 @@ Slack 답변 형식:
 
 
 class QuestionResponse(MentionHandler):
-    # 스레드 맥락 과다 방지: 가장 최근부터 이 글자 수까지만 포함
+    # 기존 텍스트 보기의 글자 수 기준
     THREAD_CONTEXT_MAX_CHARS = 4000
 
     def __init__(
@@ -61,11 +61,9 @@ class QuestionResponse(MentionHandler):
         require_prefix=True,
         assistant_id: Optional[str] = None,
     ):
-        """require_prefix=True 면 `q)` 가 있을 때만 반응한다 (명령어보다 먼저 평가되는 명시적 질문).
+        """require_prefix가 참이면 q) 질문만, 거짓이면 일반 질문 멘션도 받는다.
 
-        require_prefix=False 면 멘션 텍스트 전체를 질문으로 취급한다 — 셔플/새로운 빅챗/help
-        등 어느 명령에도 걸리지 않은 멘션을 받아주는 폴백 전용. 빈 멘션은
-        can_handle 이 False 라 기존 폴백(SimpleResponse)으로 넘어간다.
+        빈 멘션은 받지 않는다.
         """
         self.text = event["text"]
         self.ts = event["ts"]
@@ -113,7 +111,7 @@ class QuestionResponse(MentionHandler):
 
     @staticmethod
     def _render_result(result) -> str:
-        """Render a QA result as one plain message (answer + source line)."""
+        """답변과 출처를 한 메시지로 합친다."""
         answer, sources = QuestionResponse._render_parts(result)
         if sources:
             answer += "\n\n출처: " + ", ".join(sources)
@@ -121,14 +119,11 @@ class QuestionResponse(MentionHandler):
 
     @staticmethod
     def _render_parts(result) -> Tuple[str, List[str]]:
-        """Return the cleaned answer and its Slack-formatted cited source links.
-
-        The old answer-only return value is still accepted.
-        """
+        """정리한 답변과 출처 링크를 반환한다. 구형 문자열 응답도 받는다."""
         return render_parts(result)
 
     def _fetch_conversation(self) -> List[Dict[str, str]]:
-        """Gather bounded thread history as separately labeled conversation turns."""
+        """스레드 발화를 읽고 전송량에 맞춰 고른다."""
         if not self.channel or not self.thread_ts:
             return []
         try:
@@ -145,12 +140,11 @@ class QuestionResponse(MentionHandler):
         return select_conversation(normalized, self._extract_question())
 
     def _normalize_conversation(self, messages) -> List[Dict[str, str]]:
-        """Convert SDK replies to bounded plain conversation turns."""
+        """SDK 응답을 발화로 바꾸고 필드별 길이를 제한한다."""
         normalized = []
         for message in messages or []:
             ts = self._message_value(message, "ts")
-            # Slack may include the event itself in replies. Comparing ts is
-            # stable even when the current text contains a different mention form.
+            # 멘션 표기가 달라도 현재 이벤트는 ts로 제외한다.
             if ts and ts == self.ts:
                 continue
             text = self._message_value(message, "text").strip()
@@ -176,7 +170,7 @@ class QuestionResponse(MentionHandler):
         return normalized
 
     def _fetch_thread_context(self) -> str:
-        """Legacy text view retained for callers that used the old helper."""
+        """기존 호출자를 위한 텍스트 보기를 만든다."""
         lines = []
         total = 0
         for item in self._fetch_conversation():
@@ -196,11 +190,7 @@ class QuestionResponse(MentionHandler):
         return value if isinstance(value, str) else ""
 
     def _is_assistant_message(self, message: Any, author: str) -> bool:
-        """안나 자신의 발화만 assistant 다.
-
-        다른 봇의 글(GeekNews 스레드 첫 글 등)을 assistant 로 넣으면 요약할 원문이
-        '안나가 했던 말'이 되어 근거에서 빠진다. 안나 id 를 모를 때만 봇 여부로 추정한다.
-        """
+        """안나 ID가 있으면 일치 여부로, 없으면 봇 표시로 발화를 구분한다."""
         if self.assistant_id:
             return author == self.assistant_id
         return bool(
