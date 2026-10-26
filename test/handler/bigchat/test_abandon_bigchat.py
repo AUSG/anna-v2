@@ -27,7 +27,11 @@ class TestAbandonBigchat(unittest.TestCase):
                 thread_ts="1689429129.825319",
                 channel="C03SZTDEDK3",
                 user="U01BN035Y6L",
-                text="새로운 빅챗, 등록 완료! <https://docs.google.com/spreadsheets/d/1FtKRO4gmlVg-Si0_CHt-tkpVd3LDTXdsoZ0u98MYd0k/edit#gid=161837744|구글스프레드 시트>",
+                text=(
+                    "새로운 빅챗, 등록 완료! <https://docs.google.com/spreadsheets/d/"
+                    "1FtKRO4gmlVg-Si0_CHt-tkpVd3LDTXdsoZ0u98MYd0k/"
+                    "edit#gid=161837744|구글스프레드 시트>"
+                ),
             ),
         ]
         mock_member_manager = MagicMock()
@@ -52,7 +56,7 @@ class TestAbandonBigchat(unittest.TestCase):
 
         mock_slack_client.get_replies.assert_called_once()
         mock_member_manager.find.assert_called_once()
-        mock_gs_client.delete_row.assert_called_once()
+        mock_gs_client.delete_row.assert_called_once_with(161837744, "email")
         mock_slack_client.send_message_only_visible_to_user.assert_called_once()
         assert result is True
         assert (
@@ -72,7 +76,11 @@ class TestAbandonBigchat(unittest.TestCase):
                 thread_ts="1689429129.825319",
                 channel="C03SZTDEDK3",
                 user="U01BN035Y6L",
-                text="새로운 빅챗, 등록 완료! <https://docs.google.com/spreadsheets/d/1FtKRO4gmlVg-Si0_CHt-tkpVd3LDTXdsoZ0u98MYd0k/edit#gid=161837744|구글스프레드 시트>",
+                text=(
+                    "새로운 빅챗, 등록 완료! <https://docs.google.com/spreadsheets/d/"
+                    "1FtKRO4gmlVg-Si0_CHt-tkpVd3LDTXdsoZ0u98MYd0k/"
+                    "edit#gid=161837744|구글스프레드 시트>"
+                ),
             ),
         ]
         mock_member_manager = MagicMock()
@@ -145,13 +153,40 @@ class TestAbandonBigchatLoadingEmoji(unittest.TestCase):
         mock_slack_client.add_emoji.assert_not_called()
         mock_slack_client.remove_emoji.assert_not_called()
 
+    def test_zero_gid_stops_before_loading_or_storage(self):
+        event = create_sample_reaction_removed_event("gogo")
+        mock_slack_client = MagicMock()
+        mock_slack_client.get_replies.return_value = [
+            self._message(
+                event["item"]["ts"],
+                "https://docs.google.com/spreadsheets/d/a/edit#gid=0",
+            )
+        ]
+        mock_gs_client = MagicMock()
+        mock_member_manager = MagicMock()
+
+        result = self._sut(
+            event, mock_slack_client, mock_gs_client, mock_member_manager
+        ).run()
+
+        assert result is False
+        mock_slack_client.get_replies.assert_called_once_with(
+            channel=event["item"]["channel"], ts=event["item"]["ts"]
+        )
+        mock_slack_client.add_emoji.assert_not_called()
+        mock_slack_client.remove_emoji.assert_not_called()
+        assert mock_gs_client.mock_calls == []
+        assert mock_member_manager.mock_calls == []
+
     def test_wraps_the_actual_cancellation(self):
         event = create_sample_reaction_removed_event("gogo")
         mock_slack_client = MagicMock()
         mock_slack_client.get_replies.return_value = [
             self._message(
                 event["item"]["ts"],
-                "새로운 빅챗, 등록 완료! <https://docs.google.com/spreadsheets/d/1FtKRO4gmlVg-Si0_CHt-tkpVd3LDTXdsoZ0u98MYd0k/edit#gid=161837744|구글스프레드 시트>",
+                "새로운 빅챗, 등록 완료! <https://docs.google.com/spreadsheets/d/"
+                "1FtKRO4gmlVg-Si0_CHt-tkpVd3LDTXdsoZ0u98MYd0k/"
+                "edit#gid=161837744|구글스프레드 시트>",
             )
         ]
         mock_gs_client = MagicMock()
