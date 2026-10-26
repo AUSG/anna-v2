@@ -28,7 +28,7 @@ class BigchatCreated:
 
 @dataclass
 class ReminderResult:
-    """한 번의 발송 시도 요약. 수동 트리거가 이걸로 결과 메시지를 만든다."""
+    """리마인더 발송 결과."""
 
     target_date: date
     bigchat_names: List[str] = field(default_factory=list)

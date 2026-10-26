@@ -5,10 +5,10 @@ from handler.mention_router import REMINDER_TRIGGER as TRIGGER
 from util.bigchat_event import BigchatEvent
 from util.utils import strip_multiline
 
-# 이름 안의 줄구분자도 처리하므로 multiline literal 들여쓰기는 기존 값을 유지한다.
+# 이름의 줄구분자가 출력 공백에 영향을 주므로 문자열 들여쓰기를 유지한다.
 WEEKDAYS_KO = ["월", "화", "수", "목", "금", "토", "일"]
 TEST_PHRASE = "테스트"
-# 전원 발송은 되돌릴 수 없어서, 이 문구를 통째로 쳐야만 실행된다
+# 전원 발송은 이 확인 문구가 있을 때만 실행한다.
 BROADCAST_PHRASE = "지금 전원 발송"
 
 USAGE = strip_multiline(
@@ -34,9 +34,7 @@ def build_reminder(event: BigchatEvent) -> str:
         f"{d.month}월 {d.day}일 ({WEEKDAYS_KO[d.weekday()]}) "
         f"{d.strftime('%H:%M')}~{event.end.strftime('%H:%M')}"
     )
-    # 시트 이름이 "빅챗 26-08-18 ..." 이면 이벤트 이름이 그냥 "빅챗" 이라
-    # 그대로 쓰면 "*빅챗* 빅챗이 열리는 날이야" 처럼 겹친다.
-    # 어느 쪽이든 '빅챗' 으로 끝나므로 뒤에 붙는 조사는 항상 '이'.
+    # 이름이 '빅챗'으로 끝나면 접미사를 중복하지 않는다.
     subject = f"*{event.name}*" if event.name.endswith("빅챗") else f"*{event.name}* 빅챗"
     return strip_multiline(
         f"""

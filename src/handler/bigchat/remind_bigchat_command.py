@@ -20,10 +20,9 @@ SLACK_USER_PAT = re.compile(r"<@([A-Z0-9]+)>")
 
 
 class RemindBigchatCommand(MentionHandler):
-    """리마인더를 18시 스케줄과 무관하게 지금 실행하는 멘션 명령.
+    """예약 시각을 기다리지 않고 내일 빅챗의 리마인더를 실행한다.
 
-    두 모드 모두 "지금 기준 내일" 시작하는 빅챗을 실제 스케줄과 똑같이 찾는다.
-    다른 건 받는 사람뿐이다 — 테스트는 멘션한 사람에게만, 전원 발송은 신청자 전원에게.
+    테스트는 멘션 대상에게, 전원 발송은 신청자에게 보낸다.
     """
 
     def __init__(self, event, slack_client, gs_client, member_manager, anna_id):
@@ -77,7 +76,7 @@ class RemindBigchatCommand(MentionHandler):
         ).run(only_user_ids=only_user_ids)
 
     def _target_user_ids(self):
-        """멘션된 슬랙 계정들. 자기 자신에게 보내보는 게 정상 사용이라 실행자도 제외하지 않는다."""
+        """멘션 대상을 고른다. 실행자와 중복은 유지하고 안나만 제외한다."""
         return [
             user_id
             for user_id in SLACK_USER_PAT.findall(self.text)

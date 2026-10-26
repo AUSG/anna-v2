@@ -11,11 +11,7 @@ logger = logging.getLogger(__name__)
 
 
 class RemindBigchat:
-    """빅챗 전날 저녁, 신청자들에게 내일 잊지 말고 오라는 리마인더 DM 을 보낸다.
-
-    신청 시트의 행에는 슬랙 id 가 없으므로, 행의 이메일을 멤버 시트의
-    이메일과 대조해 슬랙 계정을 역추적한다 (탈퇴 취소가 이메일 기준인 것과 동일).
-    """
+    """신청 이메일을 슬랙 계정과 대조해 내일 빅챗의 리마인더를 보낸다."""
 
     def __init__(self, slack_client, gs_client, member_manager):
         self.slack_client = slack_client
@@ -27,10 +23,9 @@ class RemindBigchat:
         now: Optional[datetime] = None,
         only_user_ids: Optional[List[str]] = None,
     ) -> ReminderResult:
-        """내일 시작하는 모든 빅챗의 신청자에게 DM 을 보낸다.
+        """내일 시작하는 빅챗을 찾아 발송하고 결과를 모은다.
 
-        :param only_user_ids: 주면 신청자 대신 이 슬랙 계정들에게만 보낸다 (수동 트리거 테스트용).
-          신청자 조회/매칭은 그대로 수행하고 로그도 남기므로, 실제 발송 경로를 그대로 점검할 수 있다.
+        only_user_ids를 지정해도 신청자 조회와 계정 매칭은 수행한다.
         """
         now = now or datetime.now(KST)
         tomorrow = (now + timedelta(days=1)).date()
@@ -104,7 +99,7 @@ class RemindBigchat:
         )
         logger.debug("Reminder message for %r:\n%s", event.name, msg)
 
-        # 신청자 -> 슬랙 계정 해석은 테스트 모드에서도 그대로 수행한다 (로그로 매칭 상태를 보려고)
+        # 테스트 모드에서도 신청자와 계정의 매칭 상태를 확인한다.
         recipients = []
         for email in emails:
             slack_id = email_to_slack_id.get(email)
@@ -152,10 +147,7 @@ class RemindBigchat:
         result.sent_cnt += sent_cnt
 
     def _applicant_emails(self, worksheet_id: int) -> List[str]:
-        """신청 시트 각 행의 이메일 목록.
-
-        수기 수정으로 열이 밀렸을 수 있어 이메일 형태의 첫 셀을 찾고, 중복 신청은 한 번만 센다.
-        """
+        """각 행의 첫 이메일을 골라 원래 순서대로 중복을 제거한다."""
         rows = self.gs_client.get_values(worksheet_id)
         emails, skipped_rows = [], 0
         for row in rows:
