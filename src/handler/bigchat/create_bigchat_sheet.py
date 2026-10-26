@@ -32,6 +32,10 @@ class CreateBigchatSheet(MentionHandler):
         try:
             command = CreateBigchatCommand(sheet_name)
         except InvalidBigchatName:
+            command = None
+
+        # 안내 전송 오류에 검증 예외가 context로 남지 않도록 except 밖에서 보낸다.
+        if command is None:
             self.slack_client.send_message_only_visible_to_user(
                 msg=invalid_bigchat_name_message(self.user),
                 channel=self.channel,
