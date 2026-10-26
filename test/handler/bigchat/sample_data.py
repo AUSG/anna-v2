@@ -1,6 +1,18 @@
 import json
 
 
+def create_sample_member():
+    from implementation.member_finder import Member
+
+    return Member(
+        kor_name="김동주",
+        eng_name="Kim Dongjoo",
+        email="email",
+        phone="phone",
+        school_name_or_company_name="school_name_or_company_name",
+    )
+
+
 def create_sample_message_shortcut_body(thread_ts=None):
     message = {
         "type": "message",

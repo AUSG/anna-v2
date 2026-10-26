@@ -4,6 +4,7 @@ from contextlib import nullcontext
 from typing import List, Optional
 
 from config.env_config import envs
+from handler.bigchat.messages import build_registration_info_message
 from implementation.google_spreadsheet_client import WorksheetNotFound
 from implementation.member_finder import MemberNotFound, MemberLackInfo
 from implementation.slack_client import Message
@@ -15,27 +16,12 @@ from util.bigchat_event import (
     parse_sheet_name,
     to_gcal_link_truncated,
 )
-from util.utils import strip_multiline
 
 logger = logging.getLogger(__name__)
 
 SPREADSHEET_PAT = re.compile(
     r"https://docs.google.com/spreadsheets/d/.*/edit#gid=(\d*)"
 )
-
-
-def build_registration_info_message(user: str, member) -> str:
-    return strip_multiline(
-        f"""
-        <@{user}> 네 신청 정보를 아래와 같이 등록했어. 바뀐 부분이 있다면 운영진에게 DM으로 알려줘!
-        ```
-        이름(영문): {member.kor_name}({member.eng_name})
-        핸드폰: {member.phone}
-        이메일: {member.email}
-        학교/회사: {member.school_name_or_company_name}
-        ```
-        (참고로 이 메시지는 너만 볼 수 있어!)"""
-    )
 
 
 class JoinBigchat:

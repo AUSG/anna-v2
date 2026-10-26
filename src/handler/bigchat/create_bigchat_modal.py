@@ -2,14 +2,15 @@ import json
 
 from slack_sdk.errors import SlackApiError
 
-from handler.bigchat.create_bigchat_sheet import (
+from application.bigchat import CreateBigchatCommand, InvalidBigchatName
+from handler.bigchat.creation import register_early_reacted_users
+from handler.bigchat.messages import (
     bigchat_created_message,
-    register_early_reacted_users,
+    bot_not_in_channel_message,
 )
-from util.bigchat_event import parse_sheet_name
-from util.utils import strip_multiline
+from implementation.bigchat_repository import SpreadsheetBigchatRepository
 
-# Slack 앱 설정(Interactivity & Shortcuts)에 등록된 message shortcut의 callback ID
+# 슬랙 단축메뉴에 등록한 callback ID
 CREATE_BIGCHAT_SHORTCUT_ID = "create_bigchat"
 CREATE_BIGCHAT_VIEW_ID = "create_bigchat_modal"
 
@@ -21,26 +22,12 @@ ACTION_ID = "value"
 
 
 def normalize_shortcut_body(body):
-    """message shortcut payload를 기존 핸들러들이 쓰는 이벤트 모양(channel/ts/user가 문자열)으로 맞춘다.
-
-    ts는 스레드 답글에서 실행해도 항상 스레드 첫 글을 가리킨다 (:gogo: 참여 흐름의 앵커).
-    """
+    """단축메뉴 입력을 기존 이벤트 형식으로 맞춘다. ts는 모집글 기준이다."""
     message = body.get("message", {})
     return {
         **body,
         "channel": body["channel"]["id"],
         "ts": message.get("thread_ts") or message.get("ts"),
-        "user": body["user"]["id"],
-    }
-
-
-def normalize_view_body(body):
-    """view_submission payload의 private_metadata(채널/스레드 정보)를 최상위 키로 풀어놓는다."""
-    metadata = json.loads(body["view"]["private_metadata"])
-    return {
-        **body,
-        "channel": metadata["channel"],
-        "ts": metadata["thread_ts"],
         "user": body["user"]["id"],
     }
 
@@ -107,6 +94,17 @@ class OpenCreateBigchatModal:
         }
 
 
+def normalize_view_body(body):
+    """모달의 채널과 모집글 정보를 이벤트로 옮긴다."""
+    metadata = json.loads(body["view"]["private_metadata"])
+    return {
+        **body,
+        "channel": metadata["channel"],
+        "ts": metadata["thread_ts"],
+        "user": body["user"]["id"],
+    }
+
+
 class SubmitCreateBigchatModal:
     def __init__(
         self, event, ack, slack_client, gs_client, member_manager, target_emoji
@@ -125,28 +123,48 @@ class SubmitCreateBigchatModal:
         self.gs_client = gs_client
         self.member_manager = member_manager
         self.target_emoji = target_emoji
+        self._bigchats = SpreadsheetBigchatRepository(gs_client)
 
     def run(self):
         sheet_name = f"{self.name} {self.date[2:]} {self.start}~{self.end}"
-        errors = self._validate(sheet_name)
+        errors = self._validate_fields()
         if errors:
             self.ack(response_action="errors", errors=errors)
             return False
-        self.ack()  # 3초 안에 응답해야 하므로 시트 생성 전에 모달부터 닫는다
 
-        worksheet_id = self.gs_client.create_bigchat_sheet(sheet_name)
-        sheet_url = self.gs_client.get_url(worksheet_id)
+        try:
+            command = CreateBigchatCommand(sheet_name)
+        except InvalidBigchatName:
+            # 시트 이름 검증 실패를 모달 입력 오류로 알린다.
+            errors = {NAME_BLOCK: "형식이 올바르지 않아. 입력값을 다시 확인해줘!"}
+        else:
+            self.ack()  # 3초 안에 응답하도록 시트 생성 전에 모달을 닫는다.
+            return self._create_and_notify(command)
+
+        self.ack(response_action="errors", errors=errors)
+        return False
+
+    def _validate_fields(self) -> dict[str, str]:
+        errors = {}
+        if not self.name:
+            errors[NAME_BLOCK] = "이름을 입력해줘!"
+        if self.end <= self.start:
+            errors[END_BLOCK] = "종료 시각은 시작 시각보다 늦어야 해!"
+        return errors
+
+    def _create_and_notify(self, command: CreateBigchatCommand) -> bool:
+        created = self._bigchats.create(command.sheet_name)
         try:
             self.slack_client.send_thread_message(
-                msg=bigchat_created_message(sheet_url, sheet_name),
+                msg=bigchat_created_message(created.sheet_url, created.sheet_name),
                 channel=self.channel,
                 ts=self.thread_ts,
             )
         except SlackApiError as ex:
             if ex.response["error"] not in ("not_in_channel", "channel_not_found"):
                 raise
-            # 봇이 채널에 없으면 모집글의 reaction 도 읽을 수 없으니 일괄 등록은 생략한다
-            self._notify_bot_not_in_channel(sheet_url, sheet_name)
+            # 채널 밖에서는 반응을 읽지 못해 일괄 등록을 건너뛴다.
+            self._notify_bot_not_in_channel(created.sheet_url, created.sheet_name)
             return True
 
         register_early_reacted_users(
@@ -154,30 +172,15 @@ class SubmitCreateBigchatModal:
             self.gs_client,
             self.member_manager,
             self.target_emoji,
-            worksheet_id,
+            created.worksheet_id,
             channel=self.channel,
             thread_ts=self.thread_ts,
         )
         return True
 
-    def _validate(self, sheet_name):
-        errors = {}
-        if not self.name:
-            errors[NAME_BLOCK] = "이름을 입력해줘!"
-        if self.end <= self.start:
-            errors[END_BLOCK] = "종료 시각은 시작 시각보다 늦어야 해!"
-        if not errors and not parse_sheet_name(sheet_name):
-            # 위젯이 날짜/시각 형식을 보장하므로 여기 올 일이 없지만, 방어적으로 남겨둔다
-            errors[NAME_BLOCK] = "형식이 올바르지 않아. 입력값을 다시 확인해줘!"
-        return errors
-
     def _notify_bot_not_in_channel(self, sheet_url, sheet_name):
-        # 봇이 채널에 없으면 스레드 답글은 못 달지만, response_url로는 실행한 사람에게 안내할 수 있다
+        # 채널에 없어도 response_url로 요청자에게 안내한다.
         self.slack_client.send_response_url_message(
             response_url=self.response_url,
-            msg=strip_multiline(
-                f"""
-                시트(<{sheet_url}|{sheet_name}>)는 만들었는데, 내가 이 채널에 없어서 스레드에 답글을 못 달았어.
-                나를 채널에 초대한 뒤 위 시트 링크를 스레드에 공유해줘. 그래야 이모지로 참여 신청을 받을 수 있어!"""
-            ),
+            msg=bot_not_in_channel_message(sheet_url, sheet_name),
         )
