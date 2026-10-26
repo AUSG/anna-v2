@@ -29,9 +29,11 @@ class RemindBigchatCommandTestBase(unittest.TestCase):
         )
 
     def _reply(self):
-        return self.mock_slack_client.send_message_only_visible_to_user.call_args.kwargs[
-            "msg"
-        ]
+        return (
+            self.mock_slack_client.send_message_only_visible_to_user.call_args.kwargs[
+                "msg"
+            ]
+        )
 
 
 class TestCanHandle(RemindBigchatCommandTestBase):
@@ -88,8 +90,19 @@ class TestTestMode(RemindBigchatCommandTestBase):
             result = sut.handle_mention()
 
         assert result is False
+        mock_reminder.assert_not_called()
         mock_reminder.return_value.run.assert_not_called()
-        assert "받을 사람을 같이 멘션해줘" in self._reply()
+        reply = self._reply()
+        assert "받을 사람을 같이 멘션해줘" in reply
+        self.mock_slack_client.send_message_only_visible_to_user.assert_called_once_with(
+            msg="받을 사람을 같이 멘션해줘! 실수로 신청자 전원에게 나가지 않게 대상 지정을 필수로 해뒀어.\n"
+            "예) `빅챗 리마인더 테스트 <@U01BN035Y6L>`\n"
+            "(진짜로 전원에게 보내려면 `빅챗 리마인더 지금 전원 발송` 라고 해줘!)",
+            channel="C03SZTDEDK3",
+            ts="1689403771.805849",
+            user_id="U01BN035Y6L",
+        )
+        self.mock_slack_client.send_direct_message.assert_not_called()
 
     def test_reports_when_no_bigchat_tomorrow(self):
         sut = self._build_sut(f"<@{ANNA_ID}> 빅챗 리마인더 테스트 <@U0001>")
@@ -163,3 +176,81 @@ class TestBroadcastMode(RemindBigchatCommandTestBase):
 
         assert result is False
         mock_reminder.return_value.run.assert_not_called()
+
+
+class TestReminderCommandBoundaries(RemindBigchatCommandTestBase):
+    def test_unrelated_mention_has_no_reply_or_run(self):
+        sut = self._build_sut(f"<@{ANNA_ID}> 안녕")
+        with patch("handler.bigchat.remind_bigchat_command.RemindBigchat") as reminder:
+            assert sut.handle_mention() is False
+        reminder.assert_not_called()
+        self.mock_slack_client.send_message_only_visible_to_user.assert_not_called()
+
+    def test_target_helper_keeps_duplicates_and_invoker(self):
+        for text, expected in [
+            (
+                f"<@{ANNA_ID}> 빅챗 리마인더 테스트 <@U1><@U1> <@U01BN035Y6L> <@{ANNA_ID}> <@lower>",
+                ["U1", "U1", "U01BN035Y6L"],
+            ),
+            (
+                "<@UANNA> 테스트 <@U1><@U1> <@UINVOKER> <@UANNA> <@lower> <@U_2> <@U3|이름> <@A9>",
+                ["U1", "U1", "UINVOKER", "A9"],
+            ),
+        ]:
+            with self.subTest(text=text):
+                assert self._build_sut(text)._target_user_ids() == expected
+
+    def test_broadcast_takes_precedence_over_test_phrase(self):
+        sut = self._build_sut(f"<@{ANNA_ID}> 빅챗 리마인더 테스트 지금 전원 발송 <@U1>")
+        with patch("handler.bigchat.remind_bigchat_command.RemindBigchat") as reminder:
+            reminder.return_value.run.return_value = _result(bigchat_names=["빅챗"])
+            with self.assertLogs(
+                "handler.bigchat.remind_bigchat_command", level="WARNING"
+            ) as logs:
+                assert sut.handle_mention() is True
+        reminder.return_value.run.assert_called_once_with(only_user_ids=None)
+        assert len(logs.records) == 1
+        assert logs.records[0].name == "handler.bigchat.remind_bigchat_command"
+
+    def test_run_helper_uses_shared_reminder_and_original_clients(self):
+        sut = self._build_sut(f"<@{ANNA_ID}> 빅챗 리마인더")
+        expected = _result()
+        with patch("handler.bigchat.remind_bigchat_command.RemindBigchat") as reminder:
+            reminder.return_value.run.return_value = expected
+            assert sut._run(only_user_ids=[]) is expected
+        reminder.assert_called_once_with(
+            sut.slack_client, sut.gs_client, sut.member_manager
+        )
+        reminder.return_value.run.assert_called_once_with(only_user_ids=[])
+
+    def test_run_error_propagates_without_result_reply(self):
+        sut = self._build_sut(f"<@{ANNA_ID}> 빅챗 리마인더 테스트 <@U1>")
+        with patch("handler.bigchat.remind_bigchat_command.RemindBigchat") as reminder:
+            reminder.return_value.run.side_effect = RuntimeError("sheet unavailable")
+            with self.assertRaisesRegex(RuntimeError, "sheet unavailable"):
+                sut.handle_mention()
+        self.mock_slack_client.send_message_only_visible_to_user.assert_not_called()
+
+    def test_reply_error_is_not_treated_as_a_failed_dm(self):
+        sut = self._build_sut(f"<@{ANNA_ID}> 빅챗 리마인더 테스트 <@U1>")
+        self.mock_slack_client.send_message_only_visible_to_user.side_effect = (
+            RuntimeError("reply failed")
+        )
+        with patch("handler.bigchat.remind_bigchat_command.RemindBigchat") as reminder:
+            reminder.return_value.run.return_value = _result(
+                bigchat_names=["빅챗"], sent_cnt=1
+            )
+            with self.assertRaisesRegex(RuntimeError, "reply failed"):
+                sut.handle_mention()
+        reminder.return_value.run.assert_called_once_with(only_user_ids=["U1"])
+
+    def test_report_facade_keeps_original_unresolved_note_indentation(self):
+        result = _result(
+            bigchat_names=["빅챗"], applicant_cnt=2, resolved_cnt=1, sent_cnt=1
+        )
+        assert RemindBigchatCommand._build_report(result, None) == (
+            "                2026-08-20 빅챗 `빅챗` 신청자들에게 리마인더를 보냈어!\n"
+            "                - 신청 시트에서 찾은 신청자: 2명\n"
+            "                - 실제로 DM 을 보낸 사람: 1명\n"
+            "신청자 1명은 멤버 시트에서 슬랙 계정을 못 찾아서 못 보냈어. (누군지는 로그에 남겼어!)"
+        )

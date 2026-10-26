@@ -1,39 +1,17 @@
 import logging
-import re
-from dataclasses import dataclass, field
-from datetime import date, datetime, timedelta
+from datetime import datetime, timedelta
 from typing import List, Optional
 
-from util.bigchat_event import KST, BigchatEvent, parse_sheet_name
-from util.utils import strip_multiline
+from application.bigchat import ReminderResult as ReminderResult, select_bigchats
+from handler.bigchat.reminder_messages import WEEKDAYS_KO as WEEKDAYS_KO, build_reminder
+from handler.bigchat.reminder_policy import EMAIL_PAT as EMAIL_PAT, applicant_email
+from util.bigchat_event import KST, BigchatEvent
 
 logger = logging.getLogger(__name__)
 
-WEEKDAYS_KO = ["월", "화", "수", "목", "금", "토", "일"]
-
-# 소속(회사명 등)에 '@' 가 들어가는 경우와 구분하기 위해, 이메일 형태인 셀만 집는다
-EMAIL_PAT = re.compile(r"^\S+@\S+\.\S+$")
-
-
-@dataclass
-class ReminderResult:
-    """한 번의 발송 시도 요약. 수동 트리거가 이걸로 결과 메시지를 만든다."""
-
-    target_date: date
-    bigchat_names: List[str] = field(default_factory=list)
-    parsed_sheet_cnt: int = 0
-    ignored_sheet_cnt: int = 0
-    applicant_cnt: int = 0  # 신청 시트에서 찾은 이메일 수
-    resolved_cnt: int = 0  # 그 중 멤버 시트에서 슬랙 계정을 찾은 수
-    sent_cnt: int = 0
-
 
 class RemindBigchat:
-    """빅챗 전날 저녁, 신청자들에게 내일 잊지 말고 오라는 리마인더 DM 을 보낸다.
-
-    신청 시트의 행에는 슬랙 id 가 없으므로, 행의 이메일을 멤버 시트의
-    이메일과 대조해 슬랙 계정을 역추적한다 (탈퇴 취소가 이메일 기준인 것과 동일).
-    """
+    """신청 이메일을 슬랙 계정과 대조해 내일 빅챗의 리마인더를 보낸다."""
 
     def __init__(self, slack_client, gs_client, member_manager):
         self.slack_client = slack_client
@@ -45,10 +23,9 @@ class RemindBigchat:
         now: Optional[datetime] = None,
         only_user_ids: Optional[List[str]] = None,
     ) -> ReminderResult:
-        """내일 시작하는 모든 빅챗의 신청자에게 DM 을 보낸다.
+        """내일 시작하는 빅챗을 찾아 발송하고 결과를 모은다.
 
-        :param only_user_ids: 주면 신청자 대신 이 슬랙 계정들에게만 보낸다 (수동 트리거 테스트용).
-          신청자 조회/매칭은 그대로 수행하고 로그도 남기므로, 실제 발송 경로를 그대로 점검할 수 있다.
+        only_user_ids를 지정해도 신청자 조회와 계정 매칭은 수행한다.
         """
         now = now or datetime.now(KST)
         tomorrow = (now + timedelta(days=1)).date()
@@ -60,15 +37,7 @@ class RemindBigchat:
         )
 
         worksheets = self.gs_client.list_worksheets()
-        matched, parsed, ignored = [], [], []
-        for worksheet_id, title in worksheets:
-            event = parse_sheet_name(title)
-            if not event:
-                ignored.append(title)
-                continue
-            parsed.append(f"{title!r} -> starts {event.start.date()}")
-            if event.start.date() == tomorrow:
-                matched.append((worksheet_id, event))
+        matched, parsed, ignored = select_bigchats(worksheets, tomorrow)
 
         # 시트 이름이 곧 이벤트 정보라, 왜 매칭이 안 됐는지는 이 두 줄이면 판단할 수 있다
         logger.info(
@@ -130,7 +99,7 @@ class RemindBigchat:
         )
         logger.debug("Reminder message for %r:\n%s", event.name, msg)
 
-        # 신청자 -> 슬랙 계정 해석은 테스트 모드에서도 그대로 수행한다 (로그로 매칭 상태를 보려고)
+        # 테스트 모드에서도 신청자와 계정의 매칭 상태를 확인한다.
         recipients = []
         for email in emails:
             slack_id = email_to_slack_id.get(email)
@@ -178,17 +147,11 @@ class RemindBigchat:
         result.sent_cnt += sent_cnt
 
     def _applicant_emails(self, worksheet_id: int) -> List[str]:
-        """신청 시트 각 행의 이메일 목록.
-
-        수기 수정으로 열이 밀렸을 수 있어 이메일 형태의 첫 셀을 찾고, 중복 신청은 한 번만 센다.
-        """
+        """각 행의 첫 이메일을 골라 원래 순서대로 중복을 제거한다."""
         rows = self.gs_client.get_values(worksheet_id)
         emails, skipped_rows = [], 0
         for row in rows:
-            email = next(
-                (cell.strip().lower() for cell in row if EMAIL_PAT.match(cell.strip())),
-                None,
-            )
+            email = applicant_email(row)
             if not email:
                 skipped_rows += 1  # 빈 헤더 행이 보통 하나 있고, 그 외는 수기 편집 흔적일 수 있다
                 logger.debug("Worksheet %s: no email in row %r", worksheet_id, row)
@@ -210,20 +173,4 @@ class RemindBigchat:
 
     @staticmethod
     def _build_reminder(event: BigchatEvent) -> str:
-        d = event.start
-        when = (
-            f"{d.month}월 {d.day}일 ({WEEKDAYS_KO[d.weekday()]}) "
-            f"{d.strftime('%H:%M')}~{event.end.strftime('%H:%M')}"
-        )
-        # 시트 이름이 "빅챗 26-08-18 ..." 이면 이벤트 이름이 그냥 "빅챗" 이라
-        # 그대로 쓰면 "*빅챗* 빅챗이 열리는 날이야" 처럼 겹친다.
-        # 어느 쪽이든 '빅챗' 으로 끝나므로 뒤에 붙는 조사는 항상 '이'.
-        subject = (
-            f"*{event.name}*" if event.name.endswith("빅챗") else f"*{event.name}* 빅챗"
-        )
-        return strip_multiline(
-            f"""
-            :wave: 안녕! 내일 {subject}이 열리는 날이야.
-            :calendar: {when}
-            잊지 말고 꼭 와줘! 내일 만나 :raised_hands:"""
-        )
+        return build_reminder(event)

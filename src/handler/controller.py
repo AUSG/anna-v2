@@ -259,8 +259,7 @@ def announce_new_channel_created(event, say, client):
     AnnounceNewChannelCreated(event, SlackClient(say, client)).run()
 
 
-# 스케줄러(빅챗 전날 저녁)가 부르는 진입점 — 슬랙 이벤트 없이 실행되므로 bolt 의 say/client 가
-# 없고, 에러 알림도 catch_global_error 대신 web_client 로 직접 어드민 채널에 보낸다
+# 잡은 오류는 관리자 채널에 알림을 시도한다.
 def remind_bigchat():
     logger = logging.getLogger(__name__)
     logger.info("Bigchat reminder job invoked by scheduler")
@@ -268,12 +267,12 @@ def remind_bigchat():
     # 여러 명에게 연속으로 DM 을 보내다 429 를 맞으면 Retry-After 만큼 기다렸다 재시도한다
     web_client.retry_handlers.append(RateLimitErrorRetryHandler(max_retry_count=2))
     try:
-        sent_cnt = RemindBigchat(
+        result = RemindBigchat(
             SlackClient(None, web_client),
             GoogleSpreadsheetClient(),
             _get_member_manager(),
         ).run()
-        logger.info("Bigchat reminder job done: %d DM(s) sent", sent_cnt)
+        logger.info("Bigchat reminder job done: %d DM(s) sent", result.sent_cnt)
     except Exception:
         logger.exception("Failed to send bigchat reminders")
         try:

@@ -1,6 +1,8 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from datetime import date
+from typing import Iterable, List, Tuple
 
-from util.bigchat_event import parse_sheet_name
+from util.bigchat_event import BigchatEvent, parse_sheet_name
 
 
 class InvalidBigchatName(ValueError):
@@ -22,3 +24,31 @@ class BigchatCreated:
     worksheet_id: int
     sheet_name: str
     sheet_url: str
+
+
+@dataclass
+class ReminderResult:
+    """리마인더 발송 결과."""
+
+    target_date: date
+    bigchat_names: List[str] = field(default_factory=list)
+    parsed_sheet_cnt: int = 0
+    ignored_sheet_cnt: int = 0
+    applicant_cnt: int = 0  # 신청 시트에서 찾은 이메일 수
+    resolved_cnt: int = 0  # 그 중 멤버 시트에서 슬랙 계정을 찾은 수
+    sent_cnt: int = 0
+
+
+def select_bigchats(
+    worksheets: Iterable[Tuple[int, str]], target_date: date
+) -> Tuple[List[Tuple[int, BigchatEvent]], List[str], List[str]]:
+    matched, parsed, ignored = [], [], []
+    for worksheet_id, title in worksheets:
+        event = parse_sheet_name(title)
+        if not event:
+            ignored.append(title)
+            continue
+        parsed.append(f"{title!r} -> starts {event.start.date()}")
+        if event.start.date() == target_date:
+            matched.append((worksheet_id, event))
+    return matched, parsed, ignored
