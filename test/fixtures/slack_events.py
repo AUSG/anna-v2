@@ -1,16 +1,19 @@
 import json
 
 
-def create_sample_member():
+def create_sample_member(**overrides):
+    """is_complete() 를 통과하는 회원. phone 은 13자여야 한다."""
     from features.members.models import Member
 
-    return Member(
+    values = dict(
         kor_name="김동주",
         eng_name="Kim Dongjoo",
-        email="email",
-        phone="phone",
+        email="email@example.com",
+        phone="010-1234-5678",
         school_name_or_company_name="school_name_or_company_name",
     )
+    values.update(overrides)
+    return Member(**values)
 
 
 def create_sample_message_shortcut_body(thread_ts=None):

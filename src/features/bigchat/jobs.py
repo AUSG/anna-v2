@@ -1,47 +1,43 @@
 """정기 빅챗 리마인더 진입점과 스케줄 등록."""
 
 import logging
-import traceback
 from functools import partial
 
 from slack_sdk.http_retry.builtin_handlers import RateLimitErrorRetryHandler
 
 from features.bigchat.services.reminders import RemindBigchat
-from integrations.slack import NO_UNFURL
-from shared.scheduling import DailyScheduler
+from runtime import Runtime
+from shared.scheduling import DailyScheduler, run_with_admin_alert
 from shared.time import KST
 
 logger = logging.getLogger(__name__)
 
 
-def remind_bigchat(dependencies):
+def remind_bigchat(runtime: Runtime):
     logger.info("Bigchat reminder job invoked by scheduler")
-    web_client = dependencies.create_web_client()
+    web_client = runtime.web_client()
+    # 여러 명에게 연속으로 DM 을 보내다 429 를 맞으면 Retry-After 만큼 기다렸다 재시도한다
     web_client.retry_handlers.append(RateLimitErrorRetryHandler(max_retry_count=2))
-    try:
-        result = RemindBigchat(
-            dependencies.SlackClient(None, web_client),
-            dependencies.GoogleSpreadsheetClient(),
-            dependencies._get_member_manager(),
-        ).run()
+    slack = runtime.slack_client(web_client)
+
+    def job():
+        result = RemindBigchat(slack, runtime.sheets(), runtime.members()).run()
         logger.info("Bigchat reminder job done: %d DM(s) sent", result.sent_cnt)
-    except Exception:
-        logger.exception("Failed to send bigchat reminders")
-        try:
-            web_client.chat_postMessage(
-                channel=dependencies.envs.ADMIN_CHANNEL,
-                text=f":blob-fearful: 빅챗 리마인더 DM 발송 중 에러가 발생했어!\n```\n{traceback.format_exc()}\n```",
-                **NO_UNFURL,
-            )
-        except Exception:
-            logger.exception("Failed to notify admin channel")
+
+    run_with_admin_alert(
+        job,
+        label="빅챗 리마인더 DM 발송",
+        slack=slack,
+        admin_channel=runtime.settings.ADMIN_CHANNEL,
+    )
 
 
-def start_scheduler(dependencies):
-    if not dependencies.envs.BIGCHAT_REMINDER_ENABLED:
+def start_scheduler(runtime: Runtime):
+    if not runtime.settings.BIGCHAT_REMINDER_ENABLED:
         return
+    # 빅챗 전날 저녁 6시(KST)에 신청자들에게 리마인더 DM 을 보낸다
     DailyScheduler(
-        job=partial(remind_bigchat, dependencies),
+        job=partial(remind_bigchat, runtime),
         hour=18,
         minute=0,
         tz=KST,

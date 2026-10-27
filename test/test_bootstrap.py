@@ -3,198 +3,264 @@
 from unittest.mock import MagicMock, create_autospec
 
 import pytest
+from slack_sdk import WebClient
 
 import app
-import bootstrap as controller
+import bootstrap
+from config.env_config import Settings
+from features.bigchat.services.commands import CreateBigchat, Reminder
+from features.bot_commands.models import Shuffle
+from features.bot_commands.presentation.messages import HELP_MESSAGE
+from features.issues.models import CreateIssue
+from features.members.services.directory import MemberManager
+from features.questions.models import ChatResult, Question
+from integrations.slack import SlackClient
+from shared.loading_emoji import EMOJI_NAME
+from shared.slack_events import MentionEvent
+from test.fixtures.runtime import fake_runtime, fake_settings
 from test.fixtures.slack_events import create_sample_app_mention_event
 
-EXTERNAL_FACTORIES = (
-    "GoogleSpreadsheetClient",
-    "_get_member_manager",
-    "GithubClient",
-    "_get_qa_client",
-)
-HANDLERS = (
-    "HelpResponse",
-    "ShuffleResponse",
-    "QuestionResponse",
-    "CreateIssue",
-    "CreateBigchatSheet",
-    "RemindBigchatCommand",
-    "SimpleResponse",
-)
+COLLABORATORS = ("sheets", "members", "qa", "github")
+# (핸들러를 가진 모듈, 함수 이름). app 이 import 한 모듈 객체에 patch 한다.
+HANDLERS = {
+    "show_help": (app.bot_commands, "show_help"),
+    "shuffle_users": (app.bot_commands, "shuffle_users"),
+    "unknown_command": (app.bot_commands, "unknown_command"),
+    "answer_question": (app.questions, "answer_question"),
+    "create_issue": (app.issues, "create_issue"),
+    "create_from_mention": (app.bigchat, "create_from_mention"),
+    "remind_now": (app.bigchat, "remind_now"),
+}
 
 
 @pytest.fixture
-def slack_client(monkeypatch):
-    factory = create_autospec(controller.SlackClient, spec_set=True)
-    factory.return_value.get_replies.return_value = []
-    monkeypatch.setattr(controller, "SlackClient", factory)
-    return factory.return_value
+def runtime():
+    """collaborator 접근자를 감싸 어떤 의존성이 실제로 요청됐는지 기록한다."""
+    runtime = fake_runtime()
+    runtime.touched = []
+    for name in COLLABORATORS:
+        original = getattr(runtime, name)
+
+        def accessor(name=name, original=original):
+            runtime.touched.append(name)
+            return original()
+
+        setattr(runtime, name, accessor)
+    return runtime
 
 
 @pytest.fixture
-def external_factories(monkeypatch):
-    factories = {}
-    for name in EXTERNAL_FACTORIES:
-        factory = create_autospec(
-            getattr(controller, name),
-            spec_set=True,
-            side_effect=AssertionError(f"Unexpected dependency: {name}"),
-        )
-        monkeypatch.setattr(controller, name, factory)
-        factories[name] = factory
-    return factories
+def handlers(monkeypatch):
+    patched = {}
+    for name, (module, attribute) in HANDLERS.items():
+        patched[name] = create_autospec(getattr(module, attribute), spec_set=True)
+        monkeypatch.setattr(module, attribute, patched[name])
+    return patched
 
 
-def run_mention(text):
-    event = create_sample_app_mention_event(text)
-    say, web_client = MagicMock(), MagicMock()
-    app.mention_response(
-        event=event, say=say, client=web_client, dependencies=controller
-    )
-    return event, say, web_client
+def run_mention(runtime, text):
+    event = MentionEvent.from_payload(create_sample_app_mention_event(text))
+    result = app.mention_response(event, runtime.slack, runtime)
+    return event, result
 
 
-def test_help_executes_without_external_dependencies(slack_client, external_factories):
+def test_help_executes_without_external_dependencies(runtime):
     # 실제 핸들러와의 연결은 대표 명령 하나로, 명령별 생성 여부는 아래 행렬로 검증한다.
-    event, say, web_client = run_mention("<@U01BN035Y6L> help")
+    event, result = run_mention(runtime, "<@UANNA> help")
 
-    controller.SlackClient.assert_called_once_with(say, web_client)
-    slack_client.send_message.assert_called_once()
-    assert "사용할 수 있는 명령어야" in slack_client.send_message.call_args.kwargs["msg"]
-    for factory in external_factories.values():
-        factory.assert_not_called()
-    slack_client.add_emoji.assert_called_once_with(
-        event["channel"], event["ts"], "loading"
+    assert result is True
+    runtime.slack.send_thread_message.assert_called_once_with(
+        event.channel, event.ts, HELP_MESSAGE
     )
-    slack_client.remove_emoji.assert_called_once_with(
-        event["channel"], event["ts"], "loading"
+    assert "사용할 수 있는 명령어야" in HELP_MESSAGE
+    assert runtime.touched == []
+    runtime.slack.add_reaction.assert_called_once_with(
+        event.channel, event.ts, EMOJI_NAME
     )
-    say.assert_not_called()  # 전역 오류 안내가 발생하지 않아야 한다
+    runtime.slack.remove_reaction.assert_called_once_with(
+        event.channel, event.ts, EMOJI_NAME
+    )
+    runtime.slack.send_channel_message.assert_not_called()  # 관리자 오류 보고가 없어야 한다
 
 
-def test_explicit_question_with_command_keywords_reaches_qa(
-    slack_client, external_factories
-):
-    # 분류뿐 아니라 실제 QuestionResponse가 명령 키워드를 포함한 질문도 수락해야 한다.
+def test_loading_emoji_wraps_the_dispatch(runtime):
+    event, _ = run_mention(runtime, "<@UANNA> help")
+    names = [name for name, _, _ in runtime.slack.mock_calls]
+    assert names == ["add_reaction", "send_thread_message", "remove_reaction"]
+
+
+def test_explicit_question_with_command_keywords_reaches_qa(runtime):
+    # 분류뿐 아니라 실제 answer_question 이 명령 키워드를 포함한 질문도 수락해야 한다.
     question = "help 도움말 기능은 어떻게 구현돼있어?"
-    qa_factory = external_factories["_get_qa_client"]
-    qa_factory.side_effect = None
-    qa = qa_factory.return_value
-    qa.chat.return_value = "질문에 대한 답변이야!"
+    qa = runtime.qa()
+    runtime.touched.clear()
+    qa.chat.return_value = ChatResult(answer="질문에 대한 답변이야!")
 
-    event, say, _ = run_mention(f"<@U01BN035Y6L> q) {question}")
+    event, result = run_mention(runtime, f"<@UANNA> q) {question}")
 
-    qa_factory.assert_called_once_with()
+    assert result is True
+    assert runtime.touched == ["qa"]
     qa.chat.assert_called_once()
     assert qa.chat.call_args.kwargs["question"] == question
-    slack_client.send_answer.assert_called_once_with(
-        answer="질문에 대한 답변이야!", sources=[], ts=event["ts"]
+    runtime.slack.send_answer.assert_called_once_with(
+        event.channel, event.ts, "질문에 대한 답변이야!", []
     )
-    slack_client.send_message.assert_not_called()
-    for name in ("GoogleSpreadsheetClient", "_get_member_manager", "GithubClient"):
-        external_factories[name].assert_not_called()
-    say.assert_not_called()
+    runtime.slack.send_thread_message.assert_not_called()
 
 
 @pytest.mark.parametrize(
-    ("text", "selected", "dependencies", "require_prefix"),
+    ("text", "selected", "touched", "command"),
     [
-        ("help", "HelpResponse", (), None),
-        ("shuffle", "ShuffleResponse", (), None),
-        ("q) help", "QuestionResponse", ("_get_qa_client",), True),
-        ("다음 빅챗 언제야?", "QuestionResponse", ("_get_qa_client",), False),
-        ("새로운 이슈 버그", "CreateIssue", ("GithubClient",), None),
+        ("help", "show_help", (), None),
+        ("shuffle <@UOTHER>", "shuffle_users", (), Shuffle(("UOTHER",))),
+        ("q) help", "answer_question", ("qa",), Question("help", explicit=True)),
+        (
+            "다음 빅챗 언제야?",
+            "answer_question",
+            ("qa",),
+            Question("다음 빅챗 언제야?", explicit=False),
+        ),
+        ("새로운 이슈 버그", "create_issue", ("github",), CreateIssue("버그")),
         (
             "새로운 빅챗 AI 밋업 26-08-20 19:00~21:00",
-            "CreateBigchatSheet",
-            ("GoogleSpreadsheetClient", "_get_member_manager"),
-            None,
+            "create_from_mention",
+            (),
+            CreateBigchat("AI 밋업 26-08-20 19:00~21:00"),
         ),
-        (
-            "빅챗 리마인더 테스트 <@UOTHER>",
-            "RemindBigchatCommand",
-            ("GoogleSpreadsheetClient", "_get_member_manager"),
-            None,
-        ),
-        ("", "SimpleResponse", (), None),
+        ("빅챗 리마인더 테스트 <@UOTHER>", "remind_now", (), Reminder("test", ("UOTHER",))),
+        ("", "unknown_command", (), None),
     ],
 )
-def test_constructs_only_selected_handler_and_dependencies(
-    text,
-    selected,
-    dependencies,
-    require_prefix,
-    monkeypatch,
-    slack_client,
-    external_factories,
+def test_calls_only_the_selected_handler_with_its_dependencies(
+    runtime, handlers, text, selected, touched, command
 ):
-    # 서로 다른 값을 사용해야 봇 ID와 참여 이모지를 바꾸는 오류도 검출할 수 있다.
-    monkeypatch.setattr(controller.envs, "ANNA_ID", "UANNA")
-    monkeypatch.setattr(controller.envs, "JOIN_BIGCHAT_EMOJI", "gogo")
-    handlers = {}
-    for name in HANDLERS:
-        handlers[name] = create_autospec(getattr(controller, name), spec_set=True)
-        monkeypatch.setattr(controller, name, handlers[name])
-    for name in dependencies:
-        external_factories[name].side_effect = None
+    handlers[selected].return_value = True
 
-    event, say, _ = run_mention(f"<@U01BN035Y6L> {text}")
-    expected_args = (
-        event,
-        slack_client,
-        *(external_factories[name].return_value for name in dependencies),
-    )
-    if selected == "CreateBigchatSheet":
-        expected_args += ("gogo",)
-    elif selected == "RemindBigchatCommand":
-        expected_args += ("UANNA",)
-    expected_kwargs = (
-        {"require_prefix": require_prefix, "assistant_id": "UANNA"}
-        if require_prefix is not None
-        else {}
-    )
+    event, result = run_mention(runtime, f"<@UANNA> {text}")
 
-    for name, factory in external_factories.items():
-        if name in dependencies:
-            if name == "GithubClient":
-                factory.assert_called_once_with(
-                    controller.envs.GITHUB_TOKEN, controller.envs.GITHUB_REPO
-                )
-            else:
-                factory.assert_called_once_with()
-        else:
-            factory.assert_not_called()
+    assert result is True
+    assert runtime.touched == list(touched)
+    slack = runtime.slack
+    expected = {
+        "show_help": ((event, slack), {}),
+        "unknown_command": ((event, slack), {}),
+        "shuffle_users": ((command, event, slack), {}),
+        "answer_question": (
+            (command, event, slack, runtime.qa()),
+            {"assistant_id": runtime.settings.ANNA_ID},
+        ),
+        "create_issue": ((command, event, slack, runtime.github()), {}),
+        "create_from_mention": ((command, event, slack, runtime), {}),
+        "remind_now": ((command, event, slack, runtime), {}),
+    }[selected]
     for name, handler in handlers.items():
         if name == selected:
-            handler.assert_called_once_with(*expected_args, **expected_kwargs)
-            handler.return_value.handle_mention.assert_called_once_with()
+            handler.assert_called_once_with(*expected[0], **expected[1])
         else:
             handler.assert_not_called()
-    say.assert_not_called()
+    slack.add_reaction.assert_called_once_with(event.channel, event.ts, EMOJI_NAME)
+    slack.remove_reaction.assert_called_once_with(event.channel, event.ts, EMOJI_NAME)
 
 
 @pytest.mark.parametrize("fails", [False, True])
 def test_does_not_fall_through_when_selected_handler_returns_false_or_raises(
-    fails, monkeypatch, slack_client, external_factories
+    runtime, handlers, fails
 ):
-    help_factory = create_autospec(controller.HelpResponse, spec_set=True)
-    help_handler = help_factory.return_value
-    help_handler.handle_mention.return_value = False
+    handlers["show_help"].return_value = False
     if fails:
-        help_handler.handle_mention.side_effect = RuntimeError("handler failed")
-    fallback = create_autospec(controller.SimpleResponse, spec_set=True)
-    monkeypatch.setattr(controller, "HelpResponse", help_factory)
-    monkeypatch.setattr(controller, "SimpleResponse", fallback)
+        handlers["show_help"].side_effect = RuntimeError("handler failed")
 
-    _, say, _ = run_mention("<@U01BN035Y6L> help")
+    if fails:
+        with pytest.raises(RuntimeError, match="handler failed"):
+            run_mention(runtime, "<@UANNA> help")
+    else:
+        _, result = run_mention(runtime, "<@UANNA> help")
+        assert result is False
 
-    help_factory.assert_called_once()
-    help_handler.handle_mention.assert_called_once_with()
-    fallback.assert_not_called()
-    for factory in external_factories.values():
+    handlers["show_help"].assert_called_once()
+    for name, handler in handlers.items():
+        if name != "show_help":
+            handler.assert_not_called()
+    assert runtime.touched == []
+    runtime.slack.add_reaction.assert_called_once()
+    runtime.slack.remove_reaction.assert_called_once()
+
+
+def test_unknown_command_type_is_rejected(runtime, handlers):
+    event = MentionEvent.from_payload(create_sample_app_mention_event("<@UANNA> help"))
+    with pytest.raises(ValueError, match="Unknown mention command"):
+        app.dispatch_mention(object(), event, runtime.slack, runtime)
+    for handler in handlers.values():
+        handler.assert_not_called()
+
+
+# --- create_runtime ---------------------------------------------------------------
+
+
+@pytest.fixture
+def integrations(monkeypatch):
+    patched = {}
+    for name in ("GoogleSpreadsheetClient", "QAClient", "GithubClient"):
+        patched[name] = create_autospec(getattr(bootstrap, name), spec_set=True)
+        monkeypatch.setattr(bootstrap, name, patched[name])
+    return patched
+
+
+def production_settings():
+    values = vars(fake_settings())
+    return Settings(_env_file=None, **values)
+
+
+def test_create_runtime_shares_clients_and_builds_github_from_settings(integrations):
+    settings = production_settings()
+    runtime = bootstrap.create_runtime(settings)
+
+    assert isinstance(runtime, bootstrap.ProductionRuntime)
+    assert runtime.settings is settings
+    for factory in integrations.values():
+        factory.assert_not_called()  # 외부 클라이언트는 처음 쓰일 때 만든다
+
+    assert runtime.sheets() is runtime.sheets()
+    integrations["GoogleSpreadsheetClient"].assert_called_once_with(settings)
+    assert runtime.sheets() is integrations["GoogleSpreadsheetClient"].return_value
+
+    members = runtime.members()
+    assert members is runtime.members()
+    assert isinstance(members, MemberManager)
+    assert members.sheets is runtime.sheets()
+    assert members.members_worksheet_id == settings.MEMBERS_INFO_WORKSHEET_ID
+    assert integrations["GoogleSpreadsheetClient"].call_count == 1
+
+    assert runtime.qa() is runtime.qa()
+    integrations["QAClient"].assert_called_once_with(
+        qa_server_base_url=settings.QA_SERVER_BASE_URL, api_key=settings.QA_API_KEY
+    )
+
+    github = runtime.github()
+    assert github is integrations["GithubClient"].return_value
+    integrations["GithubClient"].assert_called_once_with(
+        settings.GITHUB_TOKEN, settings.GITHUB_REPO
+    )
+
+
+def test_create_runtime_wraps_slack_clients_without_network(integrations):
+    runtime = bootstrap.create_runtime(production_settings())
+    web_client = runtime.web_client()
+    assert isinstance(web_client, WebClient)
+    assert web_client.token == runtime.settings.SLACK_BOT_TOKEN
+
+    bolt_client = MagicMock(spec=WebClient)
+    slack = runtime.slack_client(bolt_client)
+    assert isinstance(slack, SlackClient)
+    assert slack.web_client is bolt_client
+    for factory in integrations.values():
         factory.assert_not_called()
-    slack_client.add_emoji.assert_called_once()
-    slack_client.remove_emoji.assert_called_once()
-    assert say.call_count == (2 if fails else 0)
+
+
+def test_create_runtime_reads_settings_once_when_none_given(monkeypatch, integrations):
+    settings = production_settings()
+    factory = MagicMock(return_value=settings)
+    monkeypatch.setattr(bootstrap, "Settings", factory)
+    runtime = bootstrap.create_runtime()
+    factory.assert_called_once_with()
+    assert runtime.settings is settings

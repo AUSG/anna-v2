@@ -1,14 +1,6 @@
-from types import SimpleNamespace
-from unittest.mock import patch
-
 import pytest
 
-from features.bigchat.services import (
-    cancellation as abandon_bigchat,
-    registration as join_bigchat,
-)
-from features.bigchat.services.cancellation import AbandonBigchat
-from features.bigchat.services.registration import JoinBigchat
+from features.bigchat import slack as bigchat_slack
 from features.bigchat.services.sheet_link import SPREADSHEET_PAT, extract_worksheet_id
 
 
@@ -116,37 +108,6 @@ def test_extract_worksheet_id_preserves_errors(texts, error_type, error_message)
     assert str(error.value) == error_message
 
 
-@pytest.mark.parametrize(
-    "module, handler",
-    [(join_bigchat, JoinBigchat), (abandon_bigchat, AbandonBigchat)],
-)
-def test_compatibility_delegate_passes_texts_and_returns_zero(module, handler):
-    messages = [SimpleNamespace(text="소개글"), SimpleNamespace(text="신청 시트")]
-
-    with patch.object(module, "extract_worksheet_id", return_value=0) as extract:
-        result = handler._extract_worksheet_id(messages)
-
-    extract.assert_called_once()
-    assert extract.call_args.kwargs == {}
-    (texts,) = extract.call_args.args
-    assert list(texts) == ["소개글", "신청 시트"]
-    assert result is extract.return_value
-
-
-@pytest.mark.parametrize(
-    "module, handler",
-    [(join_bigchat, JoinBigchat), (abandon_bigchat, AbandonBigchat)],
-)
-@pytest.mark.parametrize("failure", [ValueError("잘못된 시트 ID"), TypeError("잘못된 메시지 텍스트")])
-def test_compatibility_delegate_propagates_helper_error(module, handler, failure):
-    with patch.object(module, "extract_worksheet_id", side_effect=failure) as extract:
-        with pytest.raises(type(failure)) as error:
-            handler._extract_worksheet_id([SimpleNamespace(text="소개글")])
-
-    extract.assert_called_once()
-    assert error.value is failure
-
-
 def test_extract_worksheet_id_does_not_consume_later_texts():
     def texts():
         yield "https://docs.google.com/spreadsheets/d/a/edit#gid=12"
@@ -155,27 +116,9 @@ def test_extract_worksheet_id_does_not_consume_later_texts():
     assert extract_worksheet_id(texts()) == 12
 
 
-@pytest.mark.parametrize("handler", [JoinBigchat, AbandonBigchat])
-def test_compatibility_delegate_does_not_read_later_messages(handler):
-    messages = [
-        SimpleNamespace(text="https://docs.google.com/spreadsheets/d/a/edit#gid=12"),
-        object(),
-    ]
-
-    assert handler._extract_worksheet_id(messages) == 12
-
-
-@pytest.mark.parametrize("handler", [JoinBigchat, AbandonBigchat])
-def test_compatibility_delegate_preserves_missing_text_error(handler):
-    with pytest.raises(AttributeError) as error:
-        handler._extract_worksheet_id([object()])
-
-    assert str(error.value) == "'object' object has no attribute 'text'"
-
-
-def test_handlers_use_the_shared_parser_and_pattern():
-    assert join_bigchat.extract_worksheet_id is extract_worksheet_id
-    assert abandon_bigchat.extract_worksheet_id is extract_worksheet_id
+def test_reaction_handlers_use_the_shared_parser_and_pattern():
+    """참여/취소 반응 처리(features/bigchat/slack.py)는 같은 파서로 스레드에서 시트 ID 를 찾는다."""
+    assert bigchat_slack.extract_worksheet_id is extract_worksheet_id
     assert SPREADSHEET_PAT.pattern == (
         r"https://docs.google.com/spreadsheets/d/.*/edit#gid=(\d*)"
     )

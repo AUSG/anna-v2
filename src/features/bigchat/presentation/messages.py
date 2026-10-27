@@ -1,3 +1,7 @@
+from typing import Dict, List
+
+from features.bigchat.models import CancellationStatus, RegistrationStatus
+from features.members.models import Member
 from shared.text import strip_multiline
 
 
@@ -24,7 +28,7 @@ def bot_not_in_channel_message(sheet_url: str, sheet_name: str) -> str:
     )
 
 
-def build_registration_info_message(user: str, member) -> str:
+def build_registration_info_message(user: str, member: Member) -> str:
     return strip_multiline(
         f"""
         <@{user}> 네 신청 정보를 아래와 같이 등록했어. 바뀐 부분이 있다면 운영진에게 DM으로 알려줘!
@@ -35,4 +39,53 @@ def build_registration_info_message(user: str, member) -> str:
         학교/회사: {member.school_name_or_company_name}
         ```
         (참고로 이 메시지는 너만 볼 수 있어!)"""
+    )
+
+
+def registered_message(user: str) -> str:
+    return f"<@{user}>, 등록 완료!"
+
+
+REGISTRATION_NOTICES: Dict[RegistrationStatus, str] = {
+    RegistrationStatus.ALREADY_REGISTERED: "<@{user}>, 이미 등록되어 있어!",
+    RegistrationStatus.MEMBER_NOT_FOUND: "<@{user}>, 네 정보를 찾지 못했어. 운영진에게 연락해줘!",
+    RegistrationStatus.MEMBER_LACKS_INFO: "<@{user}>, 네 정보에 누락된 값이 있어. 운영진에게 연락해줘!",
+    RegistrationStatus.WORKSHEET_MISSING: (
+        "<@{user}>, 이 빅챗의 신청 시트를 찾을 수 없어. 이미 마감되었거나 삭제된 것 같아. "
+        "모집이 진행 중인 빅챗이라면 운영진에게 알려줘!"
+    ),
+}
+
+
+def registration_notice(status: RegistrationStatus, user: str) -> str:
+    return REGISTRATION_NOTICES[status].format(user=user)
+
+
+def cancelled_message(user: str) -> str:
+    return f"<@{user}>, 등록을 취소했어."
+
+
+CANCELLATION_NOTICES: Dict[CancellationStatus, str] = {
+    CancellationStatus.MEMBER_NOT_FOUND: "<@{user}>, 네 정보를 찾지 못했어.",
+    CancellationStatus.MEMBER_LACKS_INFO: "<@{user}>, 네 정보에 누락된 값이 있어.",
+    CancellationStatus.WORKSHEET_MISSING: (
+        "<@{user}>, 이 빅챗의 신청 시트를 찾을 수 없어서 등록을 취소하지 못했어. "
+        "이미 마감되었거나 삭제된 것 같아. 필요하면 운영진에게 알려줘!"
+    ),
+}
+
+
+def cancellation_notice(status: CancellationStatus, user: str) -> str:
+    return CANCELLATION_NOTICES[status].format(user=user)
+
+
+def early_reactions_registered_message(users: List[str], target_emoji: str) -> str:
+    mentions = " ".join(f"<@{user}>" for user in users)
+    return f"{mentions} 시트가 만들어지기 전에 :{target_emoji}:를 눌러줬구나! 지금 등록 완료했어!"
+
+
+def early_reactions_failed_message(target_emoji: str) -> str:
+    return (
+        f"미리 눌린 :{target_emoji}: 자동 등록을 처리하다 문제가 생겨서 멈췄어. "
+        "등록되지 않은 사람이 있을 수 있으니 시트를 확인해줘!"
     )

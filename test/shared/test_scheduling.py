@@ -4,7 +4,8 @@ import unittest
 from datetime import datetime, timedelta, timezone
 
 from shared.time import KST
-from shared.scheduling import next_fire_time
+from shared.scheduling import next_fire_time, run_with_admin_alert
+from test.fixtures.runtime import fake_slack
 
 
 class TestNextFireTime(unittest.TestCase):
@@ -59,4 +60,51 @@ class TestFireTimeIsIndependentOfServerTimezone(unittest.TestCase):
         assert KST is not None
         assert datetime(2026, 8, 19, 18, 0, tzinfo=KST).utcoffset() == timedelta(
             hours=9
+        )
+
+
+class TestRunWithAdminAlert(unittest.TestCase):
+    def test_returns_job_result_without_touching_slack(self):
+        slack = fake_slack()
+
+        result = run_with_admin_alert(
+            lambda: "digest posted",
+            label="daily-digest",
+            slack=slack,
+            admin_channel="C_ADMIN",
+        )
+
+        assert result == "digest posted"
+        slack.send_channel_message.assert_not_called()
+
+    def test_swallows_job_failure_and_alerts_admin_with_traceback(self):
+        slack = fake_slack()
+
+        def job():
+            raise RuntimeError("crawler down")
+
+        result = run_with_admin_alert(
+            job, label="daily-digest", slack=slack, admin_channel="C_ADMIN"
+        )
+
+        assert result is None  # 스케줄러 스레드가 죽지 않는다
+        slack.send_channel_message.assert_called_once()
+        channel, text = slack.send_channel_message.call_args.args
+        assert channel == "C_ADMIN"
+        assert "daily-digest" in text
+        assert "RuntimeError: crawler down" in text
+        assert "in job" in text  # traceback
+
+    def test_notification_failure_is_swallowed_too(self):
+        slack = fake_slack()
+        slack.send_channel_message.side_effect = RuntimeError("slack down")
+
+        def job():
+            raise RuntimeError("crawler down")
+
+        assert (
+            run_with_admin_alert(
+                job, label="daily-digest", slack=slack, admin_channel="C_ADMIN"
+            )
+            is None
         )

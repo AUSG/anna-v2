@@ -3,8 +3,10 @@
 import re
 from dataclasses import dataclass, field
 from datetime import date, datetime
-from typing import List, Optional
+from enum import Enum, auto
+from typing import List, Literal, Optional, Tuple
 
+from features.members.models import Member
 from shared.time import KST
 
 SHEET_NAME_PAT = re.compile(
@@ -12,7 +14,7 @@ SHEET_NAME_PAT = re.compile(
 )
 
 
-@dataclass
+@dataclass(frozen=True)
 class BigchatEvent:
     name: str
     start: datetime
@@ -38,25 +40,18 @@ def parse_sheet_name(sheet_name: str) -> Optional[BigchatEvent]:
     return BigchatEvent(name=match["name"].strip(), start=start, end=end)
 
 
-class InvalidBigchatName(ValueError):
-    pass
-
-
-class CalendarUnavailable(Exception):
-    """캘린더 제공이 꺼져 있거나 이벤트를 찾을 수 없다."""
-
-
-class CalendarAccessDenied(Exception):
-    """다운로드 토큰이 요청한 이벤트/스레드와 일치하지 않는다."""
-
-
 @dataclass(frozen=True)
 class CreateBigchatCommand:
-    sheet_name: str
+    """검증을 통과한 시트 이름. parse() 로만 만든다."""
 
-    def __post_init__(self):
-        if not parse_sheet_name(self.sheet_name):
-            raise InvalidBigchatName(self.sheet_name)
+    sheet_name: str
+    event: BigchatEvent
+
+    @classmethod
+    def parse(cls, sheet_name: str) -> Optional["CreateBigchatCommand"]:
+        # 시트 이름은 안내문에도 쓰이므로 원문을 바꾸지 않는다.
+        event = parse_sheet_name(sheet_name)
+        return cls(sheet_name, event) if event else None
 
 
 @dataclass(frozen=True)
@@ -66,12 +61,53 @@ class BigchatCreated:
     sheet_url: str
 
 
+class RegistrationStatus(Enum):
+    REGISTERED = auto()
+    ALREADY_REGISTERED = auto()
+    MEMBER_NOT_FOUND = auto()
+    MEMBER_LACKS_INFO = auto()
+    WORKSHEET_MISSING = auto()
+
+
+@dataclass(frozen=True)
+class Registration:
+    status: RegistrationStatus
+    member: Optional[Member] = None
+
+
+class CancellationStatus(Enum):
+    CANCELLED = auto()
+    MEMBER_NOT_FOUND = auto()
+    MEMBER_LACKS_INFO = auto()
+    WORKSHEET_MISSING = auto()
+
+
+@dataclass(frozen=True)
+class CalendarLinks:
+    gcal_url: str
+    ics_url: Optional[str] = None
+
+
+@dataclass(frozen=True)
+class CalendarContext:
+    event: BigchatEvent
+    description: str
+
+
+@dataclass(frozen=True)
+class CalendarFailure:
+    reason: Literal["denied", "unavailable"]
+
+
 @dataclass
 class ReminderResult:
     target_date: date
     bigchat_names: List[str] = field(default_factory=list)
     parsed_sheet_cnt: int = 0
     ignored_sheet_cnt: int = 0
-    applicant_cnt: int = 0
-    resolved_cnt: int = 0
+    applicant_cnt: int = 0  # 신청 시트에서 찾은 이메일 수
+    resolved_cnt: int = 0  # 그 중 멤버 시트에서 슬랙 계정을 찾은 수
     sent_cnt: int = 0
+
+
+Recipients = List[Tuple[str, Optional[str]]]  # (slack_id, email)

@@ -1,34 +1,37 @@
 import unittest
-from unittest.mock import MagicMock
 
+from features.bot_commands.models import is_help
+from features.bot_commands.presentation.messages import HELP_MESSAGE
+from features.bot_commands.slack import show_help
+from shared.slack_events import MentionEvent
+from test.fixtures.runtime import fake_slack
 from test.fixtures.slack_events import create_sample_app_mention_event
 
-from features.bot_commands.slack import HelpResponse
 
+class TestShowHelp(unittest.TestCase):
+    def _run(self, text):
+        event = MentionEvent.from_payload(create_sample_app_mention_event(text))
+        slack = fake_slack()
+        assert is_help(text)
+        result = show_help(event, slack)
+        return result, slack, event
 
-class TestHelpResponse(unittest.TestCase):
     def test_run(self):
-        event = create_sample_app_mention_event("<@U01BN035Y6L> 도움!")
-        mock_slack_client = MagicMock()
-        sut = HelpResponse(event, mock_slack_client)
+        result, slack, event = self._run("<@U01BN035Y6L> 도움!")
 
-        result = sut.handle_mention()
-
-        mock_slack_client.send_message.assert_called_once()
         assert result is True
-        assert mock_slack_client.send_message.call_args.kwargs["msg"].startswith(
-            "나를 멘션했을 때, 사용할 수 있는 명령어야"
+        slack.send_thread_message.assert_called_once_with(
+            event.channel, event.ts, HELP_MESSAGE
         )
+        assert HELP_MESSAGE.startswith("나를 멘션했을 때, 사용할 수 있는 명령어야")
 
     def test_run_by_english(self):
-        event = create_sample_app_mention_event("<@U01BN035Y6L> help!")
-        mock_slack_client = MagicMock()
-        sut = HelpResponse(event, mock_slack_client)
+        result, slack, event = self._run("<@U01BN035Y6L> help!")
 
-        result = sut.handle_mention()
-
-        mock_slack_client.send_message.assert_called_once()
         assert result is True
-        assert mock_slack_client.send_message.call_args.kwargs["msg"].startswith(
+        slack.send_thread_message.assert_called_once_with(
+            event.channel, event.ts, HELP_MESSAGE
+        )
+        assert slack.send_thread_message.call_args.args[2].startswith(
             "나를 멘션했을 때, 사용할 수 있는 명령어야"
         )

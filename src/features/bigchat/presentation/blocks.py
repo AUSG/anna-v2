@@ -2,8 +2,6 @@
 
 from typing import Optional
 
-SLACK_BUTTON_URL_LIMIT = 2900
-
 
 def registration_blocks(
     msg: str, gcal_url: str, ics_url: Optional[str] = None

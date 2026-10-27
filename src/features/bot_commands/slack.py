@@ -1,80 +1,30 @@
 """도움말, 셔플과 빈 멘션 안내."""
 
 import random
-import re
+from typing import List
 
-from shared.slack_commands import MentionHandler
-from shared.text import strip_multiline
-from slack_router import matches_mention
-
-
-class HelpResponse(MentionHandler):
-    def __init__(self, event, slack_client):
-        self.text = event["text"]
-        self.ts = event["ts"]
-        self.slack_client = slack_client
-
-    def handle_mention(self):
-        if not self.can_handle():
-            return False
-        self.slack_client.send_message(
-            msg=strip_multiline(
-                """
-                나를 멘션했을 때, 사용할 수 있는 명령어야.
-                - `shuffle` 또는 `섞어줘`: 멘션된 유저들을 섞어줘!
-                - `새로운 빅챗`: 새로운 빅챗 시트를 만들어줘!
-                (메시지 더보기 메뉴 `⋮` > `새로운 빅챗 만들기`로 폼 입력도 돼!)
-                - `빅챗 리마인더 테스트 @누구`: 전날 저녁 6시에 나갈 리마인더 DM 을 지금 그 사람에게만 보내볼게!
-                - `빅챗 리마인더 지금 전원 발송`: 내일 빅챗 신청자 전원에게 리마인더 DM 을 지금 보낼게!
-                - `새로운 이슈 <제목>`: 내 레포(AUSG/anna-v2)에 이슈를 만들어줄게!
-                (둘째 줄부터는 이슈 본문이 되고, 스레드 안에서 부르면 그 대화도 같이 넣어둘게)
-                - `help` 또는 `도움`: 도움말을 보여줘!
-                그 외에는 뭐든 물어봐 — 그냥 멘션하면서 질문하면 내가 아는 선에서 답해줄게!
-                (`q)` 를 붙이면 위 명령어보다 질문을 우선해)
-                더 많은 기능이 필요하면, https://github.com/AUSG/anna-v2 으로 기여해줘!"""
-            ),
-            ts=self.ts,
-        )
-        return True
-
-    def can_handle(self):
-        return matches_mention("help", self.text)
+from features.bot_commands.models import Shuffle
+from features.bot_commands.presentation.messages import (
+    HELP_MESSAGE,
+    UNKNOWN_COMMAND_MESSAGE,
+    shuffled_message,
+)
+from shared.gateways import SlackGateway
+from shared.slack_events import MentionEvent
 
 
-class ShuffleResponse(MentionHandler):
-    def __init__(self, event, slack_client):
-        self.text = event["text"]
-        self.ts = event["ts"]
-        self.slack_client = slack_client
-
-    def handle_mention(self):
-        if not self.can_handle():
-            return False
-        text = self.text.replace("<@U01BN035Y6L>", "").strip()
-        shuffled = self._shuffle(text.replace("shuffle", "").replace("섞어줘", "").strip())
-        self.slack_client.send_message(msg=shuffled, ts=self.ts)
-        return True
-
-    def can_handle(self):
-        return matches_mention("shuffle", self.text)
-
-    def _shuffle(self, text):
-        users = re.findall(r"<@U[0-9a-zA-Z]+>", text)
-        random.shuffle(users)
-        return "여기있어!\n" + " ".join(users)
+def show_help(event: MentionEvent, slack: SlackGateway) -> bool:
+    slack.send_thread_message(event.channel, event.ts, HELP_MESSAGE)
+    return True
 
 
-class SimpleResponse(MentionHandler):
-    def __init__(self, event, slack_client):
-        self.text = event["text"]
-        self.ts = event["ts"]
-        self.slack_client = slack_client
+def shuffle_users(command: Shuffle, event: MentionEvent, slack: SlackGateway) -> bool:
+    users: List[str] = list(command.user_ids)
+    random.shuffle(users)
+    slack.send_thread_message(event.channel, event.ts, shuffled_message(users))
+    return True
 
-    def handle_mention(self):
-        self.slack_client.send_message(
-            msg="앗, 잘못입력한 것 같아.\n나를 멘션하면서 help를 한 번 입력해봐!", ts=self.ts
-        )
-        return True
 
-    def can_handle(self):
-        return True
+def unknown_command(event: MentionEvent, slack: SlackGateway) -> bool:
+    slack.send_thread_message(event.channel, event.ts, UNKNOWN_COMMAND_MESSAGE)
+    return True

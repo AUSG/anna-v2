@@ -41,18 +41,12 @@ def test_applicant_email_keeps_invalid_row_error():
 
 def test_reminder_exports_and_runtime_type_hints_share_application_identity():
     reminder = importlib.import_module("features.bigchat.services.reminders")
-    command = importlib.import_module("features.bigchat.slack")
     messages = importlib.import_module("features.bigchat.presentation.reminders")
     policy = importlib.import_module("features.bigchat.services.reminder_policy")
-    for module in (reminder, command, messages):
+    for module in (reminder, messages):
         assert module.ReminderResult is ReminderResult
     assert reminder.select_bigchats is policy.select_bigchats is select_bigchats
     assert select_bigchats.__module__ == "features.bigchat.services.reminder_policy"
-    for method in (reminder.RemindBigchat.run, command.RemindBigchatCommand._run):
-        assert get_type_hints(method)["return"] is ReminderResult
-    for method in (
-        reminder.RemindBigchat._remind_applicants,
-        command.RemindBigchatCommand._build_report,
-        messages.build_report,
-    ):
+    assert get_type_hints(reminder.RemindBigchat.run)["return"] is ReminderResult
+    for method in (reminder.RemindBigchat._remind_applicants, messages.build_report):
         assert get_type_hints(method)["result"] is ReminderResult

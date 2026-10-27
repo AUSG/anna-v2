@@ -1,13 +1,13 @@
 import unittest
 
 from features.bigchat.models import parse_sheet_name
-from features.bigchat.presentation.blocks import SLACK_BUTTON_URL_LIMIT
 from features.bigchat.presentation.calendar import (
     to_gcal_link,
     to_gcal_link_truncated,
     to_ics,
 )
 from features.bigchat.services.calendar import (
+    SLACK_BUTTON_URL_LIMIT,
     calendar_payload,
     calendar_token,
     verify_calendar_token,

@@ -16,8 +16,13 @@ from features.questions.models import (
     MAX_CONVERSATION_TIMESTAMP_CHARS,
     ChatResult,
     Source,
+    Utterance,
 )
 from features.questions.services.conversation import select_conversation
+
+
+def _turn(content, role="user", timestamp=""):
+    return Utterance(role=role, content=content, timestamp=timestamp)
 
 
 def test_empty_conversation_has_no_turns():
@@ -28,31 +33,30 @@ def test_empty_conversation_has_no_turns():
     ("relevant_index", "question", "timestamps"),
     [
         (3, "KUBERNETES 일정", ["0", "3", "4", "5", "6", "7", "8", "9", "10", "11"]),
-        (11, "Kubernetes", ["0", "4", "5", "6", "7", "8", "9", "10", "11"]),
+        # 관련 글이 최신 글이기도 하면 한 번만 예산에 넣는다
+        (11, "Kubernetes", ["0", "3", "4", "5", "6", "7", "8", "9", "10", "11"]),
     ],
     ids=["middle", "recent"],
 )
 def test_relevance_priority_and_recent_budget(relevant_index, question, timestamps):
-    turns = [
-        {"role": "user", "content": "무" * 4000, "timestamp": str(index)}
-        for index in range(12)
-    ]
-    turns[relevant_index]["content"] = "Kubernetes" + "가" * 3990
+    turns = [_turn("무" * 4000, timestamp=str(index)) for index in range(12)]
+    turns[relevant_index] = _turn(
+        "Kubernetes" + "가" * 3990, timestamp=str(relevant_index)
+    )
     before = copy.deepcopy(turns)
 
     selected = select_conversation(turns, question)
 
-    assert [turn["timestamp"] for turn in selected] == timestamps
+    assert [turn.timestamp for turn in selected] == timestamps
     assert turns == before
-    assert all(turn is turns[int(turn["timestamp"])] for turn in selected)
+    assert all(turn is turns[int(turn.timestamp)] for turn in selected)
 
 
-def test_equal_dicts_are_not_the_same_selected_object():
-    root = {"role": "user", "content": "같음"}
-    twin = dict(root)
-    turns = [root, twin] + [
-        {"role": "user", "content": str(index)} for index in range(99)
-    ]
+def test_equal_utterances_are_not_the_same_selected_object():
+    root = _turn("같음")
+    twin = _turn("같음")
+    assert root == twin and root is not twin
+    turns = [root, twin] + [_turn(str(index)) for index in range(99)]
 
     selected = select_conversation(turns, "!")
 
@@ -63,8 +67,8 @@ def test_equal_dicts_are_not_the_same_selected_object():
 
 
 def test_repeated_input_reference_is_retained_at_each_input_position():
-    shared = {"role": "user", "content": "동일 객체"}
-    last = {"role": "assistant", "content": "마지막"}
+    shared = _turn("동일 객체")
+    last = _turn("마지막", role="assistant")
 
     selected = select_conversation([shared, shared, last], "동일")
 
@@ -75,30 +79,27 @@ def test_repeated_input_reference_is_retained_at_each_input_position():
 
 
 def test_over_budget_candidate_does_not_prevent_a_later_smaller_turn():
-    root = {"role": "user", "content": "r" * 4000}
-    small = {"role": "user", "content": "s" * 1000}
-    relevant = [{"role": "user", "content": "tag" + "가" * 3997} for _ in range(8)] + [
-        {"role": "user", "content": "tag" + "나" * 2997}
+    root = _turn("r" * 4000)
+    small = _turn("s" * 1000)
+    relevant = [_turn("tag" + "가" * 3997) for _ in range(8)] + [
+        _turn("tag" + "나" * 2997)
     ]
-    newest = {"role": "user", "content": "x" * 4000}
+    newest = _turn("x" * 4000)
     turns = [root, small, *relevant, newest]
 
     selected = select_conversation(turns, "tag")
 
     assert len(selected) == 11
     assert all(left is right for left, right in zip(selected, turns[:-1]))
-    assert sum(len(turn["content"]) for turn in selected) == 40000
+    assert sum(len(turn.content) for turn in selected) == 40000
 
 
 def test_message_count_limit_is_applied_before_identity_filtering():
-    turns = [
-        {"role": "user", "content": "aa", "timestamp": str(index)}
-        for index in range(120)
-    ]
+    turns = [_turn("aa", timestamp=str(index)) for index in range(120)]
 
     selected = select_conversation(turns, "aa")
 
-    assert [turn["timestamp"] for turn in selected] == [str(i) for i in range(100)]
+    assert [turn.timestamp for turn in selected] == [str(i) for i in range(100)]
 
 
 @pytest.mark.parametrize(
@@ -121,11 +122,7 @@ def test_relevance_uses_existing_two_character_term_pattern(
     monkeypatch.setattr(
         "features.questions.services.conversation.MAX_CONVERSATION_MESSAGES", 2
     )
-    turns = [
-        {"role": "user", "content": "root"},
-        {"role": "user", "content": middle},
-        {"role": "user", "content": "newest"},
-    ]
+    turns = [_turn("root"), _turn(middle), _turn("newest")]
 
     selected = select_conversation(turns, question)
 
@@ -142,6 +139,17 @@ def test_shared_limits_keep_the_crawler_contract():
         MAX_CONVERSATION_AUTHOR_CHARS,
         MAX_CONVERSATION_TIMESTAMP_CHARS,
     ) == (100, 4000, 40000, 200, 100)
+
+
+def test_utterance_is_a_frozen_value_with_optional_identity_fields():
+    assert Utterance.__dataclass_params__.frozen is True
+    assert [(item.name, item.default) for item in fields(Utterance)] == [
+        ("role", MISSING),
+        ("content", MISSING),
+        ("author", ""),
+        ("timestamp", ""),
+    ]
+    assert Utterance("user", "질문") == Utterance("user", "질문", author="", timestamp="")
 
 
 def test_source_fields_keep_order_defaults_and_list_factory():
@@ -227,10 +235,16 @@ def test_runtime_type_hints_resolve_application_values():
         "citations": List[str],
         "trace_id": str,
     }
+    assert get_type_hints(Utterance) == {
+        "role": str,
+        "content": str,
+        "author": str,
+        "timestamp": str,
+    }
     assert get_type_hints(select_conversation) == {
-        "normalized": List[Dict[str, str]],
+        "normalized": List[Utterance],
         "question": str,
-        "return": List[Dict[str, str]],
+        "return": List[Utterance],
     }
 
 
@@ -247,7 +261,7 @@ from typing import get_type_hints
 
 root = Path(sys.argv[1]).resolve()
 blocked = {
-    "handler", "implementation", "integrations", "bootstrap", "app", "anna", "config", "requests", "dotenv",
+    "handler", "implementation", "integrations", "bootstrap", "runtime", "app", "anna", "config", "requests", "dotenv",
     "slack_sdk", "slack_bolt", "gspread", "gspread_formatting", "google",
     "google_auth_oauthlib", "pydantic", "pydantic_settings", "flask", "gunicorn",
 }
@@ -284,11 +298,14 @@ from features.questions.services import conversation
 
 expected = root / "src/features/questions/models.py"
 assert Path(question.__file__).resolve() == expected
-assert Path(conversation.select_conversation.__code__.co_filename).resolve() == root / "src/features/questions/services/conversation.py"
+selection_source = Path(conversation.select_conversation.__code__.co_filename).resolve()
+assert selection_source == root / "src/features/questions/services/conversation.py"
 assert question.Source.__module__ == "features.questions.models"
 assert question.ChatResult.__module__ == "features.questions.models"
 assert get_type_hints(question.ChatResult)["sources"].__args__[0] is question.Source
-turn = {"role": "user", "content": "질문"}
+assert question.Utterance.__module__ == "features.questions.models"
+assert get_type_hints(conversation.select_conversation)["normalized"].__args__[0] is question.Utterance
+turn = question.Utterance(role="user", content="질문")
 assert conversation.select_conversation([turn], "질문")[0] is turn
 assert question.ChatResult("답변").sources == []
 loaded = sorted(name for name in sys.modules if name.split(".")[0] in blocked)

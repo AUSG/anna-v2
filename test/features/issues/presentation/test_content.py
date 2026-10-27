@@ -1,76 +1,26 @@
 import pytest
 
-from features.issues.presentation.content import build_issue_body, build_issue_footer
-from features.issues.services.commands import parse_issue_command
-
-
-@pytest.mark.parametrize(
-    ("text", "expected"),
-    [
-        ("<@U01BN035Y6L> 새로운 이슈 제목", ("제목", "")),
-        ("<@U1> 새 이슈 제목", ("제목", "")),
-        ("<@U1> 새이슈 제목", ("제목", "")),
-        ("<@U1> 이슈 만들어줘 제목", ("제목", "")),
-        ("<@U1> 이슈 만들어줄래? 제목", ("제목", "")),
-        ("<@U1> 이슈 만들어줘: 제목", ("제목", "")),
-        ("<@U1> 이슈 만들자 제목", ("제목", "")),
-        ("<@U1> 이슈 등록해주세요 제목", ("제목", "")),
-        ("<@U1> 이슈 생성해줘 제목", ("제목", "")),
-        ("<@U1> 이슈 파줘 제목", ("제목", "")),
-        ("<@U1> 이슈 따주세요 제목", ("제목", "")),
-        ("앞의 설명 <@U1> 새로운 이슈 제목", ("제목", "")),
-        ("새로운\t이슈\t?!.,:;~ \t 제목  \n  본문  \n", ("제목", "본문")),
-        ("새로운 이슈 제목 <@U1>\n본문 <@U2> 끝", ("제목", "본문  끝")),
-        ("새로운 이슈 제<@U1>목", ("제목", "")),
-        ("새로운 이슈 제목 <@u1> <@U_1>", ("제목 <@u1> <@U_1>", "")),
-        ("새로운 이슈 제목\n\n  첫 줄\n\t코드  \n끝  ", ("제목", "첫 줄\n\t코드  \n끝")),
-        ("새로운 이슈 제목\r\n본문\r\n  다음 줄\r\n", ("제목", "본문\r\n  다음 줄")),
-        ("새로운 이슈 제목\r본문", ("제목\r본문", "")),
-        ("새로운 이슈 제목\u2028본문\u2029끝", ("제목\u2028본문\u2029끝", "")),
-        ("새로운 이슈 제목\v본문\f끝", ("제목\v본문\f끝", "")),
-        ("\u3000새로운 이슈\u00a0제목\u3000\n\u00a0본문\u3000", ("제목", "본문")),
-        ("새로운 이슈 🐍 e\u0301 한글  제목\n  본문 🧪  ", ("🐍 e\u0301 한글  제목", "본문 🧪")),
-        ("새로운 이슈 <script> a|b & c", ("<script> a|b & c", "")),
-        ("새로운 이슈 !?제목!?\n:본문;", ("제목!?", ":본문;")),
-        ("새로운 이슈 제목 새로운 이슈 둘", ("제목 새로운 이슈 둘", "")),
-        ("새로운 이슈\n제목\n본문", ("제목", "본문")),
-        ("새로운 이슈 ?\n본문만 있음", ("", "본문만 있음")),
-        ("새로운 이슈 ?\r\n본문만 있음", ("", "본문만 있음")),
-        ("새로운 이슈", ("", "")),
-        ("새로운 이슈 <@U1> ?!.,:;~\t ", ("", "")),
-        ("<@U1> 이슈 만들어줘\n \t", ("", "")),
-        ("", ("", "")),
-        ("<@U1>\t", ("", "")),
-        ("트리거 없는 제목\n본문", ("트리거 없는 제목", "본문")),
-        ("이슈 파악해줘", ("이슈 파악해줘", "")),
-    ],
+from features.issues.models import Issue
+from features.issues.presentation.content import (
+    THREAD_CONTEXT_MAX_CHARS,
+    build_issue_body,
+    build_issue_footer,
+    build_thread_context,
+    issue_created_message,
+    issue_failed_message,
 )
-def test_parse_issue_command(text, expected):
-    assert parse_issue_command(text) == expected
+from shared.slack_models import Message
+
+ANNA_ID = "U01BN035Y6L"
 
 
-@pytest.mark.parametrize(
-    ("title", "expected"),
-    [
-        ("가" * 119, "가" * 119),
-        ("가" * 120, "가" * 120),
-        ("가" * 121, "가" * 119 + "…"),
-        ("가" * 300, "가" * 119 + "…"),
-        ("가" * 118 + " \t나", "가" * 118 + "…"),
-        ("🐍" * 121, "🐍" * 119 + "…"),
-        ("e\u0301" * 61, "e\u0301" * 59 + "e…"),
-        ("👩‍💻" * 41, "👩‍💻" * 39 + "👩‍…"),
-        ("가" * 119 + "<@U1>나", "가" * 119 + "나"),
-    ],
-)
-def test_title_truncation_counts_code_points_and_strips_cut_whitespace(title, expected):
-    assert parse_issue_command("새로운 이슈 " + title + "\n본문") == (expected, "본문")
-
-
-def test_command_body_is_not_truncated_with_the_title():
-    assert parse_issue_command("새로운 이슈 제목\n" + "긴 본문\n" * 1000) == (
-        "제목",
-        "긴 본문\n" * 999 + "긴 본문",
+def _message(user, text):
+    return Message(
+        ts="1689403100.222939",
+        thread_ts="1689403100.222939",
+        channel="C03SZTDEDK3",
+        user=user,
+        text=text,
     )
 
 
@@ -134,3 +84,110 @@ def test_footer_preserves_user_and_permalink_without_normalization(
     user, permalink, expected
 ):
     assert build_issue_footer(user, permalink) == expected
+
+
+@pytest.mark.parametrize(
+    ("messages", "expected"),
+    [
+        pytest.param(
+            [
+                _message("U0", None),
+                # 스레드 인용에서도 멘션 코드는 걷어낸다
+                _message("U1", f" <@{ANNA_ID}> \n "),
+                _message("U2", " 첫 줄\r\n  코드\u2028끝  "),
+                _message("U3", " 🐍 "),
+            ],
+            "> **U2**: 첫 줄\r\n  코드\u2028끝\n>\n> **U3**: 🐍",
+            id="inner-newlines",
+        ),
+        pytest.param([_message("", " ")], "", id="blank-without-user"),
+        pytest.param([], "", id="empty-thread"),
+        pytest.param(
+            [
+                _message("U0001", "어제 리마인더 두 번 왔는데 저만 그런가요?"),
+                _message("U0002", f"저도요 <@{ANNA_ID}>"),
+            ],
+            "> **U0001**: 어제 리마인더 두 번 왔는데 저만 그런가요?\n>\n> **U0002**: 저도요",
+            id="two-messages",
+        ),
+        pytest.param(
+            [
+                _message("U0", "제외"),
+                _message("U1", "가" * 1489),
+                _message("U2", "나" * 1489),
+            ],
+            "> **U1**: " + "가" * 1489 + "\n>\n> **U2**: " + "나" * 1489,
+            id="exact-budget",
+        ),
+        pytest.param(
+            [_message("U1", "가" * 1489), _message("U2", "나" * 1490)],
+            "> **U2**: " + "나" * 1490,
+            id="one-over-budget",
+        ),
+        pytest.param(
+            [_message("U1", "이전 대화"), _message("U2", "🐍" * 3500)],
+            "> **U2**: " + "🐍" * 3500,
+            id="latest-oversize",
+        ),
+        pytest.param(
+            [
+                _message("U1", "짧은 과거"),
+                _message("U2", "가" * 3000),
+                _message("U3", "최신"),
+            ],
+            "> **U3**: 최신",
+            id="stop-at-middle",
+        ),
+    ],
+)
+def test_thread_context_fills_from_the_latest_within_budget(messages, expected):
+    assert THREAD_CONTEXT_MAX_CHARS == 3000
+    assert build_thread_context(messages) == expected
+
+
+@pytest.mark.parametrize(
+    ("issue", "expected"),
+    [
+        (
+            Issue(
+                number=42,
+                title="빅챗 리마인더가 두 번 와요",
+                url="https://github.com/AUSG/anna-v2/issues/42",
+            ),
+            "이슈 만들었어! <https://github.com/AUSG/anna-v2/issues/42|#42 빅챗 리마인더가 두 번 와요>",
+        ),
+        # 제목의 <, > 가 그대로 나가면 슬랙 링크 표기가 깨진다
+        (
+            Issue(
+                number=42,
+                title="<script> 태그가 안 먹어요",
+                url="https://github.com/AUSG/anna-v2/issues/42",
+            ),
+            "이슈 만들었어! <https://github.com/AUSG/anna-v2/issues/42|#42 &lt;script&gt; 태그가 안 먹어요>",
+        ),
+        (
+            Issue(
+                number=7,
+                title="<script> | &lt; & > 🐍",
+                url="https://github.com/AUSG/anna-v2/issues/7",
+            ),
+            "이슈 만들었어! <https://github.com/AUSG/anna-v2/issues/7|#7 &lt;script&gt; &#124; &lt; & &gt; 🐍>",
+        ),
+    ],
+)
+def test_issue_created_message_escapes_link_text(issue, expected):
+    assert issue_created_message(issue) == expected
+
+
+@pytest.mark.parametrize(
+    ("reason", "expected"),
+    [
+        (
+            "깃허브에 연결하지 못했어. 잠시 뒤에 다시 시도해줘!",
+            ":blob-fearful: 이슈를 만들지 못했어. 깃허브에 연결하지 못했어. 잠시 뒤에 다시 시도해줘!",
+        ),
+        ("거절 <403>|🐍", ":blob-fearful: 이슈를 만들지 못했어. 거절 <403>|🐍"),
+    ],
+)
+def test_issue_failed_message_keeps_reason_verbatim(reason, expected):
+    assert issue_failed_message(reason) == expected

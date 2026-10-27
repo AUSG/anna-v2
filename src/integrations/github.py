@@ -1,28 +1,17 @@
+"""GithubGateway 의 REST 구현."""
+
 import logging
-from typing import List, Optional
+from typing import List, Optional, Union
 
 import requests
-from pydantic import BaseModel
+
+from features.issues.models import Issue, IssueCreationFailed
 
 logger = logging.getLogger(__name__)
 
 GITHUB_API_BASE_URL = "https://api.github.com"
 # 응답 형식을 고정한다 (GitHub 은 버전 헤더가 없으면 계정 기본값을 쓴다)
 GITHUB_API_VERSION = "2022-11-28"
-
-
-class GithubApiError(Exception):
-    """GitHub API 호출이 실패했을 때. reason 은 그대로 슬랙에 보여줄 수 있는 한국어 문장이다."""
-
-    def __init__(self, reason: str):
-        super().__init__(reason)
-        self.reason = reason
-
-
-class Issue(BaseModel):
-    number: int
-    title: str
-    url: str
 
 
 class GithubClient:
@@ -42,9 +31,9 @@ class GithubClient:
 
     def create_issue(
         self, title: str, body: str = "", labels: Optional[List[str]] = None
-    ) -> Issue:
+    ) -> Union[Issue, IssueCreationFailed]:
         if not self.is_enabled():
-            raise GithubApiError("깃허브 토큰이나 레포 설정이 비어 있어. 운영진에게 알려줘!")
+            return IssueCreationFailed("깃허브 토큰이나 레포 설정이 비어 있어. 운영진에게 알려줘!")
 
         payload = {"title": title, "body": body}
         if labels:
@@ -63,7 +52,7 @@ class GithubClient:
             )
         except requests.exceptions.RequestException as ex:
             logger.warning("GitHub issue creation failed to reach the API: %s", ex)
-            raise GithubApiError("깃허브에 연결하지 못했어. 잠시 뒤에 다시 시도해줘!") from ex
+            return IssueCreationFailed("깃허브에 연결하지 못했어. 잠시 뒤에 다시 시도해줘!")
 
         if resp.status_code != 201:
             logger.warning(
@@ -71,7 +60,7 @@ class GithubClient:
                 resp.status_code,
                 resp.text[:500],
             )
-            raise GithubApiError(self._error_reason(resp.status_code))
+            return IssueCreationFailed(self._error_reason(resp.status_code))
 
         data = resp.json()
         return Issue(number=data["number"], title=data["title"], url=data["html_url"])

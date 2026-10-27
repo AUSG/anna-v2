@@ -1,8 +1,8 @@
 import pytest
 
-from features.questions.models import ChatResult, Source
-from features.questions.slack import QuestionResponse
+from features.questions.models import ChatFailure, ChatResult, Source
 from features.questions.presentation.answers import (
+    SERVICE_FAILURE_MESSAGE,
     _escape_slack_text,
     _format_timestamp,
     _normalize_answer_url,
@@ -164,10 +164,10 @@ _UNKNOWN_ANSWER = "흐음~ 나도 잘 모르는 일인걸? 오거나이저를 �
             id="malformed-structured",
         ),
         pytest.param(
-            "예전 답변 https://evil.test/plain",
+            ChatResult(answer="예전 답변 https://evil.test/plain"),
             "예전 답변 [확인되지 않은 링크 제거]",
             [],
-            id="legacy-untrusted-url",
+            id="uncited-untrusted-url",
         ),
         pytest.param(
             ChatResult(
@@ -187,16 +187,16 @@ _UNKNOWN_ANSWER = "흐음~ 나도 잘 모르는 일인걸? 오거나이저를 �
             id="duplicate-only",
         ),
         pytest.param(
-            "HTTPS://wrong.test www.wrong.test",
+            ChatResult(answer="HTTPS://wrong.test www.wrong.test"),
             "[확인되지 않은 링크 제거] [확인되지 않은 링크 제거]",
             [],
-            id="legacy-uppercase-www",
+            id="uncited-uppercase-www",
         ),
         pytest.param(
-            "<https://wrong.test|출처> [출처](https://wrong.test)",
+            ChatResult(answer="<https://wrong.test|출처> [출처](https://wrong.test)"),
             "출처[확인되지 않은 링크 제거] 출처[확인되지 않은 링크 제거]",
             [],
-            id="legacy-named-links",
+            id="uncited-named-links",
         ),
         pytest.param(
             ChatResult(
@@ -218,12 +218,18 @@ def test_render_parts_cases(result, answer, sources):
     assert render_parts(result) == (answer, sources)
 
 
-@pytest.mark.parametrize("result", [None, {}, [], False, 42])
-def test_missing_or_wrong_result_type_is_service_failure(result):
-    assert render_parts(result) == (
-        "앗, 답변 서버가 잠시 응답하지 않아요. 잠시 후 다시 시도해 주세요.",
-        [],
-    )
+@pytest.mark.parametrize(
+    "result",
+    [
+        ChatFailure("timeout"),
+        ChatFailure(""),
+        ChatFailure("invalid json"),
+        ChatFailure("HTTP 500 https://evil.test/plain"),
+    ],
+)
+def test_chat_failure_is_service_failure_without_sources(result):
+    assert SERVICE_FAILURE_MESSAGE == ("앗, 답변 서버가 잠시 응답하지 않아요. 잠시 후 다시 시도해 주세요.")
+    assert render_parts(result) == (SERVICE_FAILURE_MESSAGE, [])
 
 
 @pytest.mark.parametrize(
@@ -240,11 +246,9 @@ def test_empty_structured_answer_uses_status_fallback(status, expected):
     assert render_parts(ChatResult(answer="", status=status)) == (expected, [])
 
 
-@pytest.mark.parametrize("answer", ["", " \t\n", "가\r\n나\u2028다\u2029😀e\u0301"])
-def test_legacy_strings_and_structured_whitespace_remain_distinct(answer):
-    assert render_parts(answer) == (answer, [])
-    if answer:
-        assert render_parts(ChatResult(answer=answer)) == (answer, [])
+@pytest.mark.parametrize("answer", [" \t\n", "가\r\n나\u2028다\u2029😀e\u0301"])
+def test_whitespace_and_unicode_answers_are_returned_verbatim(answer):
+    assert render_parts(ChatResult(answer=answer)) == (answer, [])
 
 
 @pytest.mark.parametrize(
@@ -389,10 +393,6 @@ def test_source_order_escaping_current_source_and_ambiguous_ids_are_preserved():
             "현재 &lt;대화&gt;",
             "<https://a.test/2|doc-2 · bad&time>",
         ],
-    )
-    assert QuestionResponse._render_result(result) == (
-        "확인했어요.\n\n출처: <https://a.test/1|A&amp;B &lt;공지&gt;>, "
-        "현재 &lt;대화&gt;, <https://a.test/2|doc-2 · bad&time>"
     )
 
 

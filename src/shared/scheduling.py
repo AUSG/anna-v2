@@ -1,9 +1,14 @@
 import logging
 import threading
 import time
+import traceback
 from datetime import datetime, timedelta, timezone
+from typing import Callable, Optional, TypeVar
+
+from shared.gateways import SlackGateway
 
 logger = logging.getLogger(__name__)
+T = TypeVar("T")
 
 # 오래 자는 동안 시계가 조정(NTP 등)되어도 이 간격 안에 남은 시간을 다시 계산한다
 _MAX_SLEEP_SEC = 5 * 60
@@ -87,3 +92,25 @@ class DailyScheduler(threading.Thread):
 def _fmt_duration(seconds: float) -> str:
     total = int(max(seconds, 0))
     return f"{total // 3600}h {total % 3600 // 60}m {total % 60}s"
+
+
+def run_with_admin_alert(
+    job: Callable[[], T],
+    *,
+    label: str,
+    slack: SlackGateway,
+    admin_channel: str,
+) -> Optional[T]:
+    """잡의 예외를 삼키고 관리자 채널에 알린다. 스케줄러 스레드가 죽지 않게 한다."""
+    try:
+        return job()
+    except Exception:
+        logger.exception("[%s] job failed", label)
+        try:
+            slack.send_channel_message(
+                admin_channel,
+                f":blob-fearful: {label} 중 에러가 발생했어!\n```\n{traceback.format_exc()}\n```",
+            )
+        except Exception:
+            logger.exception("[%s] failed to notify admin channel", label)
+        return None

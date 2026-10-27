@@ -9,6 +9,12 @@ class TestLogConfig(unittest.TestCase):
     def test_init_logger(self):
         with self.assertLogs() as cm:  # context manager
             reload(log_config)
+            log_config.init_logger("DEBUG")
+            self.assertTrue("log config initialized" in cm.output[0])
+
+    def test_init_logger_uses_default_level_when_omitted(self):
+        with self.assertLogs() as cm:  # context manager
+            reload(log_config)
             log_config.init_logger()
             self.assertTrue("log config initialized" in cm.output[0])
 

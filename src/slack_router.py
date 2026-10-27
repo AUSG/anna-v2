@@ -1,59 +1,49 @@
-"""클라이언트 생성이나 API 호출 없이 멘션 명령을 판별한다."""
+"""멘션 본문을 한 번 해석해 명령 값으로 바꾼다. 클라이언트 생성이나 API 호출은 없다.
 
-from typing import Literal
+우선순위: 명시적 질문(q)) > 명령 > 일반 질문 > 빈 멘션.
+"""
 
-from features.bigchat.services.commands import REMINDER_TRIGGER
-from features.issues.services.commands import ISSUE_TRIGGER_PATTERN
-from features.questions.services.commands import extract_question
+from typing import Union
 
+from features.bigchat.services.commands import (
+    CreateBigchat,
+    Reminder,
+    is_create_bigchat,
+    is_reminder,
+    parse_create_bigchat,
+    parse_reminder,
+)
+from features.bot_commands.models import Empty, Help, Shuffle, is_help, is_shuffle
+from features.issues.models import CreateIssue
+from features.issues.services.commands import is_create_issue, parse_issue_command
+from features.questions.models import Question
+from features.questions.services.commands import (
+    is_explicit_question,
+    parse_explicit_question,
+    parse_plain_question,
+)
+from shared.slack_commands import SLACK_USER_PATTERN
 
-MentionCommand = Literal[
-    "explicit_question",
-    "shuffle",
-    "reminder",
-    "create_bigchat",
-    "create_issue",
-    "help",
-    "question",
-    "empty",
+MentionCommand = Union[
+    Question, Shuffle, Reminder, CreateBigchat, CreateIssue, Help, Empty
 ]
 
 
-def matches_mention(command: MentionCommand, text: str) -> bool:
-    """라우터와 개별 핸들러가 같은 판별 조건을 사용한다."""
-    match command:
-        case "explicit_question":
-            return "q)" in text.lower()
-        case "shuffle":
-            return "섞어줘" in text or "shuffle" in text.lower()
-        case "reminder":
-            return REMINDER_TRIGGER in text
-        case "create_bigchat":
-            return "새로운 빅챗" in text
-        case "create_issue":
-            return bool(ISSUE_TRIGGER_PATTERN.search(text))
-        case "help":
-            return "help" in text or "도움" in text
-        case "question":
-            return bool(extract_question(text, require_prefix=False))
-        case "empty":
-            return not extract_question(text, require_prefix=False)
-        case _:
-            raise ValueError(f"Unknown mention command: {command}")
-
-
-def classify_mention(text: str) -> MentionCommand:
-    # 명시적 질문, 명령, 일반 질문 순으로 판별한다.
-    commands: tuple[MentionCommand, ...] = (
-        "explicit_question",
-        "shuffle",
-        "reminder",
-        "create_bigchat",
-        "create_issue",
-        "help",
-        "question",
-    )
-    for command in commands:
-        if matches_mention(command, text):
-            return command
-    return "empty"
+def parse_mention(text: str, anna_id: str) -> MentionCommand:
+    if is_explicit_question(text):
+        return parse_explicit_question(text)
+    if is_shuffle(text):
+        # 섞을 대상에서 안나 자신은 뺀다
+        return Shuffle(
+            tuple(u for u in SLACK_USER_PATTERN.findall(text) if u != anna_id)
+        )
+    if is_reminder(text):
+        return parse_reminder(text, anna_id)
+    if is_create_bigchat(text):
+        return parse_create_bigchat(text)
+    if is_create_issue(text):
+        return parse_issue_command(text)
+    if is_help(text):
+        return Help()
+    question = parse_plain_question(text)
+    return question if question else Empty()

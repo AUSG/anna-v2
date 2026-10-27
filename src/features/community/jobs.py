@@ -1,44 +1,40 @@
 """데일리 핫스레드 게시 진입점과 스케줄 등록."""
 
 import logging
-import traceback
 from functools import partial
 
-from integrations.slack import NO_UNFURL
-from shared.scheduling import DailyScheduler
+from runtime import Runtime
+from shared.scheduling import DailyScheduler, run_with_admin_alert
 from shared.time import KST
 
 logger = logging.getLogger(__name__)
 
 
-def post_daily_digest(dependencies):
-    web_client = dependencies.create_web_client()
-    try:
-        text = dependencies._get_qa_client().daily_digest()
+def post_daily_digest(runtime: Runtime):
+    slack = runtime.slack_client(runtime.web_client())
+
+    def job():
+        text = runtime.qa().daily_digest()
         if not text:
             logger.info("Daily digest: nothing to post")
             return
-        dependencies.SlackClient(None, web_client).post_markdown(
-            dependencies.envs.DAILY_DIGEST_CHANNEL_ID, text
-        )
+        slack.send_markdown(runtime.settings.DAILY_DIGEST_CHANNEL_ID, text)
         logger.info("Daily digest posted")
-    except Exception:
-        logger.exception("Failed to post daily digest")
-        try:
-            web_client.chat_postMessage(
-                channel=dependencies.envs.ADMIN_CHANNEL,
-                text=f":blob-fearful: 데일리 핫스레드 게시 중 에러가 발생했어!\n```\n{traceback.format_exc()}\n```",
-                **NO_UNFURL,
-            )
-        except Exception:
-            logger.exception("Failed to notify admin channel")
+
+    run_with_admin_alert(
+        job,
+        label="데일리 핫스레드 게시",
+        slack=slack,
+        admin_channel=runtime.settings.ADMIN_CHANNEL,
+    )
 
 
-def start_scheduler(dependencies):
-    if not dependencies.envs.DAILY_DIGEST_ENABLED:
+def start_scheduler(runtime: Runtime):
+    if not runtime.settings.DAILY_DIGEST_ENABLED:
         return
+    # 어제의 핫스레드를 매일 아침 10시(KST)에 fun-anna-house 에 올린다
     DailyScheduler(
-        job=partial(post_daily_digest, dependencies),
+        job=partial(post_daily_digest, runtime),
         hour=10,
         minute=0,
         tz=KST,

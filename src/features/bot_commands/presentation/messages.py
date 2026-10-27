@@ -1,0 +1,25 @@
+from typing import Sequence
+
+from shared.text import strip_multiline
+
+HELP_MESSAGE = strip_multiline(
+    """
+    나를 멘션했을 때, 사용할 수 있는 명령어야.
+    - `shuffle` 또는 `섞어줘`: 멘션된 유저들을 섞어줘!
+    - `새로운 빅챗`: 새로운 빅챗 시트를 만들어줘!
+    (메시지 더보기 메뉴 `⋮` > `새로운 빅챗 만들기`로 폼 입력도 돼!)
+    - `빅챗 리마인더 테스트 @누구`: 전날 저녁 6시에 나갈 리마인더 DM 을 지금 그 사람에게만 보내볼게!
+    - `빅챗 리마인더 지금 전원 발송`: 내일 빅챗 신청자 전원에게 리마인더 DM 을 지금 보낼게!
+    - `새로운 이슈 <제목>`: 내 레포(AUSG/anna-v2)에 이슈를 만들어줄게!
+    (둘째 줄부터는 이슈 본문이 되고, 스레드 안에서 부르면 그 대화도 같이 넣어둘게)
+    - `help` 또는 `도움`: 도움말을 보여줘!
+    그 외에는 뭐든 물어봐 — 그냥 멘션하면서 질문하면 내가 아는 선에서 답해줄게!
+    (`q)` 를 붙이면 위 명령어보다 질문을 우선해)
+    더 많은 기능이 필요하면, https://github.com/AUSG/anna-v2 으로 기여해줘!"""
+)
+
+UNKNOWN_COMMAND_MESSAGE = "앗, 잘못입력한 것 같아.\n나를 멘션하면서 help를 한 번 입력해봐!"
+
+
+def shuffled_message(user_ids: Sequence[str]) -> str:
+    return "여기있어!\n" + " ".join(f"<@{user_id}>" for user_id in user_ids)

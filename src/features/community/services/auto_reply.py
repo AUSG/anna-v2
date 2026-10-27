@@ -1,16 +1,18 @@
 # fun-anna-house 자동 답글: 한국어 페르소나 프롬프트가 길어 줄길이(E501) 검사를 예외 처리한다.
 # ruff: noqa: E501
-import base64
-import logging
-import re
+"""지정 채널의 새 글에 자동 답글을 달지 판단한다. 외부 호출은 없다."""
 
-logger = logging.getLogger(__name__)
+from typing import List
 
-# 자동 답글 대상 채널 (하드코딩): fun-anna-house(C03SZTDEDK3)
-AUTO_REPLY_CHANNEL_IDS = {"C03SZTDEDK3"}
+from shared.slack_commands import strip_mentions
+from shared.slack_events import MessageEvent, SlackFile
 
 # opt-out 스위치: 글에 이 문구가 있으면 ANNA 가 응답하지 않음 ("안나X" 도 매칭되도록 소문자 비교)
 OPT_OUT_MARKER = "안나x"
+# 답글 길이 상한 (maxlen 조심): 짧은 문단 수준으로 제한
+REPLY_MAX_TOKENS = 220
+# 한 번에 LLM 에 넘길 최대 이미지 수
+MAX_IMAGES = 4
 
 # 김수빈 유저의 말투를 흉내 내어, 지정 채널의 새 글에 답글을 단다. (검색 없이 순수 생성)
 KIMSUBIN_PERSONA_PROMPT = """너는 AUSG 커뮤니티 멤버 '김수빈'의 말투로 답글을 다는 봇이야.
@@ -45,93 +47,37 @@ KIMSUBIN_PERSONA_PROMPT = """너는 AUSG 커뮤니티 멤버 '김수빈'의 말�
 - 한국어로, 과하지 않게."""
 
 
-class SubinLikeResponse:
-    """지정 채널(fun-anna-house)의 root 글(스레드 답글 제외)에 김수빈 말투로 답글."""
+def image_files(event: MessageEvent) -> List[SlackFile]:
+    return [f for f in event.files if f.mimetype.startswith("image/")][:MAX_IMAGES]
 
-    # 답글 길이 상한 (maxlen 조심): 짧은 문단 수준으로 제한
-    REPLY_MAX_TOKENS = 220
-    # 한 번에 LLM 에 넘길 최대 이미지 수
-    MAX_IMAGES = 4
 
-    def __init__(self, event, slack_client, qa_client, anna_id):
-        self.event = event
-        self.slack_client = slack_client
-        self.qa_client = qa_client
-        self.anna_id = anna_id
+def should_auto_reply(event: MessageEvent, *, anna_id: str, channel_id: str) -> bool:
+    """지정 채널의 root 글(스레드 답글 제외)에만, 봇·수정·멘션·opt-out 은 제외."""
+    if event.channel != channel_id:
+        return False
+    # 사용자 opt-out: 글에 "안나x" 가 있으면 응답하지 않음
+    if OPT_OUT_MARKER in event.text.lower():
+        return False
+    # 봇 메시지 무시 — 무한루프·잡음 방지
+    if event.bot_id:
+        return False
+    # subtype 메시지 무시하되, 이미지 첨부(file_share)는 허용
+    if event.subtype and event.subtype != "file_share":
+        return False
+    # ANNA 자기 글 무시
+    if event.user and event.user == anna_id:
+        return False
+    # root 글만 — 스레드 답글이면 무시 (ANNA 자기 답글 루프도 자동 차단)
+    if event.thread_ts and event.thread_ts != event.ts:
+        return False
+    # ANNA 멘션은 q) 핸들러에 양보 (중복 응답 방지)
+    if anna_id and f"<@{anna_id}>" in event.text:
+        return False
+    # 텍스트도 이미지도 없으면 무시
+    if not event.text.strip() and not image_files(event):
+        return False
+    return True
 
-        self.channel = event.get("channel")
-        self.ts = event.get("ts")
-        self.text = event.get("text") or ""
-        self.user = event.get("user")
 
-    def run(self):
-        if not self._should_handle():
-            return
-
-        content = re.sub(r"<@[A-Z0-9]+>", "", self.text).strip()
-        images = self._extract_images()
-        answer = self.qa_client.generate(
-            content=content,
-            system_prompt=KIMSUBIN_PERSONA_PROMPT,
-            max_tokens=self.REPLY_MAX_TOKENS,
-            images=images or None,
-        )
-        if not answer:
-            logger.info("[subin] generation failed/empty, skip")
-            return
-
-        logger.info(
-            "[subin] post=%r images=%d | reply=%r", content[:80], len(images), answer
-        )
-        self.slack_client.send_message(msg=answer, ts=self.ts)
-
-    def _image_files(self):
-        return [
-            f
-            for f in (self.event.get("files") or [])
-            if (f.get("mimetype") or "").startswith("image/")
-        ][: self.MAX_IMAGES]
-
-    def _extract_images(self):
-        """첨부 이미지를 봇 토큰으로 받아 base64 data URL 리스트로."""
-        out = []
-        for f in self._image_files():
-            url = f.get("url_private_download") or f.get("url_private")
-            if not url:
-                continue
-            data = self.slack_client.download_file(url)
-            if not data:
-                continue
-            mimetype = f.get("mimetype") or "image/png"
-            b64 = base64.b64encode(data).decode("ascii")
-            out.append(f"data:{mimetype};base64,{b64}")
-        return out
-
-    def _should_handle(self) -> bool:
-        # 지정된 자동 답글 채널만 (fun-anna-house)
-        if self.channel not in AUTO_REPLY_CHANNEL_IDS:
-            return False
-        # 사용자 opt-out: 글에 "안나x" 가 있으면 응답하지 않음
-        if OPT_OUT_MARKER in self.text.lower():
-            return False
-        # 봇 메시지 무시 — 무한루프·잡음 방지
-        if self.event.get("bot_id"):
-            return False
-        # subtype 메시지 무시하되, 이미지 첨부(file_share)는 허용
-        subtype = self.event.get("subtype")
-        if subtype and subtype != "file_share":
-            return False
-        # ANNA 자기 글 무시
-        if self.user and self.user == self.anna_id:
-            return False
-        # root 글만 — 스레드 답글이면 무시 (ANNA 자기 답글 루프도 자동 차단)
-        thread_ts = self.event.get("thread_ts")
-        if thread_ts and thread_ts != self.ts:
-            return False
-        # ANNA 멘션은 q) 핸들러에 양보 (중복 응답 방지)
-        if self.anna_id and f"<@{self.anna_id}>" in self.text:
-            return False
-        # 텍스트도 이미지도 없으면 무시
-        if not self.text.strip() and not self._image_files():
-            return False
-        return True
+def reply_content(event: MessageEvent) -> str:
+    return strip_mentions(event.text)

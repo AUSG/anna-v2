@@ -242,9 +242,11 @@ import threading
 from pathlib import Path
 
 root = Path(sys.argv[1]).resolve()
+# src 의 진입점/조립/통합 모듈과 외부 SDK. 정책 모듈은 features/shared 의 순수 값만 봐야 한다.
 blocked = {
-    'handler', 'implementation', 'integrations', 'bootstrap', 'app', 'anna', 'config', 'requests', 'slack_sdk', 'slack_bolt',
-    'gspread', 'dotenv', 'pydantic_settings', 'google', 'googleapiclient', 'github',
+    'anna', 'app', 'bootstrap', 'config', 'integrations', 'runtime', 'slack_router',
+    'requests', 'slack_sdk', 'slack_bolt', 'flask', 'gunicorn',
+    'gspread', 'gspread_formatting', 'dotenv', 'pydantic_settings', 'google', 'googleapiclient', 'github',
 }
 assert not [name for name in sys.modules if name.split('.')[0] in blocked]
 attempted = []
@@ -264,7 +266,9 @@ socket.socket.connect = socket.socket.connect_ex = forbidden
 socket.create_connection = socket.getaddrinfo = forbidden
 threading.Thread.start = forbidden
 sys.dont_write_bytecode = True
+# 저장소 밖의 패키지 경로(site-packages 등)는 부모 프로세스에서 넘겨받는다. -I 가 PYTHONPATH 를 무시하기 때문이다.
 sys.path[:0] = [str(root / 'src'), str(root)]
+sys.path += sys.argv[2:]
 
 # finder가 실제로 로딩 전에 거절하는지 확인하고 application의 시도와 구분한다.
 for name in sorted(blocked):
@@ -301,8 +305,21 @@ print('reminder policy isolated at ' + str(module.__file__))
 
 def test_application_bigchat_import_is_isolated_in_a_fresh_process():
     root = Path(__file__).resolve().parents[4]
+    external_paths = [
+        path
+        for path in sys.path
+        if path and not Path(path).resolve().is_relative_to(root)
+    ]
     completed = subprocess.run(
-        [sys.executable, "-I", "-B", "-c", IMPORT_GUARD_SCRIPT, str(root)],
+        [
+            sys.executable,
+            "-I",
+            "-B",
+            "-c",
+            IMPORT_GUARD_SCRIPT,
+            str(root),
+            *external_paths,
+        ],
         cwd=root,
         capture_output=True,
         text=True,

@@ -9,6 +9,26 @@ MAX_CONVERSATION_CHARS = 40000
 MAX_CONVERSATION_AUTHOR_CHARS = 200
 MAX_CONVERSATION_TIMESTAMP_CHARS = 100
 
+CHAT_STATUSES = frozenset(
+    {"answered", "insufficient_evidence", "no_search_needed", "conflicting_evidence"}
+)
+
+
+@dataclass(frozen=True)
+class Question:
+    text: str
+    explicit: bool  # q) 접두어로 명시한 질문인지
+
+
+@dataclass(frozen=True)
+class Utterance:
+    """QA 서버에 넘기는 대화 한 줄."""
+
+    role: str  # "user" | "assistant"
+    content: str
+    author: str = ""
+    timestamp: str = ""
+
 
 @dataclass
 class Source:
@@ -37,3 +57,10 @@ class ChatResult:
     status: str = "answered"
     citations: List[str] = field(default_factory=list)
     trace_id: str = ""
+
+
+@dataclass(frozen=True)
+class ChatFailure:
+    """QA 서버가 응답하지 않았거나 응답을 해석하지 못했다."""
+
+    reason: str

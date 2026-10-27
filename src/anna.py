@@ -3,12 +3,14 @@
 import logging
 
 from app import create_app, start_schedulers
+from bootstrap import create_runtime
 from config.log_config import init_logger
 
-init_logger()
-flask_app = create_app()
+runtime = create_runtime()
+init_logger(runtime.settings.LOGLEVEL)
+flask_app = create_app(runtime)
 app = flask_app.extensions["slack_app"]
-start_schedulers()
+start_schedulers(runtime)
 
 if __name__ == "__main__":
     PORT = 8080
