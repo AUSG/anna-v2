@@ -1,0 +1,37 @@
+[
+  {
+    "text": "<@UANNA> q) 질문\n추가 설명",
+    "require_prefix": true,
+    "expected": "질문\n추가 설명"
+  },
+  {
+    "text": "<@UANNA> Q) <@UOTHER> 질문",
+    "require_prefix": true,
+    "expected": "질문"
+  },
+  {
+    "text": "<@UANNA> q) <@UOTHER>",
+    "require_prefix": true,
+    "expected": ""
+  },
+  {
+    "text": "<@UANNA> 일반 질문",
+    "require_prefix": true,
+    "expected": ""
+  },
+  {
+    "text": "<@UANNA> 일반 질문",
+    "require_prefix": false,
+    "expected": "일반 질문"
+  },
+  {
+    "text": "<@UANNA> q) 질문",
+    "require_prefix": false,
+    "expected": "질문"
+  },
+  {
+    "text": "<@UANNA>",
+    "require_prefix": false,
+    "expected": ""
+  }
+]

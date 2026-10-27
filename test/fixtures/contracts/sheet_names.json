@@ -1,0 +1,50 @@
+[
+  {
+    "sheet_name": "AI 밋업 26-08-20 19:00~21:00",
+    "expected": {
+      "name": "AI 밋업",
+      "start": "2026-08-20T19:00:00+09:00",
+      "end": "2026-08-20T21:00:00+09:00"
+    }
+  },
+  {
+    "sheet_name": "  이름에 공백  26-08-20 09:00~10:30 ",
+    "expected": {
+      "name": "이름에 공백",
+      "start": "2026-08-20T09:00:00+09:00",
+      "end": "2026-08-20T10:30:00+09:00"
+    }
+  },
+  {
+    "sheet_name": "AWS 밋업 26-02-29 19:00~21:00",
+    "expected": null
+  },
+  {
+    "sheet_name": "AI 밋업 26-08-20 21:00~19:00",
+    "expected": null
+  },
+  {
+    "sheet_name": "AI 밋업 26-08-20 19:00~19:00",
+    "expected": null
+  },
+  {
+    "sheet_name": "AI 밋업 26-13-01 19:00~21:00",
+    "expected": null
+  },
+  {
+    "sheet_name": "AI 밋업 26-08-20 19:00-21:00",
+    "expected": null
+  },
+  {
+    "sheet_name": "26-08-20 19:00~21:00",
+    "expected": null
+  },
+  {
+    "sheet_name": "AI 밋업 2026-08-20 19:00~21:00",
+    "expected": null
+  },
+  {
+    "sheet_name": "AI 밋업 26-08-20 24:00~25:00",
+    "expected": null
+  }
+]

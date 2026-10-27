@@ -107,9 +107,31 @@ poetry install --with ci
 
 ### 코드 구성
 
-- `src/anna.py`는 실행, `src/app.py`·`src/bootstrap.py`는 앱 구성과 의존성 연결을 담당한다.
-- `src/features/`에 기능별 코드를 둔다. 각 기능의 `slack.py`·`http.py`·`jobs.py`는 진입점, `services/`는 업무 처리, `presentation/`은 출력 형식을 담는다.
-- 외부 API·저장소 연동은 `src/integrations/`, 공통 코드는 `src/shared/`에 둔다.
+```
+src/
+  anna.py            gunicorn 진입점. 런타임을 만들고 앱과 스케줄러를 띄운다
+  app.py             Flask/Bolt 앱 조립과 멘션 디스패치 (import 만으로는 아무것도 시작하지 않는다)
+  bootstrap.py       ProductionRuntime: 설정을 읽고 외부 클라이언트를 만드는 유일한 곳
+  runtime.py         Runtime Protocol. features 가 실행 환경에 요구하는 계약
+  slack_router.py    멘션 본문을 한 번 해석해 명령 값(dataclass)으로 바꾼다
+  features/<기능>/
+    slack.py / http.py / jobs.py   진입점. Slack 페이로드를 값으로 바꾸고 결과를 문구로 답한다 (jobs 는 앱 프로세스 안의 데일리 스케줄러)
+    models.py                      값 객체, 결과 enum. 외부 의존 없음
+    ports.py                       이 기능이 외부에 요구하는 Protocol
+    services/                      판단과 처리. 예외 대신 값을 돌려주고, 외부는 포트로만 부른다
+    presentation/                  문구·블록·캘린더 등 출력 형식. 순수 함수
+  integrations/      포트의 실제 구현 (slack_sdk, gspread, QA 서버, GitHub)
+  shared/            gateways(공통 포트), slack_events(타입화된 이벤트), 오류 경계, 로딩 이모지, 재시도, 스케줄러
+```
+
+규칙은 `test/test_architecture.py` 가 강제한다. 핵심만 적으면:
+
+- `features/`·`shared/` 는 `anna`·`app`·`bootstrap`·`slack_router`·`config.env_config` 를 import 하지 않는다.
+- `services/`·`presentation/` 는 `integrations`·`slack_sdk`·`requests` 등 외부 SDK 를 import 하지 않는다.
+- 도메인 결과는 예외가 아니라 enum/dataclass 로 돌려준다. SDK 예외는 `integrations/` 안에서 값으로 바꾼다.
+- 정규식은 lookaround·역참조를 쓰지 않는다 (Rust `regex` crate 로 그대로 옮기기 위해).
+
+이 구조는 나중에 Rust 로 1:1 재작성할 것을 전제로 잡았다. `models`·`ports`·`services`·`presentation` 이 I/O 없는 core crate, `integrations` 가 adapters crate, 진입점·`bootstrap`·`slack_router` 가 app crate 에 대응한다. `test/fixtures/contracts/*.json` 은 입력과 기대 출력을 언어 중립으로 적어 둔 계약이라 양쪽 구현이 같은 케이스를 돌릴 수 있다.
 
 ## 실제 AUSG 슬랙과 로컬 안나를 연동해서 테스트하기
 

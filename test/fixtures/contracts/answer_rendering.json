@@ -1,0 +1,314 @@
+[
+  {
+    "id": "failure",
+    "result": {
+      "failure": "down"
+    },
+    "expected": {
+      "answer": "앗, 답변 서버가 잠시 응답하지 않아요. 잠시 후 다시 시도해 주세요.",
+      "sources": []
+    }
+  },
+  {
+    "id": "plain_answer_without_sources",
+    "result": {
+      "answer": "답변이야",
+      "sources": [],
+      "timing": {},
+      "status": "answered",
+      "citations": [],
+      "trace_id": ""
+    },
+    "expected": {
+      "answer": "답변이야",
+      "sources": []
+    }
+  },
+  {
+    "id": "cited_source_with_link_kept",
+    "result": {
+      "answer": "자세한 건 https://docs.ausg.dev/a 를 봐",
+      "sources": [
+        {
+          "document_id": "d1",
+          "score": 0.0,
+          "title": "문서 A",
+          "url": "https://docs.ausg.dev/a",
+          "content_preview": "",
+          "channel_id": null,
+          "thread_ts": null,
+          "user_id": null,
+          "timestamp": "1700000000.5",
+          "truncated": false,
+          "evidence_urls": []
+        }
+      ],
+      "timing": {},
+      "status": "answered",
+      "citations": [
+        "d1"
+      ],
+      "trace_id": ""
+    },
+    "expected": {
+      "answer": "자세한 건 https://docs.ausg.dev/a 를 봐",
+      "sources": [
+        "<https://docs.ausg.dev/a|문서 A · 2023-11-15 07:13 KST>"
+      ]
+    }
+  },
+  {
+    "id": "uncited_link_removed",
+    "result": {
+      "answer": "여기 [링크](https://evil.example/x) 와 <https://evil.example/y|라벨> 그리고 https://evil.example/z.",
+      "sources": [
+        {
+          "document_id": "d1",
+          "score": 0.0,
+          "title": "문서 A",
+          "url": "https://docs.ausg.dev/a",
+          "content_preview": "",
+          "channel_id": null,
+          "thread_ts": null,
+          "user_id": null,
+          "timestamp": null,
+          "truncated": false,
+          "evidence_urls": []
+        }
+      ],
+      "timing": {},
+      "status": "answered",
+      "citations": [
+        "d1"
+      ],
+      "trace_id": ""
+    },
+    "expected": {
+      "answer": "여기 링크[확인되지 않은 링크 제거] 와 라벨[확인되지 않은 링크 제거] 그리고 [확인되지 않은 링크 제거].",
+      "sources": [
+        "<https://docs.ausg.dev/a|문서 A>"
+      ]
+    }
+  },
+  {
+    "id": "evidence_url_allowed",
+    "result": {
+      "answer": "근거: https://ausg.dev/evidence/1)",
+      "sources": [
+        {
+          "document_id": "d1",
+          "score": 0.0,
+          "title": "A",
+          "url": "https://docs.ausg.dev/a",
+          "content_preview": "",
+          "channel_id": null,
+          "thread_ts": null,
+          "user_id": null,
+          "timestamp": null,
+          "truncated": false,
+          "evidence_urls": [
+            "https://ausg.dev/evidence/1"
+          ]
+        }
+      ],
+      "timing": {},
+      "status": "answered",
+      "citations": [
+        "d1"
+      ],
+      "trace_id": ""
+    },
+    "expected": {
+      "answer": "근거: https://ausg.dev/evidence/1)",
+      "sources": [
+        "<https://docs.ausg.dev/a|A>"
+      ]
+    }
+  },
+  {
+    "id": "duplicate_document_id_not_cited",
+    "result": {
+      "answer": "답",
+      "sources": [
+        {
+          "document_id": "d1",
+          "score": 0.0,
+          "title": "A",
+          "url": "https://docs.ausg.dev/a",
+          "content_preview": "",
+          "channel_id": null,
+          "thread_ts": null,
+          "user_id": null,
+          "timestamp": null,
+          "truncated": false,
+          "evidence_urls": []
+        },
+        {
+          "document_id": "d1",
+          "score": 0.0,
+          "title": "A2",
+          "url": "https://docs.ausg.dev/a2",
+          "content_preview": "",
+          "channel_id": null,
+          "thread_ts": null,
+          "user_id": null,
+          "timestamp": null,
+          "truncated": false,
+          "evidence_urls": []
+        }
+      ],
+      "timing": {},
+      "status": "answered",
+      "citations": [
+        "d1"
+      ],
+      "trace_id": ""
+    },
+    "expected": {
+      "answer": "답",
+      "sources": []
+    }
+  },
+  {
+    "id": "insufficient_evidence_fallback",
+    "result": {
+      "answer": "",
+      "sources": [],
+      "timing": {},
+      "status": "insufficient_evidence",
+      "citations": [],
+      "trace_id": ""
+    },
+    "expected": {
+      "answer": "흐음~ 관련 기록에서는 확인하지 못했어요.",
+      "sources": []
+    }
+  },
+  {
+    "id": "conflicting_evidence_fallback",
+    "result": {
+      "answer": "",
+      "sources": [],
+      "timing": {},
+      "status": "conflicting_evidence",
+      "citations": [],
+      "trace_id": ""
+    },
+    "expected": {
+      "answer": "흐음~ 기록이 서로 달라서 확답하기 어렵네요.",
+      "sources": []
+    }
+  },
+  {
+    "id": "empty_answer_default_fallback",
+    "result": {
+      "answer": "",
+      "sources": [],
+      "timing": {},
+      "status": "answered",
+      "citations": [],
+      "trace_id": ""
+    },
+    "expected": {
+      "answer": "흐음~ 나도 잘 모르는 일인걸? 오거나이저를 찾아볼까?",
+      "sources": []
+    }
+  },
+  {
+    "id": "current_conversation_source_without_link",
+    "result": {
+      "answer": "답",
+      "sources": [
+        {
+          "document_id": "conversation:current",
+          "score": 0.0,
+          "title": "현재 대화",
+          "url": "conversation:current",
+          "content_preview": "",
+          "channel_id": null,
+          "thread_ts": null,
+          "user_id": null,
+          "timestamp": null,
+          "truncated": false,
+          "evidence_urls": []
+        }
+      ],
+      "timing": {},
+      "status": "answered",
+      "citations": [
+        "conversation:current"
+      ],
+      "trace_id": ""
+    },
+    "expected": {
+      "answer": "답",
+      "sources": [
+        "현재 대화"
+      ]
+    }
+  },
+  {
+    "id": "unsafe_source_url_dropped",
+    "result": {
+      "answer": "답",
+      "sources": [
+        {
+          "document_id": "d1",
+          "score": 0.0,
+          "title": "A <b>",
+          "url": "javascript:alert(1)",
+          "content_preview": "",
+          "channel_id": null,
+          "thread_ts": null,
+          "user_id": null,
+          "timestamp": null,
+          "truncated": false,
+          "evidence_urls": []
+        }
+      ],
+      "timing": {},
+      "status": "answered",
+      "citations": [
+        "d1"
+      ],
+      "trace_id": ""
+    },
+    "expected": {
+      "answer": "답",
+      "sources": []
+    }
+  },
+  {
+    "id": "korean_particle_after_trusted_url",
+    "result": {
+      "answer": "https://docs.ausg.dev/a를 참고해",
+      "sources": [
+        {
+          "document_id": "d1",
+          "score": 0.0,
+          "title": "A",
+          "url": "https://docs.ausg.dev/a",
+          "content_preview": "",
+          "channel_id": null,
+          "thread_ts": null,
+          "user_id": null,
+          "timestamp": null,
+          "truncated": false,
+          "evidence_urls": []
+        }
+      ],
+      "timing": {},
+      "status": "answered",
+      "citations": [
+        "d1"
+      ],
+      "trace_id": ""
+    },
+    "expected": {
+      "answer": "https://docs.ausg.dev/a를 참고해",
+      "sources": [
+        "<https://docs.ausg.dev/a|A>"
+      ]
+    }
+  }
+]
