@@ -229,6 +229,27 @@ def test_sdk_values_current_event_filter_and_unicode_clipping_are_preserved():
     )
 
 
+@pytest.mark.parametrize("stage", ["qa", "reply"])
+def test_qa_and_send_failures_propagate_without_retry_or_fallback(stage):
+    sut, slack, qa = _make(_QUESTION_TEXT)
+    trace = MagicMock()
+    trace.attach_mock(slack.get_replies, "replies")
+    trace.attach_mock(qa.chat, "chat")
+    trace.attach_mock(slack.send_answer, "answer")
+    failure = RuntimeError("처리 실패")
+    target = qa.chat if stage == "qa" else slack.send_answer
+    target.side_effect = failure
+
+    with pytest.raises(RuntimeError) as error:
+        sut.handle_mention()
+
+    assert error.value is failure
+    expected = ["replies", "chat"] if stage == "qa" else ["replies", "chat", "answer"]
+    assert [call[0] for call in trace.mock_calls] == expected
+    qa.chat.assert_called_once()
+    slack.send_message.assert_not_called()
+
+
 def test_handler_keeps_current_question_separate_and_preserves_identities():
     sut, slack, qa = _make(
         event={

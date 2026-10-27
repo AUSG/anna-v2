@@ -1,7 +1,7 @@
 """앱 조립, 의존성 수명과 명시적인 worker 시작을 검증한다."""
 
 import importlib
-import subprocess
+import importlib.util
 import sys
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
@@ -190,70 +190,55 @@ def test_gunicorn_worker_hook_starts_jobs_only_after_app_is_loaded(monkeypatch):
     start.assert_called_once_with(worker.wsgi)
 
 
-def test_import_does_not_initialize_bolt_clients_or_scheduler():
+def test_import_does_not_initialize_bolt_clients_or_scheduler(monkeypatch):
+    bolt, web_client, start_thread = MagicMock(), MagicMock(), MagicMock()
+    monkeypatch.setattr("slack_bolt.App", bolt)
+    monkeypatch.setattr("slack_sdk.WebClient", web_client)
+    monkeypatch.setattr("threading.Thread.start", start_thread)
+    spec = importlib.util.spec_from_file_location("anna_import_check", anna.__file__)
+    module = importlib.util.module_from_spec(spec)
+    monkeypatch.setitem(sys.modules, spec.name, module)
+
+    spec.loader.exec_module(module)
+
+    bolt.assert_not_called()
+    web_client.assert_not_called()
+    start_thread.assert_not_called()
+    assert not hasattr(module, "flask_app")
+
+
+def test_gunicorn_loads_factory_and_starts_jobs_only_in_worker_hook(monkeypatch):
+    from gunicorn.app.wsgiapp import WSGIApplication
+
     root = Path(__file__).resolve().parents[1]
-    script = r"""
-import socket
-import threading
-from unittest.mock import patch
-
-def forbidden(*args, **kwargs):
-    raise AssertionError("import must not initialize runtime")
-
-socket.create_connection = socket.socket.connect = socket.socket.connect_ex = forbidden
-threading.Thread.start = forbidden
-with patch("slack_bolt.App", side_effect=forbidden), patch("slack_sdk.WebClient", side_effect=forbidden):
-    import anna
-assert not hasattr(anna, "flask_app")
-"""
-    completed = subprocess.run(
-        [sys.executable, "-c", script],
-        cwd=root,
-        capture_output=True,
-        text=True,
-        timeout=20,
+    monkeypatch.chdir(root)
+    monkeypatch.setattr(sys, "path", list(sys.path))
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "gunicorn",
+            "--config",
+            "src/gunicorn_config.py",
+            "--chdir",
+            "src",
+            "anna:create_app()",
+        ],
     )
-    assert completed.returncode == 0, completed.stdout + completed.stderr
+    monkeypatch.delenv("GUNICORN_CMD_ARGS", raising=False)
+    monkeypatch.setattr(anna.envs, "BIGCHAT_REMINDER_ENABLED", True)
+    monkeypatch.setattr(anna.envs, "DAILY_DIGEST_ENABLED", True)
+    monkeypatch.setattr(anna, "App", MagicMock(return_value=FakeBoltApp()))
+    monkeypatch.setattr(anna, "init_logger", MagicMock())
+    scheduler = MagicMock()
+    monkeypatch.setattr(anna, "DailyScheduler", scheduler)
 
+    application = WSGIApplication()
+    app = application.wsgi()
 
-def test_gunicorn_factory_and_config_paths_load_without_external_connections():
-    root = Path(__file__).resolve().parents[1]
-    script = r"""
-import os
-import socket
-import sys
-import threading
-from unittest.mock import patch
-
-os.environ.update(
-    SLACK_BOT_TOKEN="xoxb-test",
-    SLACK_SIGNING_SECRET="test-secret",
-    BIGCHAT_REMINDER_ENABLED="true",
-    DAILY_DIGEST_ENABLED="true",
-)
-
-def forbidden(*args, **kwargs):
-    raise AssertionError("configuration check must not connect or start jobs")
-
-socket.create_connection = socket.socket.connect = socket.socket.connect_ex = forbidden
-threading.Thread.start = forbidden
-from slack_bolt import App as BoltApp
-from gunicorn.app.wsgiapp import WSGIApplication
-
-sys.argv = [
-    "gunicorn", "--config", "src/gunicorn_config.py", "--chdir", "src",
-    "anna:create_app()", "--check-config",
-]
-with patch("slack_bolt.App", side_effect=lambda **kwargs: BoltApp(
-    **kwargs, token_verification_enabled=False
-)):
-    WSGIApplication().run()
-"""
-    completed = subprocess.run(
-        [sys.executable, "-c", script],
-        cwd=root,
-        capture_output=True,
-        text=True,
-        timeout=20,
-    )
-    assert completed.returncode == 0, completed.stdout + completed.stderr
+    assert app.test_client().get("/health").json == {"status": "ok"}
+    scheduler.assert_not_called()
+    worker = MagicMock(wsgi=app)
+    application.cfg.post_worker_init(worker)
+    assert scheduler.call_count == 2
+    assert scheduler.return_value.start.call_count == 2

@@ -1,6 +1,6 @@
 import json
 import unittest
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, call
 
 from slack_sdk.errors import SlackApiError
 
@@ -15,6 +15,7 @@ from features.bigchat.handlers.create_bigchat_modal import (
     normalize_shortcut_body,
     normalize_view_body,
 )
+from features.bigchat.models import InvalidBigchatName
 from features.bigchat.services.sheet_link import extract_worksheet_id
 from test.fixtures.slack_events import (
     create_sample_message_shortcut_body,
@@ -111,10 +112,20 @@ class TestSubmitCreateBigchatModal(unittest.TestCase):
 
     def test_run(self):
         sut, mock_ack, mock_slack_client, mock_gs_client = self._build_sut()
+        trace = MagicMock()
+        trace.attach_mock(mock_ack, "ack")
+        trace.attach_mock(mock_gs_client, "sheets")
+        trace.attach_mock(mock_slack_client, "slack")
 
         result = sut.run()
 
         assert result is True
+        # ACK는 시트 생성과 Slack 안내보다 먼저 보내야 한다.
+        assert trace.mock_calls[:3] == [
+            call.ack(),
+            call.sheets.create_bigchat_sheet("AI 밋업 26-08-20 19:00~21:00"),
+            call.sheets.get_url(987654321),
+        ]
         mock_ack.assert_called_once_with()
         mock_gs_client.create_bigchat_sheet.assert_called_once_with(
             "AI 밋업 26-08-20 19:00~21:00"
@@ -167,6 +178,40 @@ class TestSubmitCreateBigchatModal(unittest.TestCase):
                 assert mock_gs_client.mock_calls == []
                 assert mock_slack_client.mock_calls == []
 
+    def test_ack_failure_does_not_create_a_sheet(self):
+        for overrides in ({}, {"date": "2026-02-30"}, {"name": "   "}):
+            with self.subTest(**overrides):
+                sut, ack, slack, sheets = self._build_sut(**overrides)
+                failure = RuntimeError("ACK 실패")
+                ack.side_effect = failure
+
+                with self.assertRaises(RuntimeError) as error:
+                    sut.run()
+
+                assert error.exception is failure
+                ack.assert_called_once()
+                assert sheets.mock_calls == []
+                assert slack.mock_calls == []
+                assert self.mock_member_manager.mock_calls == []
+
+    def test_creation_error_is_not_reported_as_validation_error(self):
+        for failure in (RuntimeError("시트 생성 실패"), InvalidBigchatName("생성 중 오류")):
+            with self.subTest(failure=type(failure).__name__):
+                sut, ack, slack, sheets = self._build_sut()
+                sheets.create_bigchat_sheet.side_effect = failure
+
+                with self.assertRaises(type(failure)) as error:
+                    sut.run()
+
+                assert error.exception is failure
+                ack.assert_called_once_with()
+                sheets.create_bigchat_sheet.assert_called_once_with(
+                    "AI 밋업 26-08-20 19:00~21:00"
+                )
+                sheets.get_url.assert_not_called()
+                assert slack.mock_calls == []
+                assert self.mock_member_manager.mock_calls == []
+
     def test_fallback_to_response_url_when_bot_not_in_channel(self):
         """봇이 채널에 없으면 대체 안내를 보내고 사전 등록은 건너뛴다."""
         for error in ("not_in_channel", "channel_not_found"):
@@ -191,7 +236,7 @@ class TestSubmitCreateBigchatModal(unittest.TestCase):
                 mock_slack_client.get_emoji.assert_not_called()
 
     def test_unexpected_slack_error_is_raised(self):
-        sut, _, mock_slack_client, _ = self._build_sut()
+        sut, mock_ack, mock_slack_client, mock_gs_client = self._build_sut()
         mock_slack_client.send_thread_message.side_effect = SlackApiError(
             "boom", {"error": "ratelimited"}
         )
@@ -199,4 +244,10 @@ class TestSubmitCreateBigchatModal(unittest.TestCase):
         with self.assertRaises(SlackApiError):
             sut.run()
 
+        mock_ack.assert_called_once_with()
+        mock_gs_client.create_bigchat_sheet.assert_called_once_with(
+            "AI 밋업 26-08-20 19:00~21:00"
+        )
+        mock_slack_client.send_thread_message.assert_called_once()
+        mock_slack_client.get_emoji.assert_not_called()
         mock_slack_client.send_response_url_message.assert_not_called()

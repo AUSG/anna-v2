@@ -188,6 +188,44 @@ class TestReminderCommand(RemindBigchatCommandTestBase):
         reminder.assert_not_called()
         self.mock_slack_client.send_message_only_visible_to_user.assert_not_called()
 
+    def test_run_error_propagates_without_result_reply(self):
+        for mode, targets in (
+            ("테스트 <@U1>", ["U1"]),
+            ("지금 전원 발송", None),
+        ):
+            with self.subTest(mode=mode):
+                sut = self._build_sut(f"<@{ANNA_ID}> 빅챗 리마인더 {mode}")
+                failure = RuntimeError("시트 조회 실패")
+                with patch(
+                    "features.bigchat.handlers.remind_bigchat_command.RemindBigchat"
+                ) as reminder:
+                    reminder.return_value.run.side_effect = failure
+
+                    with self.assertRaises(RuntimeError) as error:
+                        sut.handle_mention()
+
+                assert error.exception is failure
+                reminder.return_value.run.assert_called_once_with(only_user_ids=targets)
+                self.mock_slack_client.send_message_only_visible_to_user.assert_not_called()
+
+    def test_reply_error_does_not_retry_reminder_delivery(self):
+        sut = self._build_sut(f"<@{ANNA_ID}> 빅챗 리마인더 테스트 <@U1>")
+        failure = RuntimeError("결과 안내 실패")
+        self.mock_slack_client.send_message_only_visible_to_user.side_effect = failure
+        with patch(
+            "features.bigchat.handlers.remind_bigchat_command.RemindBigchat"
+        ) as reminder:
+            reminder.return_value.run.return_value = _result(
+                bigchat_names=["빅챗"], sent_cnt=1
+            )
+
+            with self.assertRaises(RuntimeError) as error:
+                sut.handle_mention()
+
+        assert error.exception is failure
+        reminder.return_value.run.assert_called_once_with(only_user_ids=["U1"])
+        self.mock_slack_client.send_message_only_visible_to_user.assert_called_once()
+
     def test_keeps_duplicate_targets_and_invoker(self):
         sut = self._build_sut(
             f"<@{ANNA_ID}> 빅챗 리마인더 테스트 <@U1><@U1> <@U01BN035Y6L> <@{ANNA_ID}> <@lower>"

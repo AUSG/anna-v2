@@ -155,6 +155,30 @@ class TestRemindBigchat(unittest.TestCase):
         assert result.sent_cnt == 1  # 첫 DM 실패해도 두 번째는 발송된다
         assert self.mock_slack_client.send_direct_message.call_count == 2
 
+    def test_lookup_errors_are_not_swallowed_as_dm_failures(self):
+        for client_name, method in (
+            ("mock_gs_client", "list_worksheets"),
+            ("mock_member_manager", "email_to_slack_ids"),
+            ("mock_gs_client", "get_values"),
+        ):
+            with self.subTest(method=method):
+                self.setUp()
+                self.mock_gs_client.list_worksheets.return_value = [
+                    (111, "AI 밋업 26-08-20 19:00~21:00")
+                ]
+                self.mock_gs_client.get_values.return_value = [["me@example.com"]]
+                self.mock_member_manager.email_to_slack_ids.return_value = {
+                    "me@example.com": "U1"
+                }
+                failure = RuntimeError("조회 실패")
+                getattr(getattr(self, client_name), method).side_effect = failure
+
+                with self.assertRaises(RuntimeError) as error:
+                    self.sut.run(now=NOW)
+
+                assert error.exception is failure
+                self.mock_slack_client.send_direct_message.assert_not_called()
+
     def test_run_with_no_bigchat_tomorrow(self):
         self.mock_gs_client.list_worksheets.return_value = []
 

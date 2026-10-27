@@ -1,6 +1,8 @@
 import unittest
 from unittest.mock import MagicMock, call
 
+from slack_sdk.errors import SlackApiError
+
 from features.bigchat.handlers.create_bigchat_sheet import CreateBigchatSheet
 from test.fixtures.slack_events import create_sample_app_mention_event
 
@@ -103,6 +105,61 @@ class TestCreateBigchatSheet(unittest.TestCase):
                         user_id=event["user"],
                     )
                 ]
+
+    def test_invalid_notice_failure_does_not_create_a_sheet(self):
+        for failure in (
+            RuntimeError("안내 전송 실패"),
+            SlackApiError("안내 전송 실패", {"error": "channel_not_found"}),
+        ):
+            with self.subTest(failure=type(failure).__name__):
+                self.setUp()
+                event = create_sample_app_mention_event("<@U01BN035Y6L> 새로운 빅챗 nope")
+                self.mock_slack_client.send_message_only_visible_to_user.side_effect = (
+                    failure
+                )
+
+                with self.assertRaises(type(failure)) as error:
+                    self.create_sut(event).handle_mention()
+
+                assert error.exception is failure
+                self.mock_slack_client.send_message_only_visible_to_user.assert_called_once()
+                self.mock_slack_client.send_message.assert_not_called()
+                self.mock_slack_client.get_emoji.assert_not_called()
+                assert self.mock_gs_client.mock_calls == []
+                assert self.mock_member_manager.mock_calls == []
+
+    def test_url_failure_is_propagated_without_publishing_or_backfilling(self):
+        event = create_sample_app_mention_event(MENTION)
+        failure = RuntimeError("URL 조회 실패")
+        self.mock_gs_client.get_url.side_effect = failure
+
+        with self.assertRaises(RuntimeError) as error:
+            self.create_sut(event).handle_mention()
+
+        assert error.exception is failure
+        assert self.mock_gs_client.mock_calls == [
+            call.create_bigchat_sheet("AI 밋업 26-08-20 19:00~21:00"),
+            call.get_url(161837744),
+        ]
+        assert self.mock_slack_client.mock_calls == []
+        assert self.mock_member_manager.mock_calls == []
+
+    def test_success_notice_failure_does_not_recreate_or_backfill(self):
+        event = create_sample_app_mention_event(MENTION)
+        failure = SlackApiError("안내 전송 실패", {"error": "ratelimited"})
+        self.mock_slack_client.send_message.side_effect = failure
+
+        with self.assertRaises(SlackApiError) as error:
+            self.create_sut(event).handle_mention()
+
+        assert error.exception is failure
+        self.mock_gs_client.create_bigchat_sheet.assert_called_once_with(
+            "AI 밋업 26-08-20 19:00~21:00"
+        )
+        self.mock_slack_client.send_message.assert_called_once()
+        self.mock_slack_client.send_message_only_visible_to_user.assert_not_called()
+        self.mock_slack_client.get_emoji.assert_not_called()
+        assert self.mock_member_manager.mock_calls == []
 
     def test_ignores_description_after_first_line(self):
         event = create_sample_app_mention_event(MENTION + "\n이번 빅챗 소개글입니다")

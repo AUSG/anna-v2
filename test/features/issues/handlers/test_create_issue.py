@@ -311,6 +311,55 @@ class TestCreateIssue(CreateIssueTestBase):
                     ),
                 ]
 
+    def test_unexpected_creation_error_propagates_without_result_reply(self):
+        sut = self._build_sut(f"<@{ANNA_ID}> 새로운 이슈 제목")
+        failure = ValueError("예상하지 않은 응답")
+        self.mock_github_client.create_issue.side_effect = failure
+
+        with self.assertRaises(ValueError) as error:
+            sut.handle_mention()
+
+        assert error.exception is failure
+        assert self.calls.mock_calls == CHANNEL_LOOKUPS + [
+            call.github.create_issue(title="제목", body=LINKED_FOOTER)
+        ]
+
+    def test_success_reply_failure_does_not_recreate_or_become_private_error(self):
+        sut = self._build_sut(f"<@{ANNA_ID}> 새로운 이슈 제목")
+        failure = GithubApiError("공개 안내 실패")
+        self.mock_slack_client.send_message.side_effect = failure
+
+        with self.assertRaises(GithubApiError) as error:
+            sut.handle_mention()
+
+        assert error.exception is failure
+        assert self.calls.mock_calls == CHANNEL_LOOKUPS + [
+            call.github.create_issue(title="제목", body=LINKED_FOOTER),
+            PUBLIC_REPLY,
+        ]
+        self.mock_slack_client.send_message_only_visible_to_user.assert_not_called()
+
+    def test_creation_error_reply_failure_propagates_without_retry(self):
+        sut = self._build_sut(f"<@{ANNA_ID}> 새로운 이슈 제목")
+        self.mock_github_client.create_issue.side_effect = GithubApiError("생성 실패")
+        failure = RuntimeError("비공개 안내 실패")
+        self.mock_slack_client.send_message_only_visible_to_user.side_effect = failure
+
+        with self.assertRaises(RuntimeError) as error:
+            sut.handle_mention()
+
+        assert error.exception is failure
+        assert self.calls.mock_calls == CHANNEL_LOOKUPS + [
+            call.github.create_issue(title="제목", body=LINKED_FOOTER),
+            call.slack.send_message_only_visible_to_user(
+                msg=":blob-fearful: 이슈를 만들지 못했어. 생성 실패",
+                channel=sut.channel,
+                ts=sut.ts,
+                user_id=sut.user,
+            ),
+        ]
+        self.mock_slack_client.send_message.assert_not_called()
+
     def test_thread_context_cases(self):
         for name, (messages, expected) in {
             "inner-newlines": (
