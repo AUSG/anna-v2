@@ -1,6 +1,6 @@
 """시트 생성 전에 모집글에 :gogo:를 누른 사람들의 일괄 등록 (#89)
 
-멘션·모달 두 핸들러가 공유하는 register_early_reacted_users를 직접 검사한다.
+멘션과 모달 핸들러가 공유하는 register_early_reacted_users를 직접 검사한다.
 핸들러 테스트는 이 함수가 링크 게시 뒤에 올바른 모집글 위치로 호출되는지만 본다.
 """
 import unittest

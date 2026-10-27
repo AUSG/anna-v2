@@ -56,7 +56,7 @@ class MemberManager:
         return member
 
     def email_to_slack_ids(self) -> Dict[str, str]:
-        """이메일(소문자) → 슬랙 user_id 매핑. 빅챗 신청 시트의 행(이메일)을 슬랙 계정으로 역추적할 때 쓴다."""
+        """소문자 이메일로 슬랙 user_id를 찾는 매핑을 만든다. 빅챗 신청자의 계정을 찾을 때 쓴다."""
         members = self._fetch_members()
         return {
             member.email.strip().lower(): user_id

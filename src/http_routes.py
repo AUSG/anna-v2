@@ -20,7 +20,7 @@ def register_http_routes(
 
     @app.route("/bigchat/<int:worksheet_id>/event.ics", methods=["GET"])
     def bigchat_ics(worksheet_id: int):
-        # 비활성화·인증 실패는 외부 클라이언트를 생성하기 전에 처리한다.
+        # 기능이 꺼져 있거나 인증에 실패한 요청은 외부 클라이언트를 만들지 않고 거절한다.
         if not settings.ICS_TOKEN_SECRET:
             abort(404)
         channel = request.args.get("channel", "")

@@ -204,9 +204,9 @@ class TestJoinBigchat(unittest.TestCase):
         buttons = blocks[1]["elements"]
         assert [b["action_id"] for b in buttons] == ["calendar_gcal", "calendar_ics"]
         gcal_url, ics_url = buttons[0]["url"], buttons[1]["url"]
-        # gcal은 직링크여야 한다 — 서버 302 경유 시 모바일 앱 링크 핸드오프가 끊긴다
+        # 서버의 302 리다이렉트를 거치면 모바일 앱으로 연결되지 않으므로 gcal URL을 직접 사용한다.
         assert gcal_url.startswith("https://calendar.google.com/calendar/render?")
-        # gcal 본문은 permalink가 맨 앞, 그 아래 소개글 — 잘려도 permalink는 항상 남는다
+        # 소개글이 잘려도 원문을 찾을 수 있도록 gcal 본문에는 permalink를 먼저 넣는다.
         assert "ausg.slack.com" in gcal_url
         assert "%EC%86%8C%EA%B0%9C%EA%B8%80" in gcal_url  # "소개글" (intro도 이어붙음)
         assert "/bigchat/161837744/event.ics?" in ics_url

@@ -114,7 +114,7 @@ class SubinLikeResponse:
         # 사용자 opt-out: 글에 "안나x" 가 있으면 응답하지 않음
         if OPT_OUT_MARKER in self.text.lower():
             return False
-        # 봇 메시지 무시 — 무한루프·잡음 방지
+        # 봇 메시지에는 응답하지 않아 불필요한 답글과 무한 반복을 막는다.
         if self.event.get("bot_id"):
             return False
         # subtype 메시지 무시하되, 이미지 첨부(file_share)는 허용
@@ -124,7 +124,7 @@ class SubinLikeResponse:
         # ANNA 자기 글 무시
         if self.user and self.user == self.anna_id:
             return False
-        # root 글만 — 스레드 답글이면 무시 (ANNA 자기 답글 루프도 자동 차단)
+        # 스레드의 첫 글에만 답하고, 안나의 답글을 포함한 스레드 답글은 무시한다.
         thread_ts = self.event.get("thread_ts")
         if thread_ts and thread_ts != self.ts:
             return False

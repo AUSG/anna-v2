@@ -60,7 +60,7 @@ class SlackClient:
     def send_answer(self, answer: str, sources: List[str], ts: str):
         """질문 답변. 본문은 표준 마크다운을 그리는 markdown 블록, 출처는 회색 작은 글씨(context 블록)로 보낸다.
 
-        text 는 알림·검색용 대체 문자열이다. 블록이 거절되면 예전처럼 text 한 덩어리로 보낸다.
+        text는 알림과 검색에 사용하는 대체 문자열이다. 블록 전송이 거절되면 text만 보낸다.
         """
         source_line = ("출처: " + " · ".join(sources)) if sources else ""
         text = answer + (f"\n\n{source_line}" if source_line else "")

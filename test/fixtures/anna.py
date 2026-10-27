@@ -1,4 +1,4 @@
-"""앱 factory를 외부 API·스케줄러 실행 없이 조립한다."""
+"""외부 API를 호출하거나 스케줄러를 시작하지 않고 테스트용 앱을 만든다."""
 
 from types import SimpleNamespace
 from unittest.mock import MagicMock

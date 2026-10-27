@@ -12,13 +12,13 @@ NEW_APP_MENTION = {
     "event_ts": "1689403771.805849",
 }
 
-# 그 멘션을 고쳤을 때 다시 오는 이벤트 — 최상위에 edited 가 붙는다
+# 기존 멘션을 수정하면 최상위에 edited가 붙은 이벤트가 다시 온다.
 EDITED_APP_MENTION = {
     **NEW_APP_MENTION,
     "edited": {"user": "UQJ8HQJG5", "ts": "1689403800.000000"},
 }
 
-# 메시지 수정 — 본문이 message 아래로 내려가고 subtype 이 붙는다
+# 메시지 수정 이벤트는 본문이 message 아래에 있고 subtype이 붙는다.
 MESSAGE_CHANGED = {
     "type": "message",
     "subtype": "message_changed",

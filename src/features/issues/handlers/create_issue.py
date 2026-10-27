@@ -91,7 +91,7 @@ class CreateIssue(MentionHandler):
         try:
             return self.slack_client.get_permalink(self.channel, self.ts) or ""
         except Exception as ex:  # noqa: BLE001
-            # permalink 는 부가 정보다 — 못 가져와도 이슈 생성 자체를 막지 않는다
+            # permalink는 부가 정보이므로 조회에 실패해도 이슈 생성을 계속한다.
             logger.warning("Failed to get permalink for the issue body: %s", ex)
             return ""
 
