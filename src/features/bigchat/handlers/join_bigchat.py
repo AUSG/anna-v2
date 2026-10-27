@@ -4,10 +4,7 @@ from typing import List, Optional
 
 from config.env_config import envs
 from features.bigchat.presentation.messages import build_registration_info_message
-from features.bigchat.services.sheet_link import (
-    SPREADSHEET_PAT as SPREADSHEET_PAT,
-    extract_worksheet_id,
-)
+from features.bigchat.services.sheet_link import extract_worksheet_id
 from integrations.google_sheets import WorksheetNotFound
 from features.members.services.directory import MemberNotFound, MemberLackInfo
 from integrations.slack import Message
@@ -32,6 +29,8 @@ class JoinBigchat:
         gs_client,
         member_manager,
         loading_emoji=None,
+        *,
+        settings=envs,
     ):
         """loading_emoji: 실제 등록 작업만 감쌀 컨텍스트 매니저. 넘기지 않으면 이모지를 붙이지 않는다."""
         self.type = event["type"]
@@ -40,14 +39,11 @@ class JoinBigchat:
         self.ts = event["item"]["ts"]
         self.user = event["user"]
         self.target_emoji = target_emoji
+        self.settings = settings
         self.slack_client = slack_client
         self.gs_client = gs_client
         self.member_manager = member_manager
         self.loading_emoji = loading_emoji or nullcontext()
-
-    @staticmethod
-    def _extract_worksheet_id(messages: List[Message]):
-        return extract_worksheet_id(message.text for message in messages)
 
     def _build_calendar_blocks(
         self, msg: str, worksheet_id: int, intro_text: str
@@ -86,9 +82,9 @@ class JoinBigchat:
                 "url": to_gcal_link_truncated(event, gcal_details),
             }
         ]
-        if envs.ICS_TOKEN_SECRET:
+        if self.settings.ICS_TOKEN_SECRET:
             token = calendar_token(
-                envs.ICS_TOKEN_SECRET,
+                self.settings.ICS_TOKEN_SECRET,
                 calendar_payload(worksheet_id, self.channel, self.ts),
             )
             query = urlencode({"token": token, "channel": self.channel, "ts": self.ts})
@@ -101,7 +97,7 @@ class JoinBigchat:
                         "text": "📥 .ics 다운로드",
                         "emoji": True,
                     },
-                    "url": f"{envs.PUBLIC_BASE_URL}/bigchat/{worksheet_id}/event.ics?{query}",
+                    "url": f"{self.settings.PUBLIC_BASE_URL}/bigchat/{worksheet_id}/event.ics?{query}",
                 }
             )
 
@@ -118,7 +114,7 @@ class JoinBigchat:
         if messages[0].ts != self.ts:
             return False
 
-        worksheet_id = self._extract_worksheet_id(messages)
+        worksheet_id = extract_worksheet_id(message.text for message in messages)
         if not worksheet_id:
             return False
 

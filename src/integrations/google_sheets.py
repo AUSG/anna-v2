@@ -17,25 +17,25 @@ _APPEND_IF_ABSENT_LOCK = threading.Lock()
 
 
 class GoogleSpreadsheetClient:
-    def __init__(self):
+    def __init__(self, settings=envs):
         self.logger = logging.getLogger(__name__)
-        self.gs_client = self._build_gs_client()
-        self.spreadsheet_id = envs.FORM_SPREADSHEET_ID
+        self.gs_client = self._build_gs_client(settings)
+        self.spreadsheet_id = settings.FORM_SPREADSHEET_ID
 
     @staticmethod
-    def _build_gs_client():
+    def _build_gs_client(settings=envs):
         return service_account_from_dict(
             {
-                "type": envs.GCP_type,
-                "project_id": envs.GCP_project_id,
-                "private_key_id": envs.GCP_private_key_id,
-                "private_key": envs.GCP_private_key.replace("\\n", "\n"),
-                "client_email": envs.GCP_client_email,
-                "client_id": envs.GCP_client_id,
-                "auth_uri": envs.GCP_auth_uri,
-                "token_uri": envs.GCP_token_uri,
-                "auth_provider_x509_cert_url": envs.GCP_auth_provider_x509_cert_url,
-                "client_x509_cert_url": envs.GCP_client_x509_cert_url,
+                "type": settings.GCP_type,
+                "project_id": settings.GCP_project_id,
+                "private_key_id": settings.GCP_private_key_id,
+                "private_key": settings.GCP_private_key.replace("\\n", "\n"),
+                "client_email": settings.GCP_client_email,
+                "client_id": settings.GCP_client_id,
+                "auth_uri": settings.GCP_auth_uri,
+                "token_uri": settings.GCP_token_uri,
+                "auth_provider_x509_cert_url": settings.GCP_auth_provider_x509_cert_url,
+                "client_x509_cert_url": settings.GCP_client_x509_cert_url,
             }
         )
 

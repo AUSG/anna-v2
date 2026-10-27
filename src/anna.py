@@ -1,217 +1,265 @@
-import logging
-import re
+"""앱 생성과 의존성 조립. import만으로 외부 연결이나 스케줄러를 시작하지 않는다."""
 
-from flask import Flask, Response, abort, request
+import logging
+from functools import partial
+from threading import Lock
+
+from flask import Flask
 from slack_bolt import App
 from slack_bolt.adapter.flask import SlackRequestHandler
-
-from config.env_config import envs
-from config.log_config import init_logger
-from features.bigchat.handlers.create_bigchat_modal import (
-    CREATE_BIGCHAT_SHORTCUT_ID,
-    CREATE_BIGCHAT_VIEW_ID,
-    normalize_shortcut_body,
-    normalize_view_body,
-)
-from slack_controller import (
-    join_bigchat,
-    abandon_bigchat,
-    announce_new_channel_created,
-    mention_response,
-    open_create_bigchat_modal,
-    post_daily_digest,
-    remind_bigchat,
-    submit_create_bigchat_modal,
-    subin_like_response,
-)
-from integrations.google_sheets import GoogleSpreadsheetClient
 from slack_sdk import WebClient
-from features.bigchat.calendar import (
-    KST,
-    calendar_payload,
-    parse_sheet_name,
-    to_ics,
-    verify_calendar_token,
+
+from config.env_config import Settings, envs
+from config.log_config import init_logger
+from features.bigchat.calendar import KST
+from features.bigchat.handlers.abandon_bigchat import AbandonBigchat
+from features.bigchat.handlers.create_bigchat_modal import (
+    OpenCreateBigchatModal,
+    SubmitCreateBigchatModal,
 )
+from features.bigchat.handlers.create_bigchat_sheet import CreateBigchatSheet
+from features.bigchat.handlers.join_bigchat import JoinBigchat
+from features.bigchat.handlers.remind_bigchat_command import RemindBigchatCommand
+from features.bigchat.services.calendar import BigchatCalendar
+from features.bigchat.services.reminders import RemindBigchat
+from features.bot_commands.handlers.help_response import HelpResponse
+from features.bot_commands.handlers.shuffle_response import ShuffleResponse
+from features.bot_commands.handlers.simple_response import SimpleResponse
+from features.community.handlers.announce_new_channel_created import (
+    AnnounceNewChannelCreated,
+)
+from features.community.handlers.subin_like_response import SubinLikeResponse
+from features.issues.handlers.create_issue import CreateIssue
+from features.members.services.directory import MemberManager
+from features.questions.handlers.question_response import QuestionResponse
+from http_routes import register_http_routes
+from integrations.github import GithubClient
+from integrations.google_sheets import GoogleSpreadsheetClient
+from integrations.qa import QAClient
+from jobs import ScheduledJob, post_daily_digest, remind_bigchat
 from shared.scheduling import DailyScheduler
-from shared.slack_events import is_edited_message
+from slack_events import SlackHandlers, register_slack_handlers
 
-init_logger()
-
-app = App(token=envs.SLACK_BOT_TOKEN, signing_secret=envs.SLACK_SIGNING_SECRET)
-
-# 빅챗 전날 저녁 6시(KST)에 신청자들에게 리마인더 DM 을 보낸다
-if envs.BIGCHAT_REMINDER_ENABLED:
-    DailyScheduler(
-        job=remind_bigchat, hour=18, minute=0, tz=KST, name="bigchat-reminder"
-    ).start()
-    logging.getLogger(__name__).info(
-        "Bigchat reminder scheduler started (daily 18:00 KST)"
-    )
-
-# 어제의 핫스레드를 매일 아침 10시(KST)에 fun-anna-house 에 올린다
-if envs.DAILY_DIGEST_ENABLED:
-    DailyScheduler(
-        job=post_daily_digest, hour=10, minute=0, tz=KST, name="daily-digest"
-    ).start()
-    logging.getLogger(__name__).info("Daily digest scheduler started (daily 10:00 KST)")
+logger = logging.getLogger(__name__)
 
 
-@app.event("reaction_added")
-def handle_reaction_added_event(ack, event, say, client):
-    ack()
-    join_bigchat(event=event, say=say, client=client)
+class Services:
+    """앱 범위의 지연 의존성. 이벤트 입력이나 SDK 요청 컨텍스트는 보관하지 않는다."""
 
+    def __init__(self, settings: Settings):
+        self.settings = settings
+        self._members = None
+        self._qa = None
+        self._members_lock = Lock()
+        self._qa_lock = Lock()
 
-@app.event("reaction_removed")
-def handle_reaction_removed_event(ack, event, say, client):
-    ack()
-    abandon_bigchat(event=event, say=say, client=client)
+    def sheets(self) -> GoogleSpreadsheetClient:
+        # 기존처럼 사용 시 생성한다. 도움말과 잘못된 캘린더 토큰에는 인증이 필요 없다.
+        return GoogleSpreadsheetClient(settings=self.settings)
 
+    def members(self) -> MemberManager:
+        with self._members_lock:
+            if self._members is None:
+                self._members = MemberManager(
+                    self.sheets(), worksheet_id=self.settings.MEMBERS_INFO_WORKSHEET_ID
+                )
+            return self._members
 
-@app.event("app_mention")
-def handle_app_mention_event(ack, event, say, client):
-    ack()
-    # 이미 있던 멘션을 고쳐도 이벤트가 다시 온다 — 명령이 두 번 실행되지 않도록 여기서 끊는다
-    if is_edited_message(event):
-        logging.getLogger(__name__).info(
-            "Ignoring app_mention from an edited message (ts=%s)", event.get("ts")
+    def qa(self) -> QAClient:
+        with self._qa_lock:
+            if self._qa is None:
+                self._qa = QAClient(
+                    qa_server_base_url=self.settings.QA_SERVER_BASE_URL,
+                    api_key=self.settings.QA_API_KEY,
+                )
+            return self._qa
+
+    def github(self) -> GithubClient:
+        return GithubClient(self.settings.GITHUB_TOKEN, self.settings.GITHUB_REPO)
+
+    def web_client(self) -> WebClient:
+        return WebClient(token=self.settings.SLACK_BOT_TOKEN)
+
+    def calendar(self) -> BigchatCalendar:
+        return BigchatCalendar(
+            worksheet_title=lambda worksheet_id: self.sheets().get_worksheet_title(
+                worksheet_id
+            ),
+            permalink=lambda channel, ts: self.web_client().chat_getPermalink(
+                channel=channel, message_ts=ts
+            )["permalink"],
+            intro=lambda channel, ts: self.web_client().conversations_replies(
+                channel=channel, ts=ts, limit=1
+            )["messages"][0]["text"],
         )
-        return
-    mention_response(say=say, event=event, client=client)
 
 
-@app.event("channel_created")
-def handle_channel_created_event(ack, event, say, client):
-    ack()
-    announce_new_channel_created(event=event, say=say, client=client)
+def build_slack_handlers(services: Services) -> SlackHandlers:
+    settings = services.settings
+    return SlackHandlers(
+        mentions={
+            "help": lambda ctx: HelpResponse(ctx.event, ctx.slack_client),
+            "shuffle": lambda ctx: ShuffleResponse(ctx.event, ctx.slack_client),
+            "explicit_question": lambda ctx: QuestionResponse(
+                ctx.event,
+                ctx.slack_client,
+                services.qa(),
+                require_prefix=True,
+                assistant_id=settings.ANNA_ID,
+            ),
+            "question": lambda ctx: QuestionResponse(
+                ctx.event,
+                ctx.slack_client,
+                services.qa(),
+                require_prefix=False,
+                assistant_id=settings.ANNA_ID,
+            ),
+            "create_issue": lambda ctx: CreateIssue(
+                ctx.event, ctx.slack_client, services.github()
+            ),
+            "create_bigchat": lambda ctx: CreateBigchatSheet(
+                ctx.event,
+                ctx.slack_client,
+                services.sheets(),
+                services.members(),
+                settings.JOIN_BIGCHAT_EMOJI,
+            ),
+            "reminder": lambda ctx: RemindBigchatCommand(
+                ctx.event,
+                ctx.slack_client,
+                services.sheets(),
+                services.members(),
+                settings.ANNA_ID,
+            ),
+            "empty": lambda ctx: SimpleResponse(ctx.event, ctx.slack_client),
+        },
+        join_bigchat=lambda ctx: JoinBigchat(
+            ctx.event,
+            settings.JOIN_BIGCHAT_EMOJI,
+            ctx.slack_client,
+            services.sheets(),
+            services.members(),
+            loading_emoji=ctx.loading_emoji,
+            settings=settings,
+        ),
+        abandon_bigchat=lambda ctx: AbandonBigchat(
+            ctx.event,
+            settings.ANNA_ID,
+            settings.JOIN_BIGCHAT_EMOJI,
+            ctx.slack_client,
+            services.members(),
+            services.sheets(),
+            loading_emoji=ctx.loading_emoji,
+        ),
+        announce_new_channel_created=lambda ctx: AnnounceNewChannelCreated(
+            ctx.event, ctx.slack_client
+        ),
+        subin_like_response=lambda ctx: SubinLikeResponse(
+            ctx.event, ctx.slack_client, services.qa(), anna_id=settings.ANNA_ID
+        ),
+        open_create_bigchat_modal=lambda ctx: OpenCreateBigchatModal(
+            ctx.event, ctx.web_client
+        ),
+        submit_create_bigchat_modal=lambda ctx: SubmitCreateBigchatModal(
+            ctx.event,
+            ctx.ack,
+            ctx.slack_client,
+            services.sheets(),
+            services.members(),
+            settings.JOIN_BIGCHAT_EMOJI,
+        ),
+    )
 
 
-@app.event("message")
-def handle_message_event(ack, event, say, client):
-    ack()
-    # 수정은 새 글이 아니다 (자동 답글 대상 채널은 수정이 잦아 DEBUG 로만 남긴다)
-    if is_edited_message(event):
-        logging.getLogger(__name__).debug(
-            "Ignoring edited message event (ts=%s)", event.get("ts")
+def build_jobs(services: Services) -> tuple[ScheduledJob, ...]:
+    settings = services.settings
+    jobs = []
+    if settings.BIGCHAT_REMINDER_ENABLED:
+        jobs.append(
+            ScheduledJob(
+                name="bigchat-reminder",
+                hour=18,
+                minute=0,
+                callback=partial(
+                    remind_bigchat,
+                    web_client_factory=services.web_client,
+                    send_reminders=lambda slack: RemindBigchat(
+                        slack, services.sheets(), services.members()
+                    ).run(),
+                    admin_channel=settings.ADMIN_CHANNEL,
+                ),
+            )
         )
-        return
-    subin_like_response(event=event, say=say, client=client)
-
-
-@app.action(re.compile("calendar_.*"))
-def handle_calendar_button(ack):
-    # 링크 버튼은 URL을 여는 것 외에 서버 동작이 없지만, ack하지 않으면 버튼에 ⚠️가 표시된다
-    ack()
-
-
-@app.shortcut(CREATE_BIGCHAT_SHORTCUT_ID)
-def handle_create_bigchat_shortcut(ack, body, say, client):
-    ack()
-    open_create_bigchat_modal(
-        event=normalize_shortcut_body(body), say=say, client=client
-    )
-
-
-@app.view(CREATE_BIGCHAT_VIEW_ID)
-def handle_create_bigchat_view_submission(ack, body, say, client):
-    # ack는 검증 결과(인라인 에러 vs 모달 닫기)에 따라 핸들러 안에서 호출된다
-    submit_create_bigchat_modal(
-        event=normalize_view_body(body), say=say, client=client, ack=ack
-    )
-
-
-flask_app = Flask(__name__)
-slack_request_handler = SlackRequestHandler(app)
-
-
-@flask_app.route("/slack/events", methods=["POST"])
-def slack_events():
-    return slack_request_handler.handle(request)
-
-
-@flask_app.route("/health", methods=["GET"])
-def health():
-    return {"status": "ok"}
-
-
-def _fetch_bigchat_intro(channel: str, ts: str) -> str:
-    """스레드 첫 글(이벤트 소개글)을 클릭 시점에 읽어온다. 실패해도 캘린더 제공은 막지 않는다."""
-    if not channel or not ts:
-        return ""
-    try:
-        web_client = WebClient(token=envs.SLACK_BOT_TOKEN)
-        resp = web_client.conversations_replies(channel=channel, ts=ts, limit=1)
-        return resp["messages"][0]["text"]
-    except Exception as ex:
-        logging.getLogger(__name__).warning(f"Failed to fetch bigchat intro: {ex}")
-        return ""
-
-
-def _fetch_permalink(channel: str, ts: str) -> str:
-    """원본 메시지 permalink를 클릭 시점에 조회한다. 실패해도 캘린더 제공은 막지 않는다."""
-    if not channel or not ts:
-        return ""
-    try:
-        web_client = WebClient(token=envs.SLACK_BOT_TOKEN)
-        resp = web_client.chat_getPermalink(channel=channel, message_ts=ts)
-        return resp["permalink"]
-    except Exception as ex:
-        logging.getLogger(__name__).warning(f"Failed to fetch permalink: {ex}")
-        return ""
-
-
-def _build_calendar_description(channel: str, ts: str) -> str:
-    """gcal 본문과 같은 포맷: 맨 앞에 permalink, 그 아래 소개글 (ics는 길이 제한이 없어 전문)."""
-    parts = []
-    permalink = _fetch_permalink(channel, ts)
-    if permalink:
-        parts.append(f"슬랙에서 소개글 보기: {permalink}")
-    intro = _fetch_bigchat_intro(channel, ts)
-    if intro:
-        parts.append(intro)
-    return "\n\n".join(parts)
-
-
-def _load_bigchat_calendar_context(worksheet_id: int):
-    """ics 다운로드의 검증/조회 경로. 반환: (event, description)"""
-    if not envs.ICS_TOKEN_SECRET:
-        abort(404)
-    channel = request.args.get("channel", "")
-    ts = request.args.get("ts", "")
-    if not verify_calendar_token(
-        envs.ICS_TOKEN_SECRET,
-        calendar_payload(worksheet_id, channel, ts),
-        request.args.get("token", ""),
-    ):
-        abort(403)
-
-    try:
-        sheet_name = GoogleSpreadsheetClient().get_worksheet_title(worksheet_id)
-    except Exception as ex:
-        logging.getLogger(__name__).warning(
-            f"Failed to load worksheet {worksheet_id}: {ex}"
+    if settings.DAILY_DIGEST_ENABLED:
+        jobs.append(
+            ScheduledJob(
+                name="daily-digest",
+                hour=10,
+                minute=0,
+                callback=partial(
+                    post_daily_digest,
+                    web_client_factory=services.web_client,
+                    fetch_digest=lambda: services.qa().daily_digest(),
+                    channel=settings.DAILY_DIGEST_CHANNEL_ID,
+                    admin_channel=settings.ADMIN_CHANNEL,
+                ),
+            )
         )
-        abort(404)
-
-    event = parse_sheet_name(sheet_name or "")
-    if not event:
-        abort(404)
-
-    return event, _build_calendar_description(channel, ts)
+    return tuple(jobs)
 
 
-@flask_app.route("/bigchat/<int:worksheet_id>/event.ics", methods=["GET"])
-def bigchat_ics(worksheet_id: int):
-    event, description = _load_bigchat_calendar_context(worksheet_id)
-    return Response(
-        to_ics(event, uid=f"bigchat-{worksheet_id}@ausg-anna", description=description),
-        mimetype="text/calendar",
-        headers={"Content-Disposition": 'attachment; filename="event.ics"'},
+def create_app(settings: Settings = envs, *, bolt_app=None) -> Flask:
+    """라우트와 factory를 조립한다. 예약 작업 시작은 start_jobs로 분리한다."""
+    init_logger(settings.LOGLEVEL)
+    services = Services(settings)
+    bolt_app = (
+        bolt_app
+        if bolt_app is not None
+        else App(
+            token=settings.SLACK_BOT_TOKEN, signing_secret=settings.SLACK_SIGNING_SECRET
+        )
     )
+    register_slack_handlers(
+        bolt_app, build_slack_handlers(services), admin_channel=settings.ADMIN_CHANNEL
+    )
+    flask_app = Flask(__name__)
+    register_http_routes(
+        flask_app, SlackRequestHandler(bolt_app), services.calendar(), settings
+    )
+    flask_app.extensions["anna_services"] = services
+    flask_app.extensions["anna_jobs"] = build_jobs(services)
+    flask_app.extensions["anna_schedulers"] = {}
+    flask_app.extensions["anna_jobs_lock"] = Lock()
+    return flask_app
+
+
+def start_jobs(flask_app: Flask):
+    """worker 시작 시 명시적으로 호출한다. 같은 앱에서는 여러 번 호출해도 한 번만 시작한다."""
+    with flask_app.extensions["anna_jobs_lock"]:
+        schedulers = flask_app.extensions["anna_schedulers"]
+        for job in flask_app.extensions["anna_jobs"]:
+            if job.name in schedulers:
+                continue
+            scheduler = DailyScheduler(
+                job=job.callback,
+                hour=job.hour,
+                minute=job.minute,
+                tz=KST,
+                name=job.name,
+            )
+            scheduler.start()
+            schedulers[job.name] = scheduler
+            logger.info(
+                "%s scheduler started (daily %02d:%02d KST)",
+                job.name,
+                job.hour,
+                job.minute,
+            )
+        return tuple(schedulers.values())
 
 
 if __name__ == "__main__":
-    PORT = 8080
-    logging.getLogger(__name__).info("Anna wakes up at room %d", PORT)
-    flask_app.run(host="0.0.0.0", port=PORT)
+    flask_app = create_app()
+    start_jobs(flask_app)
+    logger.info("Anna wakes up at room %d", 8080)
+    flask_app.run(host="0.0.0.0", port=8080)

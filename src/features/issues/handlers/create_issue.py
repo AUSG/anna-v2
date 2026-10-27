@@ -1,7 +1,6 @@
 import logging
 
 from features.issues.presentation.content import (
-    MAX_TITLE_LEN as MAX_TITLE_LEN,
     build_issue_body,
     build_issue_footer,
     parse_issue_command,
@@ -56,7 +55,7 @@ class CreateIssue(MentionHandler):
         if not self.can_handle():
             return False
 
-        title, body = self._parse_command()
+        title, body = parse_issue_command(self.text)
         if not title:
             self._reply_only_to_requester(USAGE)
             return False
@@ -81,15 +80,10 @@ class CreateIssue(MentionHandler):
         )
         return True
 
-    def _parse_command(self):
-        return parse_issue_command(self.text)
-
     def _build_body(self, body: str) -> str:
         thread_context = self._fetch_thread_context()
-        return build_issue_body(body, thread_context, self._footer())
-
-    def _footer(self) -> str:
-        return build_issue_footer(self.user, self._permalink())
+        footer = build_issue_footer(self.user, self._permalink())
+        return build_issue_body(body, thread_context, footer)
 
     def _permalink(self):
         if not self.channel or not self.ts:

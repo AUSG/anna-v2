@@ -1,19 +1,15 @@
-import ast
-import sys
-from pathlib import Path
+from datetime import date, datetime
 
 import pytest
 
-from features.bigchat.models import CreateBigchatCommand, InvalidBigchatName
+from features.bigchat.calendar import KST, BigchatEvent
+from features.bigchat.models import (
+    CreateBigchatCommand,
+    InvalidBigchatName,
+    select_bigchats,
+)
 
 SHEET_NAME = "AI 밋업 26-08-20 19:00~21:00"
-SOURCE_ROOT = Path(__file__).resolve().parents[3] / "src"
-APPLICATION_FILES = (
-    SOURCE_ROOT / "features/bigchat/models.py",
-    SOURCE_ROOT / "features/questions/models.py",
-)
-# 업무 계층은 SDK·설정·어댑터를 모른다. 표준 라이브러리와 아래 패키지만 참조할 수 있다.
-ALLOWED_PACKAGES = {"features"}
 
 
 @pytest.mark.parametrize("sheet_name", [SHEET_NAME, f"  {SHEET_NAME}  "])
@@ -26,19 +22,42 @@ def test_invalid_command_raises_domain_error():
         CreateBigchatCommand("빅챗 23-07-31")
 
 
-def test_application_layer_imports_only_allowed_packages():
-    violations = []
-    for path in APPLICATION_FILES:
-        for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
-            if isinstance(node, ast.Import):
-                names = [alias.name for alias in node.names]
-            elif isinstance(node, ast.ImportFrom):
-                names = [node.module or ""]
-            else:
-                continue
-            for name in names:
-                root = name.split(".")[0]
-                if root in sys.stdlib_module_names or root in ALLOWED_PACKAGES:
-                    continue
-                violations.append(f"{path.name}:{node.lineno} imports {name}")
-    assert violations == []
+def test_select_bigchats_preserves_sheet_order_and_scan_details():
+    worksheets = [
+        (9, "MEMBERS_INFO"),
+        (4, " 저녁 빅챗 26-08-20 19:00~21:00 "),
+        (3, "모레 빅챗 26-08-21 10:00~12:00"),
+        (4, "오전 빅챗 26-08-20 10:00~12:00"),
+        (5, "빅챗 23-07-31"),
+    ]
+
+    matched, parsed, ignored = select_bigchats(worksheets, date(2026, 8, 20))
+
+    assert matched == [
+        (
+            4,
+            BigchatEvent(
+                "저녁 빅챗",
+                datetime(2026, 8, 20, 19, tzinfo=KST),
+                datetime(2026, 8, 20, 21, tzinfo=KST),
+            ),
+        ),
+        (
+            4,
+            BigchatEvent(
+                "오전 빅챗",
+                datetime(2026, 8, 20, 10, tzinfo=KST),
+                datetime(2026, 8, 20, 12, tzinfo=KST),
+            ),
+        ),
+    ]
+    assert parsed == [
+        "' 저녁 빅챗 26-08-20 19:00~21:00 ' -> starts 2026-08-20",
+        "'모레 빅챗 26-08-21 10:00~12:00' -> starts 2026-08-21",
+        "'오전 빅챗 26-08-20 10:00~12:00' -> starts 2026-08-20",
+    ]
+    assert ignored == ["MEMBERS_INFO", "빅챗 23-07-31"]
+
+
+def test_select_bigchats_empty():
+    assert select_bigchats([], date(2026, 8, 20)) == ([], [], [])

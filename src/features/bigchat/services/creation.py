@@ -3,9 +3,6 @@ import logging
 from slack_sdk.errors import SlackApiError
 
 from features.bigchat.presentation.messages import build_registration_info_message
-from integrations.bigchat_repository import (
-    SpreadsheetBigchatRepository as SpreadsheetBigchatRepository,
-)
 from features.members.services.directory import MemberLackInfo, MemberNotFound
 
 logger = logging.getLogger(__name__)

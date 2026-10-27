@@ -33,9 +33,11 @@ class MemberLackInfo(Exception):
 
 
 class MemberManager:
-    def __init__(self, gs_client: GoogleSpreadsheetClient):
+    def __init__(self, gs_client: GoogleSpreadsheetClient, worksheet_id=None):
         self.gs_client = gs_client
-        self.members_worksheet_id = int(envs.MEMBERS_INFO_WORKSHEET_ID)
+        self.members_worksheet_id = int(
+            envs.MEMBERS_INFO_WORKSHEET_ID if worksheet_id is None else worksheet_id
+        )
         self.logger = logging.getLogger(__name__)
 
     @ttl_cache(

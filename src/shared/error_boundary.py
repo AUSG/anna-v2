@@ -9,12 +9,13 @@ from shared.utils import search_value, strip_multiline
 ADMIN_CHANNEL = envs.ADMIN_CHANNEL
 
 
-def catch_global_error():
+def catch_global_error(*, admin_channel=None):
     def decorator(f):
         @wraps(f)
         def wrapper(*args, **kwargs):
             logger = logging.getLogger(f.__name__)
             event = kwargs["event"]
+            channel = ADMIN_CHANNEL if admin_channel is None else admin_channel
 
             try:
                 logger.debug("event=%s", event)
@@ -45,7 +46,7 @@ def catch_global_error():
 
                 say = kwargs["say"]
                 say(
-                    text=err_msg, channel=ADMIN_CHANNEL, **NO_UNFURL
+                    text=err_msg, channel=channel, **NO_UNFURL
                 )  # send full log to admin channel
 
                 # notify user that something is wrong.
@@ -57,7 +58,7 @@ def catch_global_error():
                     text=msg,
                     channel=search_value(event, "channel")
                     or search_value(event, "channel_id")
-                    or ADMIN_CHANNEL,
+                    or channel,
                     thread_ts=search_value(event, "ts")
                     or search_value(event, "thread_ts"),
                     **NO_UNFURL,

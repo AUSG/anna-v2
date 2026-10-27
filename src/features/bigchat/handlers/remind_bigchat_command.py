@@ -7,7 +7,6 @@ from features.bigchat.services.reminders import RemindBigchat
 from features.bigchat.presentation.reminders import (
     BROADCAST_PHRASE,
     TEST_PHRASE,
-    TRIGGER as TRIGGER,
     USAGE,
     build_report,
     missing_targets_message,
@@ -54,7 +53,7 @@ class RemindBigchatCommand(MentionHandler):
             self.user,
         )
         result = self._run()
-        self._reply(self._build_report(result, targets=None))
+        self._reply(build_report(result, targets=None))
         return True
 
     def _test(self):
@@ -67,7 +66,7 @@ class RemindBigchatCommand(MentionHandler):
             "Manual reminder test triggered by %s, targets=%s", self.user, targets
         )
         result = self._run(only_user_ids=targets)
-        self._reply(self._build_report(result, targets))
+        self._reply(build_report(result, targets))
         return True
 
     def _run(self, only_user_ids=None) -> ReminderResult:
@@ -82,10 +81,6 @@ class RemindBigchatCommand(MentionHandler):
             for user_id in SLACK_USER_PAT.findall(self.text)
             if user_id != self.anna_id
         ]
-
-    @staticmethod
-    def _build_report(result: ReminderResult, targets) -> str:
-        return build_report(result, targets)
 
     def _reply(self, msg: str):
         self.slack_client.send_message_only_visible_to_user(

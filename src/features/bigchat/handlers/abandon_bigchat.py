@@ -1,13 +1,8 @@
 from contextlib import nullcontext
-from typing import List
 
-from features.bigchat.services.sheet_link import (
-    SPREADSHEET_PAT as SPREADSHEET_PAT,
-    extract_worksheet_id,
-)
+from features.bigchat.services.sheet_link import extract_worksheet_id
 from integrations.google_sheets import WorksheetNotFound
 from features.members.services.directory import MemberNotFound, MemberLackInfo
-from integrations.slack import Message
 
 
 class AbandonBigchat:
@@ -34,10 +29,6 @@ class AbandonBigchat:
         self.gs_client = gs_client
         self.loading_emoji = loading_emoji or nullcontext()
 
-    @staticmethod
-    def _extract_worksheet_id(messages: List[Message]):
-        return extract_worksheet_id(message.text for message in messages)
-
     def run(self):
         if self.type != "reaction_removed" or self.reaction != self.target_emoji:
             return False
@@ -46,7 +37,7 @@ class AbandonBigchat:
         if messages[0].ts != self.ts:
             return False
 
-        worksheet_id = self._extract_worksheet_id(messages)
+        worksheet_id = extract_worksheet_id(message.text for message in messages)
         if not worksheet_id:
             return False
 

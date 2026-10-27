@@ -109,24 +109,27 @@ poetry install --with ci
 
 ```
 src/
-  anna.py            main 의 Flask/Bolt 진입점, HTTP 라우트와 스케줄러 초기화
-  slack_controller.py  기존 handler/controller.py. 클라이언트 조립과 명령별 핸들러 선택
-  slack_router.py    기존 handler/mention_router.py. 문자열 명령 분류
+  anna.py              앱 factory와 의존성 조립·수명 관리
+  slack_events.py      Bolt 이벤트 등록, ACK와 명령 dispatch
+  slack_router.py      외부 의존성 없는 문자열 명령 분류
+  http_routes.py       HTTP 입력 검증과 응답
+  jobs.py              예약 작업 실행과 관리자 오류 알림
+  gunicorn_config.py   worker 초기화 후 예약 작업 시작
   features/<기능>/
-    handlers/        기존 핸들러 클래스. 파일명·클래스명·메서드와 처리 흐름을 유지
-    models.py        기존 application 의 값과 정책
-    services/        기존 공통 처리·조회 코드
-    presentation/    기존 안내 문구·답변 표현 코드
-  features/bigchat/calendar.py  기존 util/bigchat_event.py
-  integrations/      기존 implementation 의 외부 클라이언트와 시트 저장소
-  shared/            기존 오류 데코레이터, 로딩 이모지, 스케줄러와 유틸리티
+    handlers/          슬랙 이벤트와 명령 처리
+    models.py          기능별 값과 정책
+    services/          처리 흐름과 조회
+    presentation/      안내 문구와 답변 표현
+  features/bigchat/calendar.py  빅챗 일정 파싱과 캘린더 링크·파일 생성
+  integrations/        외부 클라이언트와 시트 저장소
+  shared/              오류 처리, 로딩 이모지, 스케줄러와 유틸리티
 ```
 
-이번 단계는 `main` (`6986ed94f080ab48725e9af539d02e424de90423`) 의 코드를 기능별로 **그대로 옮기는 작업**이다. import 경로와 그에 따른 줄바꿈 외에는 프로덕션 코드의 본문을 바꾸지 않는다. 기존 클래스·예외·캐시·설정 singleton·SDK 호출 계약도 유지한다. 기능 개선이나 Rust 이식을 위한 타입·포트 재설계는 이 재배치와 분리한다.
+`anna.create_app()`은 앱과 handler factory를 조립하고 예약 작업은 시작하지 않는다. `anna.start_jobs(app)`을 명시적으로 호출하면 활성화된 작업을 앱당 한 번씩 시작한다. Gunicorn에서는 `gunicorn_config.py`의 worker 초기화 훅이, `python src/anna.py`에서는 실행 진입점이 이를 호출한다. 예약 작업은 여전히 단일 worker·단일 인스턴스 운영을 전제로 한다.
 
-`test/fixtures/main_relocation.json` 에 41개 모듈의 이전/이후 경로, import 목록과 import를 제외한 원문 해시를 기록했다. `test/test_architecture.py` 가 조건·문구·주석까지 원문과 같은지 검사하므로, 옮기는 과정에서 로직을 다시 작성하면 실패한다. 기준 fixture 는 현재 구현에서 자동 갱신하지 않는다.
+회원 조회와 QA 클라이언트는 앱 범위에서 지연 생성해 공유한다. 이벤트 입력·`say`·`ack`와 handler는 이벤트마다 새로 구성한다. 시트 클라이언트는 필요할 때만 생성하므로 도움말이나 인증에 실패한 캘린더 요청에는 Google 인증이 필요 없다. 캘린더 조회·소개글 구성은 `features/bigchat/services/calendar.py`가 담당한다.
 
-`main` 의 기존 테스트도 같은 기능 위치로 옮겨 유지한다. 추가한 `test/test_main_behavior.py`, `test/test_anna.py`, `test/test_slack_http.py` 는 회원 캐시·QA 문맥 선택·멘션 입력과 모달 오류 안내·자동 등록 실패·캘린더 검증 순서를 확인한다. `test/fixtures/contracts/*.json` 의 언어 중립 계약도 기존 함수의 입출력 계약으로 검증한다.
+테스트는 `test/` 아래에 기능별로 배치한다. `test/test_anna.py`, `test/test_slack_events.py`, `test/test_slack_http.py`, `test/test_jobs.py`는 의존성 수명, 이벤트 연결·ACK, HTTP 응답, 캘린더 다운로드와 예약 작업의 실패 처리를 검증한다. 외부 API 호출은 테스트 대역으로 바꾼다.
 
 ## 실제 AUSG 슬랙과 로컬 안나를 연동해서 테스트하기
 

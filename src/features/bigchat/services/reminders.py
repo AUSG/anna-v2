@@ -2,15 +2,9 @@ import logging
 from datetime import datetime, timedelta
 from typing import List, Optional
 
-from features.bigchat.models import ReminderResult as ReminderResult, select_bigchats
-from features.bigchat.presentation.reminders import (
-    WEEKDAYS_KO as WEEKDAYS_KO,
-    build_reminder,
-)
-from features.bigchat.services.reminder_policy import (
-    EMAIL_PAT as EMAIL_PAT,
-    applicant_email,
-)
+from features.bigchat.models import ReminderResult, select_bigchats
+from features.bigchat.presentation.reminders import build_reminder
+from features.bigchat.services.reminder_policy import applicant_email
 from features.bigchat.calendar import KST, BigchatEvent
 
 logger = logging.getLogger(__name__)
@@ -93,7 +87,7 @@ class RemindBigchat:
         only_user_ids: Optional[List[str]],
         result: ReminderResult,
     ):
-        msg = self._build_reminder(event)
+        msg = build_reminder(event)
         email_to_slack_id = self.member_manager.email_to_slack_ids()
         emails = self._applicant_emails(worksheet_id)
         logger.info(
@@ -176,7 +170,3 @@ class RemindBigchat:
             skipped_rows,
         )
         return emails
-
-    @staticmethod
-    def _build_reminder(event: BigchatEvent) -> str:
-        return build_reminder(event)

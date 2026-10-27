@@ -1,27 +1,16 @@
 # 다국어(한국어) 시스템 프롬프트 문자열이 길어, 이 파일은 줄길이(E501) 검사를 예외 처리한다.
 # ruff: noqa: E501
 import logging
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional
 
 from features.questions.models import (
-    MAX_CONVERSATION_CHARS as MAX_CONVERSATION_CHARS,
     MAX_CONVERSATION_AUTHOR_CHARS,
     MAX_CONVERSATION_MESSAGE_CHARS,
-    MAX_CONVERSATION_MESSAGES as MAX_CONVERSATION_MESSAGES,
     MAX_CONVERSATION_TIMESTAMP_CHARS,
-    ChatResult as ChatResult,
     select_conversation,
 )
 from shared.mention_handler import MentionHandler
-from features.questions.presentation.answers import (
-    UNTRUSTED_LINK_MARKER as UNTRUSTED_LINK_MARKER,
-    _escape_slack_text as _escape_slack_text,
-    _format_timestamp as _format_timestamp,
-    _normalize_answer_url as _normalize_answer_url,
-    _safe_source_url as _safe_source_url,
-    _strip_untrusted_answer_links as _strip_untrusted_answer_links,
-    render_parts,
-)
+from features.questions.presentation.answers import render_parts
 from slack_router import extract_question, matches_mention
 from integrations.qa import QAClient
 
@@ -50,9 +39,6 @@ Slack 답변 형식:
 
 
 class QuestionResponse(MentionHandler):
-    # 기존 텍스트 보기의 글자 수 기준
-    THREAD_CONTEXT_MAX_CHARS = 4000
-
     def __init__(
         self,
         event,
@@ -103,24 +89,11 @@ class QuestionResponse(MentionHandler):
             conversation=conversation,
             system_prompt=DEFAULT_SYSTEM_PROMPT,
         )
-        answer, sources = self._render_parts(result)
+        answer, sources = render_parts(result)
         logger.info("[q)] question=%r | answer=%r", question, answer)
         self.slack_client.send_answer(answer=answer, sources=sources, ts=self.ts)
 
         return True
-
-    @staticmethod
-    def _render_result(result) -> str:
-        """답변과 출처를 한 메시지로 합친다."""
-        answer, sources = QuestionResponse._render_parts(result)
-        if sources:
-            answer += "\n\n출처: " + ", ".join(sources)
-        return answer
-
-    @staticmethod
-    def _render_parts(result) -> Tuple[str, List[str]]:
-        """정리한 답변과 출처 링크를 반환한다. 구형 문자열 응답도 받는다."""
-        return render_parts(result)
 
     def _fetch_conversation(self) -> List[Dict[str, str]]:
         """스레드 발화를 읽고 전송량에 맞춰 고른다."""
@@ -168,18 +141,6 @@ class QuestionResponse(MentionHandler):
                 item["timestamp"] = ts[:MAX_CONVERSATION_TIMESTAMP_CHARS]
             normalized.append(item)
         return normalized
-
-    def _fetch_thread_context(self) -> str:
-        """기존 호출자를 위한 텍스트 보기를 만든다."""
-        lines = []
-        total = 0
-        for item in self._fetch_conversation():
-            line = f"{item.get('author', '')}: {item['content']}".strip(": ")
-            if lines and total + len(line) + 1 > self.THREAD_CONTEXT_MAX_CHARS:
-                break
-            lines.append(line)
-            total += len(line) + 1
-        return "\n".join(lines)
 
     @staticmethod
     def _message_value(message: Any, key: str) -> str:

@@ -1,13 +1,10 @@
-"""main 과 동일한 진입점을 외부 API·스케줄러 실행 없이 로딩한다."""
+"""앱 factory를 외부 API·스케줄러 실행 없이 조립한다."""
 
-import importlib.util
-from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import MagicMock
 
-import slack_bolt
-
-from config import env_config, log_config
-from shared import scheduling
+import anna
+from config import env_config
 
 
 class FakeBoltApp:
@@ -49,12 +46,13 @@ def load_anna(monkeypatch, *, bolt_app=None, reminders=False, digest=False):
     for name, value in settings.items():
         monkeypatch.setattr(env_config.envs, name, value)
     bolt_app = bolt_app if bolt_app is not None else FakeBoltApp()
-    monkeypatch.setattr(slack_bolt, "App", MagicMock(return_value=bolt_app))
-    monkeypatch.setattr(log_config, "init_logger", MagicMock())
+    monkeypatch.setattr(anna, "init_logger", MagicMock())
     scheduler = MagicMock()
-    monkeypatch.setattr(scheduling, "DailyScheduler", scheduler)
-    path = Path(__file__).resolve().parents[2] / "src/anna.py"
-    spec = importlib.util.spec_from_file_location("anna_test", path)
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module, bolt_app, scheduler
+    monkeypatch.setattr(anna, "DailyScheduler", scheduler)
+    app = anna.create_app(env_config.envs, bolt_app=bolt_app)
+    runtime = SimpleNamespace(
+        flask_app=app,
+        settings=env_config.envs,
+        services=app.extensions["anna_services"],
+    )
+    return runtime, bolt_app, scheduler

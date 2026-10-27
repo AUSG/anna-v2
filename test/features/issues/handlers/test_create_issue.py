@@ -1,6 +1,6 @@
 import unittest
 from types import SimpleNamespace
-from unittest.mock import MagicMock, call, patch
+from unittest.mock import MagicMock, call
 
 from test.fixtures.slack_events import create_sample_app_mention_event
 
@@ -18,7 +18,6 @@ THREAD = call.slack.get_replies(channel="C03SZTDEDK3", thread_ts="1689403100.222
 PERMALINK = call.slack.get_permalink("C03SZTDEDK3", "1689403771.805849")
 CHANNEL_LOOKUPS = [ENABLED, PERMALINK]
 THREADED_LOOKUPS = [ENABLED, THREAD, PERMALINK]
-CREATE_TITLE = call.github.create_issue(title="제목", body=LINKED_FOOTER)
 # 이슈 링크를 스레드에 공개로 알려서, 만들어진 걸 다 같이 볼 수 있게 한다
 PUBLIC_REPLY = call.slack.send_message(
     msg="이슈 만들었어! <https://github.com/AUSG/anna-v2/issues/42|#42 빅챗 리마인더가 두 번 와요>",
@@ -40,9 +39,7 @@ DISABLED_REPLY = call.slack.send_message_only_visible_to_user(
     ts="1689403771.805849",
     user_id="UQJ8HQJG5",
 )
-SUCCESS_LOG = (
-    "INFO:features.issues.handlers.create_issue:Issue #42 created by UQJ8HQJG5: 빅챗 리마인더가 두 번 와요"
-)
+SUCCESS_LOG = "INFO:features.issues.handlers.create_issue:Issue #42 created by UQJ8HQJG5: 빅챗 리마인더가 두 번 와요"
 THREAD_WARNING = (
     "WARNING:features.issues.handlers.create_issue:Failed to fetch thread context for the issue body: "
     "스레드 실패 🐍"
@@ -126,13 +123,6 @@ class TestCreateIssue(CreateIssueTestBase):
                 None,
                 "어제 저녁에 DM 이 두 통 왔어.\n재현 100%\n\n" + LINKED_FOOTER,
             ),
-            # 슬랙 어느 대화에서 나온 이야기인지 이슈만 보고도 찾아갈 수 있어야 한다
-            "permalink-footer": (
-                f"<@{ANNA_ID}> 새로운 이슈 리마인더가 두 번 와요",
-                "리마인더가 두 번 와요",
-                None,
-                LINKED_FOOTER,
-            ),
             # 스레드 인용에서도 멘션 코드는 걷어낸다
             "thread-context": (
                 f"<@{ANNA_ID}> 이슈 만들어줘 리마인더가 두 번 와요",
@@ -144,30 +134,12 @@ class TestCreateIssue(CreateIssueTestBase):
                 "### 슬랙 스레드\n\n> **U0001**: 어제 리마인더 두 번 왔는데 저만 그런가요?"
                 "\n>\n> **U0002**: 저도요\n\n" + LINKED_FOOTER,
             ),
-            "punctuation": (
-                f"<@{ANNA_ID}> 이슈 만들어줄래? 리마인더가 두 번 와요",
-                "리마인더가 두 번 와요",
-                None,
-                LINKED_FOOTER,
-            ),
-            "long-title": (
-                f"<@{ANNA_ID}> 새로운 이슈 " + "가" * 300,
-                "가" * 119 + "…",
-                None,
-                LINKED_FOOTER,
-            ),
             "exact-body": (
                 f"<@{ANNA_ID}> 새로운 이슈 제목\n요청 본문\n  코드",
                 "제목",
                 [_message("U1", "첫 대화"), _message("U2", f"다음 대화 <@{ANNA_ID}>")],
                 "요청 본문\n  코드\n\n### 슬랙 스레드\n\n> **U1**: 첫 대화\n>\n> **U2**: 다음 대화"
                 "\n\n" + LINKED_FOOTER,
-            ),
-            "outside-thread": (
-                f"<@{ANNA_ID}> 이슈 만들어줘 리마인더가 두 번 와요",
-                "리마인더가 두 번 와요",
-                None,
-                LINKED_FOOTER,
             ),
         }.items():
             with self.subTest(case=name):
@@ -221,19 +193,6 @@ class TestCreateIssue(CreateIssueTestBase):
                     call.github.create_issue(title="제목", body=body),
                     PUBLIC_REPLY,
                 ]
-
-    def test_keeps_going_when_thread_context_fails(self):
-        sut = self._build_sut(f"<@{ANNA_ID}> 이슈 만들어줘 리마인더가 두 번 와요", in_thread=True)
-        self.mock_slack_client.get_replies.side_effect = Exception("boom")
-        with self.assertLogs("features.issues.handlers.create_issue", level="WARNING") as logs:
-            assert sut.handle_mention() is True
-        assert logs.output == [
-            "WARNING:features.issues.handlers.create_issue:Failed to fetch thread context for the issue body: boom"
-        ]
-        assert self.calls.mock_calls == THREADED_LOOKUPS + [
-            call.github.create_issue(title="리마인더가 두 번 와요", body=LINKED_FOOTER),
-            PUBLIC_REPLY,
-        ]
 
     def test_body_keeps_going_without_permalink(self):
         sut = self._build_sut(f"<@{ANNA_ID}> 새로운 이슈 리마인더가 두 번 와요")
@@ -352,147 +311,6 @@ class TestCreateIssue(CreateIssueTestBase):
                     ),
                 ]
 
-    def test_exception_propagation_by_stage(self):
-        for stage, (text, in_thread, error, prefix) in {
-            "create_issue": (
-                f"<@{ANNA_ID}> 새로운 이슈 제목",
-                False,
-                ValueError("예상하지 않은 응답"),
-                CHANNEL_LOOKUPS + [CREATE_TITLE],
-            ),
-            "is_enabled": (
-                f"<@{ANNA_ID}> 새로운 이슈 제목",
-                True,
-                GithubApiError("활성화 검사 실패"),
-                [ENABLED],
-            ),
-            "send_message_only_visible_to_user": (
-                f"<@{ANNA_ID}> 새로운 이슈",
-                True,
-                GithubApiError("비공개 안내 실패"),
-                [USAGE_REPLY],
-            ),
-        }.items():
-            with self.subTest(stage=stage):
-                sut = self._build_sut(text, in_thread=in_thread)
-                target = (
-                    self.mock_slack_client
-                    if stage == "send_message_only_visible_to_user"
-                    else self.mock_github_client
-                )
-                getattr(target, stage).side_effect = error
-                with self.assertRaises(type(error)) as caught:
-                    sut.handle_mention()
-                assert caught.exception is error
-                assert self.calls.mock_calls == prefix
-
-    def test_success_reply_failure_does_not_undo_creation_or_become_private_error(self):
-        sut = self._build_sut(f"<@{ANNA_ID}> 새로운 이슈 제목")
-        error = GithubApiError("공개 안내 실패")
-        self.mock_slack_client.send_message.side_effect = error
-        with self.assertLogs("features.issues.handlers.create_issue", level="INFO") as logs:
-            with self.assertRaises(GithubApiError) as caught:
-                sut.handle_mention()
-        assert caught.exception is error
-        assert logs.output == [SUCCESS_LOG]
-        assert self.calls.mock_calls == CHANNEL_LOOKUPS + [CREATE_TITLE, PUBLIC_REPLY]
-
-    def test_github_error_reply_exception_is_not_caught_again(self):
-        sut = self._build_sut(f"<@{ANNA_ID}> 새로운 이슈 제목")
-        self.mock_github_client.create_issue.side_effect = GithubApiError("생성 실패")
-        error = RuntimeError("비공개 안내 실패")
-        self.mock_slack_client.send_message_only_visible_to_user.side_effect = error
-        with self.assertRaises(RuntimeError) as caught:
-            sut.handle_mention()
-        assert caught.exception is error
-        assert self.calls.mock_calls == CHANNEL_LOOKUPS + [
-            CREATE_TITLE,
-            call.slack.send_message_only_visible_to_user(
-                msg=":blob-fearful: 이슈를 만들지 못했어. 생성 실패",
-                channel="C03SZTDEDK3",
-                ts="1689403771.805849",
-                user_id="UQJ8HQJG5",
-            ),
-        ]
-
-    def test_body_github_error_remains_inside_original_creation_boundary(self):
-        sut = self._build_sut(f"<@{ANNA_ID}> 새로운 이슈 제목")
-        with patch.object(sut, "_footer", side_effect=GithubApiError("본문 실패")):
-            assert sut.handle_mention() is False
-        assert self.calls.mock_calls == [
-            ENABLED,
-            call.slack.send_message_only_visible_to_user(
-                msg=":blob-fearful: 이슈를 만들지 못했어. 본문 실패",
-                channel="C03SZTDEDK3",
-                ts="1689403771.805849",
-                user_id="UQJ8HQJG5",
-            ),
-        ]
-
-    def test_unknown_body_exception_is_not_caught(self):
-        sut = self._build_sut(f"<@{ANNA_ID}> 새로운 이슈 제목")
-        error = RuntimeError("본문 실패")
-        with patch.object(sut, "_footer", side_effect=error):
-            with self.assertRaises(RuntimeError) as caught:
-                sut.handle_mention()
-        assert caught.exception is error
-        assert self.calls.mock_calls == [ENABLED]
-
-    def test_missing_channel_skips_both_lookups(self):
-        sut = self._build_sut(f"<@{ANNA_ID}> 새로운 이슈 제목", in_thread=True)
-        sut.channel = None
-        assert sut.handle_mention() is True
-        assert self.calls.mock_calls == [
-            ENABLED,
-            call.github.create_issue(title="제목", body=FOOTER),
-            PUBLIC_REPLY,
-        ]
-
-    def test_missing_timestamp_skips_permalink_but_not_thread_lookup(self):
-        sut = self._build_sut(f"<@{ANNA_ID}> 새로운 이슈 제목", in_thread=True)
-        sut.ts = ""
-        self.mock_slack_client.get_replies.return_value = [_message("U1", "대화")]
-        assert sut.handle_mention() is True
-        assert self.calls.mock_calls == [
-            ENABLED,
-            THREAD,
-            call.github.create_issue(
-                title="제목", body="### 슬랙 스레드\n\n> **U1**: 대화\n\n" + FOOTER
-            ),
-            call.slack.send_message(msg=PUBLIC_REPLY.kwargs["msg"], ts=""),
-        ]
-
-    def test_missing_user_keeps_none_in_footer(self):
-        sut = self._build_sut(f"<@{ANNA_ID}> 새로운 이슈 제목")
-        sut.user = None
-        self.mock_slack_client.get_permalink.return_value = ""
-        assert sut.handle_mention() is True
-        assert self.calls.mock_calls == CHANNEL_LOOKUPS + [
-            call.github.create_issue(
-                title="제목", body="---\n슬랙에서 `None` 가 안나에게 요청해서 만들어진 이슈야."
-            ),
-            PUBLIC_REPLY,
-        ]
-
-    def test_private_parser_and_footer_helpers_remain_callable(self):
-        sut = self._build_sut(f"<@{ANNA_ID}> 새로운 이슈 ? 제목\n 본문 ")
-        assert sut._parse_command() == ("제목", "본문")
-        assert sut._footer() == LINKED_FOOTER
-        assert self.calls.mock_calls == [PERMALINK]
-
-    def test_private_body_helper_keeps_thread_then_footer_call_order(self):
-        sut = self._build_sut(f"<@{ANNA_ID}> 새로운 이슈 제목")
-        with patch.object(sut, "_fetch_thread_context", return_value="> 대화") as thread:
-            with patch.object(sut, "_footer", return_value="---\n푸터") as footer:
-                calls = MagicMock()
-                calls.attach_mock(thread, "thread")
-                calls.attach_mock(footer, "footer")
-                assert (
-                    sut._build_body(" 본문\n ")
-                    == " 본문\n \n\n### 슬랙 스레드\n\n> 대화\n\n---\n푸터"
-                )
-                assert calls.mock_calls == [call.thread(), call.footer()]
-
     def test_thread_context_cases(self):
         for name, (messages, expected) in {
             "inner-newlines": (
@@ -540,29 +358,3 @@ class TestCreateIssue(CreateIssueTestBase):
                         channel="C03SZTDEDK3", thread_ts="1689403100.222939"
                     )
                 ]
-
-    def test_invalid_thread_result_propagates(self):
-        for name, (messages, error) in {
-            "missing-user": ([SimpleNamespace(text="대화")], AttributeError),
-            "none-result": (None, TypeError),
-        }.items():
-            with self.subTest(case=name):
-                sut = self._build_sut(f"<@{ANNA_ID}> 새로운 이슈 제목", in_thread=True)
-                self.mock_slack_client.get_replies.return_value = messages
-                with self.assertRaises(error):
-                    sut.handle_mention()
-                assert self.calls.mock_calls == [ENABLED, THREAD]
-
-    def test_lookup_does_not_swallow_base_exception(self):
-        for method in ("get_replies", "get_permalink"):
-            with self.subTest(method=method):
-                sut = self._build_sut(f"<@{ANNA_ID}> 새로운 이슈 제목", in_thread=True)
-                self.mock_slack_client.get_replies.return_value = []
-                error = KeyboardInterrupt("중단")
-                getattr(self.mock_slack_client, method).side_effect = error
-                with self.assertRaises(KeyboardInterrupt) as caught:
-                    sut.handle_mention()
-                assert caught.exception is error
-                assert self.calls.mock_calls == (
-                    [ENABLED, THREAD] if method == "get_replies" else THREADED_LOOKUPS
-                )

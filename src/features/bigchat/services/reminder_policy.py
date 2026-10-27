@@ -1,8 +1,6 @@
 import re
 from typing import Iterable, Optional
 
-from features.bigchat.models import select_bigchats as select_bigchats
-
 # 소속(회사명 등)에 '@' 가 들어가는 경우와 구분하기 위해, 이메일 형태인 셀만 집는다
 EMAIL_PAT = re.compile(r"^\S+@\S+\.\S+$")
 

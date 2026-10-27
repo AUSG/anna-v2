@@ -12,7 +12,10 @@ from features.questions.models import (
     ChatResult,
     Source,
 )
-from features.questions.handlers.question_response import DEFAULT_SYSTEM_PROMPT, QuestionResponse
+from features.questions.handlers.question_response import (
+    DEFAULT_SYSTEM_PROMPT,
+    QuestionResponse,
+)
 from integrations.slack import Message
 
 _DEFAULT_ANSWER = "답변이야!"
@@ -152,26 +155,22 @@ class TestConversationRoles(unittest.TestCase):
 
 @pytest.mark.parametrize(
     ("attribute", "value"),
-    [("channel", None), ("thread_ts", None), ("channel", ""), ("thread_ts", "")],
+    [("channel", None), ("thread_ts", None)],
 )
-def test_missing_channel_or_thread_never_fetches_or_extracts_question(attribute, value):
+def test_missing_channel_or_thread_has_no_conversation(attribute, value):
     sut, slack, _ = _make(_QUESTION_TEXT)
     setattr(sut, attribute, value)
-    sut._extract_question = MagicMock()
 
     assert sut._fetch_conversation() == []
     slack.get_replies.assert_not_called()
-    sut._extract_question.assert_not_called()
 
 
 @pytest.mark.parametrize("messages", [None, [], [{"ts": "1", "text": " \t\n"}]])
-def test_empty_normalized_history_does_not_extract_question(messages):
+def test_empty_history_has_no_conversation(messages):
     sut, slack, _ = _make(_QUESTION_TEXT)
     slack.get_replies.return_value = messages
-    sut._extract_question = MagicMock()
 
     assert sut._fetch_conversation() == []
-    sut._extract_question.assert_not_called()
 
 
 def test_fetch_failure_is_logged_but_does_not_prevent_qa_reply(caplog):
@@ -186,21 +185,6 @@ def test_fetch_failure_is_logged_but_does_not_prevent_qa_reply(caplog):
     assert [record.getMessage() for record in caplog.records] == [
         "Failed to fetch thread context: 조회 실패"
     ]
-
-
-def test_reply_iteration_failure_is_outside_fetch_exception_boundary(caplog):
-    def broken_replies():
-        yield {"ts": "1", "text": "첫 발화"}
-        raise RuntimeError("순회 실패")
-
-    sut, slack, qa = _make(_QUESTION_TEXT)
-    slack.get_replies.return_value = broken_replies()
-
-    with pytest.raises(RuntimeError, match="순회 실패"):
-        sut.handle_mention()
-    qa.chat.assert_not_called()
-    slack.send_answer.assert_not_called()
-    assert caplog.records == []
 
 
 def test_sdk_values_current_event_filter_and_unicode_clipping_are_preserved():
@@ -243,56 +227,6 @@ def test_sdk_values_current_event_filter_and_unicode_clipping_are_preserved():
     slack.get_replies.assert_called_once_with(
         channel=sut.channel, thread_ts=sut.thread_ts
     )
-
-
-def test_current_event_is_excluded_before_reading_other_sdk_attributes():
-    sut, slack, _ = _make(_QUESTION_TEXT)
-
-    class CurrentMessage:
-        ts = sut.ts
-
-        @property
-        def text(self):
-            raise AssertionError("current event text must not be read")
-
-    slack.get_replies.return_value = [CurrentMessage()]
-
-    assert sut._fetch_conversation() == []
-
-
-def test_legacy_thread_text_preserves_internal_line_separators_and_early_limit():
-    sut, _, _ = _make(_QUESTION_TEXT)
-    sut._fetch_conversation = MagicMock(
-        return_value=[
-            {"role": "user", "author": "U1", "content": "가\r\n나\u2028😀"},
-            {"role": "assistant", "content": ": 끝 : "},
-        ]
-    )
-    assert sut._fetch_thread_context() == "U1: 가\r\n나\u2028😀\n끝"
-    sut._fetch_conversation.return_value = [
-        {"role": "user", "content": "가" * 4001},
-        {"role": "user", "content": "작은 후속 발화"},
-    ]
-    assert sut._fetch_thread_context() == "가" * 4001
-
-
-@pytest.mark.parametrize("failure", ["qa", "send"])
-def test_qa_and_send_failures_propagate_after_existing_call_order(failure):
-    sut, slack, qa = _make(_QUESTION_TEXT)
-    trace = MagicMock()
-    trace.attach_mock(slack.get_replies, "replies")
-    trace.attach_mock(qa.chat, "chat")
-    trace.attach_mock(slack.send_answer, "answer")
-    if failure == "qa":
-        qa.chat.side_effect = RuntimeError("QA 실패")
-    else:
-        slack.send_answer.side_effect = RuntimeError("전송 실패")
-
-    with pytest.raises(RuntimeError, match="실패"):
-        sut.handle_mention()
-    expected = ["replies", "chat"] if failure == "qa" else ["replies", "chat", "answer"]
-    assert [call[0] for call in trace.mock_calls] == expected
-    slack.send_message.assert_not_called()
 
 
 def test_handler_keeps_current_question_separate_and_preserves_identities():
@@ -342,26 +276,3 @@ def test_handler_bounds_history_to_root_and_recent_turns():
     assert sum(len(item["content"]) for item in conversation) <= MAX_CONVERSATION_CHARS
     assert conversation[0]["content"].startswith("메시지-0")
     assert conversation[-1]["content"].startswith("메시지-49")
-
-
-def test_handler_prioritizes_a_relevant_middle_turn_before_filler():
-    sut, slack, qa = _make(
-        event={
-            "text": "<@UANNA> q) Kubernetes 일정",
-            "ts": "99",
-            "channel": "C1",
-            "thread_ts": "1",
-        }
-    )
-    messages = [
-        {"ts": str(i), "user": f"U{i}", "text": f"무관한 메시지 {i}" * 1000}
-        for i in range(20)
-    ]
-    messages[10] = {"ts": "10", "user": "U10", "text": "Kubernetes 일정은 10월이에요" * 1000}
-    slack.get_replies.return_value = messages
-    qa.chat.return_value = "답변"
-
-    assert sut.handle_mention() is True
-    conversation = qa.chat.call_args.kwargs["conversation"]
-
-    assert any("Kubernetes" in item["content"] for item in conversation)

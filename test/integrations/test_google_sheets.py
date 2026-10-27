@@ -29,3 +29,20 @@ class TestAppendRowIfAbsent(unittest.TestCase):
         assert sut.append_row_if_absent(161837744, ["x", "y", "z", "w"]) is False
 
         sut.append_row.assert_not_called()
+
+
+def test_client_uses_injected_settings(monkeypatch):
+    from config.env_config import Settings
+    from integrations import google_sheets
+
+    settings = Settings(
+        _env_file=None,
+        FORM_SPREADSHEET_ID="configured-sheet",
+        GCP_private_key="line1\\nline2",
+    )
+    factory = MagicMock()
+    monkeypatch.setattr(google_sheets, "service_account_from_dict", factory)
+    client = GoogleSpreadsheetClient(settings=settings)
+    assert client.spreadsheet_id == "configured-sheet"
+    assert client.gs_client is factory.return_value
+    assert factory.call_args.args[0]["private_key"] == "line1\nline2"

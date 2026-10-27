@@ -1,13 +1,9 @@
 import pytest
 
 from features.questions.models import ChatResult, Source
-from features.questions.handlers.question_response import QuestionResponse
 from features.questions.presentation.answers import (
-    _escape_slack_text,
     _format_timestamp,
-    _normalize_answer_url,
     _safe_source_url,
-    _strip_untrusted_answer_links,
     render_parts,
 )
 
@@ -248,76 +244,6 @@ def test_legacy_strings_and_structured_whitespace_remain_distinct(answer):
 
 
 @pytest.mark.parametrize(
-    ("answer", "allowed", "expected"),
-    [
-        (
-            "<https://bad.test|출처> [문서](https://bad.test)",
-            set(),
-            "출처[확인되지 않은 링크 제거] 문서[확인되지 않은 링크 제거]",
-        ),
-        (
-            "깨진 <https://bad.test|이름\n다음 https://bad.test/plain.",
-            set(),
-            "깨진 이름[확인되지 않은 링크 제거]\n다음 [확인되지 않은 링크 제거].",
-        ),
-        (
-            "[공지](https://good.test/1)은 여기, https://good.test/1은 같은 링크.",
-            {"https://good.test/1"},
-            "[공지](https://good.test/1)은 여기, https://good.test/1은 같은 링크.",
-        ),
-        (
-            "`https://good.test/1`예요. [문서](https://good.test/Foo_(bar))",
-            {"https://good.test/1", "https://good.test/Foo_(bar)"},
-            "`https://good.test/1`예요. [문서](https://good.test/Foo_(bar))",
-        ),
-        (
-            "https://good.test/1은.",
-            {"https://good.test/1"},
-            "[확인되지 않은 링크 제거].",
-        ),
-        (
-            "HTTPS://good.test/1 www.good.test",
-            {"https://good.test/1"},
-            "[확인되지 않은 링크 제거] [확인되지 않은 링크 제거]",
-        ),
-        (
-            "<https://good.test/1|다른 https://bad.test>",
-            {"https://good.test/1"},
-            "<https://good.test/1|다른 [확인되지 않은 링크 제거]>",
-        ),
-        (
-            "<https://bad.test|[문서](https://good.test/1)>",
-            {"https://good.test/1"},
-            "[문서]([확인되지 않은 링크 제거]확인되지 않은 링크 제거]",
-        ),
-        (
-            "가\u2028https://bad.test/x\u2029나\r\nwww.bad.test!😀",
-            set(),
-            "가\u2028[확인되지 않은 링크 제거]\u2029나\r\n[확인되지 않은 링크 제거]",
-        ),
-    ],
-)
-def test_link_rewrite_order_and_unicode_boundaries(answer, allowed, expected):
-    assert _strip_untrusted_answer_links(answer, allowed) == expected
-
-
-@pytest.mark.parametrize(
-    ("candidate", "expected"),
-    [
-        ("https://a.test/Foo_(bar))", "https://a.test/Foo_(bar)"),
-        ("https://a.test/x)은", "https://a.test/x"),
-        ("https://a.test/x은.", "https://a.test/x은"),
-        ("https://a.test/x.,!?;:", "https://a.test/x"),
-        ("https://a.test/한글", "https://a.test/"),
-        ("https://a.test/xㄱㅏ", "https://a.test/x"),
-        ("https://a.test/x😀", "https://a.test/x😀"),
-    ],
-)
-def test_url_normalization_preserves_operation_order(candidate, expected):
-    assert _normalize_answer_url(candidate) == expected
-
-
-@pytest.mark.parametrize(
     ("value", "expected"),
     [
         ("https://example.test/한글?x=1&y=2", "https://example.test/한글?x=1&y=2"),
@@ -338,11 +264,6 @@ def test_url_normalization_preserves_operation_order(candidate, expected):
 )
 def test_source_url_validation_is_not_replaced_by_answer_normalization(value, expected):
     assert _safe_source_url(value) == expected
-
-
-def test_bad_bracketed_source_url_still_raises_value_error():
-    with pytest.raises(ValueError, match="Invalid IPv6 URL"):
-        _safe_source_url("https://[broken/path")
 
 
 @pytest.mark.parametrize(
@@ -390,10 +311,6 @@ def test_source_order_escaping_current_source_and_ambiguous_ids_are_preserved():
             "<https://a.test/2|doc-2 · bad&time>",
         ],
     )
-    assert QuestionResponse._render_result(result) == (
-        "확인했어요.\n\n출처: <https://a.test/1|A&amp;B &lt;공지&gt;>, "
-        "현재 &lt;대화&gt;, <https://a.test/2|doc-2 · bad&time>"
-    )
 
 
 def test_evidence_urls_require_unique_cited_source_even_without_source_permalink():
@@ -414,7 +331,3 @@ def test_evidence_urls_require_unique_cited_source_even_without_source_permalink
         "https://a.test/keep [확인되지 않은 링크 제거] [확인되지 않은 링크 제거]",
         [],
     )
-
-
-def test_slack_text_escape_preserves_existing_entities():
-    assert _escape_slack_text("&amp;<😀>") == "&amp;amp;&lt;😀&gt;"

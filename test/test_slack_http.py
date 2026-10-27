@@ -1,4 +1,4 @@
-"""main 의 Flask/Bolt 연결과 캘린더 검증 순서를 외부 API 없이 확인한다."""
+"""Slack HTTP 요청과 캘린더 다운로드를 외부 API 없이 검증한다."""
 
 import hashlib
 import hmac
@@ -13,7 +13,6 @@ from slack_bolt.authorization import AuthorizeResult
 from slack_sdk import WebClient
 from slack_sdk.web import SlackResponse
 
-import slack_controller
 from features.bigchat.calendar import calendar_payload, calendar_token
 from features.members.services.directory import Member
 from test.fixtures.anna import load_anna
@@ -45,12 +44,12 @@ def calendar_app(monkeypatch):
     web.return_value.conversations_replies.return_value = {
         "messages": [{"text": "행사 소개글\n둘째 줄"}]
     }
-    monkeypatch.setattr(module, "GoogleSpreadsheetClient", sheets)
-    monkeypatch.setattr(module, "WebClient", web)
+    monkeypatch.setattr(module.services, "sheets", sheets)
+    monkeypatch.setattr(module.services, "web_client", web)
     return module, module.flask_app.test_client(), sheets, web
 
 
-def test_download_keeps_main_headers_and_description(calendar_app):
+def test_download_returns_calendar_with_description(calendar_app):
     _, client, sheets, web = calendar_app
     response = client.get(f"/bigchat/{WORKSHEET_ID}/event.ics", query_string=query())
     assert response.status_code == 200
@@ -75,7 +74,7 @@ def test_disabled_download_does_not_construct_clients(
     calendar_app, monkeypatch, method
 ):
     module, client, sheets, web = calendar_app
-    monkeypatch.setattr(module.envs, "ICS_TOKEN_SECRET", "")
+    monkeypatch.setattr(module.settings, "ICS_TOKEN_SECRET", "")
     assert (
         client.open(
             f"/bigchat/{WORKSHEET_ID}/event.ics", method=method, query_string=query()
@@ -111,7 +110,7 @@ def test_invalid_token_is_rejected_before_sheets_initialization(
 
 
 @pytest.mark.parametrize("failure", ["constructor", "read", "missing", "invalid_title"])
-def test_calendar_lookup_failures_keep_main_404(calendar_app, failure):
+def test_calendar_lookup_failures_return_404(calendar_app, failure):
     _, client, sheets, web = calendar_app
     if failure == "constructor":
         sheets.side_effect = RuntimeError("자격증명 초기화 실패")
@@ -187,7 +186,10 @@ def test_real_bolt_registration_calendar_roundtrip(monkeypatch, ics_enabled):
                 {
                     "ts": event["item"]["ts"],
                     "user": event["item_user"],
-                    "text": f"행사 소개글\n<https://docs.google.com/spreadsheets/d/test-sheet/edit#gid={WORKSHEET_ID}|신청 시트>",
+                    "text": (
+                        "행사 소개글\n"
+                        f"<https://docs.google.com/spreadsheets/d/test-sheet/edit#gid={WORKSHEET_ID}|신청 시트>"
+                    ),
                 }
             ]
         },
@@ -224,10 +226,8 @@ def test_real_bolt_registration_calendar_roundtrip(monkeypatch, ics_enabled):
         )
         module, _, _ = load_anna(monkeypatch, bolt_app=bolt)
         monkeypatch.setattr(
-            module.envs, "ICS_TOKEN_SECRET", "testsecret" if ics_enabled else ""
+            module.settings, "ICS_TOKEN_SECRET", "testsecret" if ics_enabled else ""
         )
-        # main 의 전역 설정·클라이언트 계약을 유지한 채 외부 조회만 대역으로 바꾼다.
-        monkeypatch.setattr(slack_controller, "envs", module.envs)
         members, sheets = MagicMock(), MagicMock()
         members.find.return_value = Member(
             kor_name="김철수",
@@ -238,9 +238,8 @@ def test_real_bolt_registration_calendar_roundtrip(monkeypatch, ics_enabled):
         )
         sheets.append_row_if_absent.return_value = True
         sheets.get_worksheet_title.return_value = SHEET_NAME
-        monkeypatch.setattr(slack_controller, "_get_member_manager", lambda: members)
-        monkeypatch.setattr(slack_controller, "GoogleSpreadsheetClient", lambda: sheets)
-        monkeypatch.setattr(module, "GoogleSpreadsheetClient", lambda: sheets)
+        monkeypatch.setattr(module.services, "members", lambda: members)
+        monkeypatch.setattr(module.services, "sheets", lambda: sheets)
         client = module.flask_app.test_client()
         response = post_signed_request(
             client,

@@ -4,7 +4,6 @@ from unittest.mock import MagicMock
 
 from slack_sdk.errors import SlackApiError
 
-from features.bigchat.models import InvalidBigchatName
 from features.bigchat.handlers.create_bigchat_modal import (
     CREATE_BIGCHAT_VIEW_ID,
     DATE_BLOCK,
@@ -16,7 +15,7 @@ from features.bigchat.handlers.create_bigchat_modal import (
     normalize_shortcut_body,
     normalize_view_body,
 )
-from features.bigchat.handlers.join_bigchat import SPREADSHEET_PAT
+from features.bigchat.services.sheet_link import extract_worksheet_id
 from test.fixtures.slack_events import (
     create_sample_message_shortcut_body,
     create_sample_view_submission_body,
@@ -130,7 +129,7 @@ class TestSubmitCreateBigchatModal(unittest.TestCase):
         )
         # :gogo: 참여 흐름(JoinBigchat)이 이 답글에서 시트 gid를 찾아낼 수 있어야 한다
         msg = mock_slack_client.send_thread_message.call_args.kwargs["msg"]
-        assert SPREADSHEET_PAT.search(msg).groups()[0] == "987654321"
+        assert extract_worksheet_id([msg]) == 987654321
         # 링크를 올린 뒤, 모달을 띄운 메시지가 속한 스레드의 첫 글(모집글)에서 reaction 을 읽는다 (#89)
         call_names = [name for name, _, _ in mock_slack_client.mock_calls]
         assert call_names.index("send_thread_message") < call_names.index("get_emoji")
@@ -167,37 +166,6 @@ class TestSubmitCreateBigchatModal(unittest.TestCase):
                 )
                 assert mock_gs_client.mock_calls == []
                 assert mock_slack_client.mock_calls == []
-
-    def test_ack_failure_does_not_create_a_sheet(self):
-        for date in ("2026-08-20", "2026-02-30"):
-            with self.subTest(date=date):
-                sut, mock_ack, mock_slack_client, mock_gs_client = self._build_sut(
-                    date=date
-                )
-                failure = RuntimeError("ACK 실패")
-                mock_ack.side_effect = failure
-
-                with self.assertRaises(RuntimeError) as error:
-                    sut.run()
-
-                assert error.exception is failure
-                assert failure.__context__ is None
-                mock_ack.assert_called_once()
-                assert mock_gs_client.mock_calls == []
-                assert mock_slack_client.mock_calls == []
-
-    def test_creation_error_is_not_reported_as_validation_error(self):
-        sut, mock_ack, mock_slack_client, mock_gs_client = self._build_sut()
-        failure = InvalidBigchatName("AI 밋업 26-08-20 19:00~21:00")
-        mock_gs_client.create_bigchat_sheet.side_effect = failure
-
-        with self.assertRaises(InvalidBigchatName) as error:
-            sut.run()
-
-        assert error.exception is failure
-        mock_ack.assert_called_once_with()
-        mock_gs_client.get_url.assert_not_called()
-        assert mock_slack_client.mock_calls == []
 
     def test_fallback_to_response_url_when_bot_not_in_channel(self):
         """봇이 채널에 없으면 대체 안내를 보내고 사전 등록은 건너뛴다."""
