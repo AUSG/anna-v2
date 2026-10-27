@@ -53,7 +53,7 @@ class Settings(BaseSettings):
     QA_SERVER_BASE_URL: str = ""
     QA_API_KEY: str = ""
 
-    # Bigchat calendar buttons (#112)
+    # Bigchat calendar buttons
     PUBLIC_BASE_URL: str = "https://anna-v2-2023.fly.dev"
     ICS_TOKEN_SECRET: str = ""  # 비어 있으면 ics 버튼/엔드포인트 비활성화
 

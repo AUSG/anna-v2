@@ -105,6 +105,12 @@ poetry install --with ci
 
 나머지 값(슬랙 토큰, GCP 키 등)은 [anna-v2-secret](https://github.com/AUSG/anna-v2-secret) 레포지토리에서 서브모듈로 받아온다.
 
+### 코드 구성
+
+- `src/anna.py`는 실행, `src/app.py`·`src/bootstrap.py`는 앱 구성과 의존성 연결을 담당한다.
+- `src/features/`에 기능별 코드를 둔다. 각 기능의 `slack.py`·`http.py`·`jobs.py`는 진입점, `services/`는 업무 처리, `presentation/`은 출력 형식을 담는다.
+- 외부 API·저장소 연동은 `src/integrations/`, 공통 코드는 `src/shared/`에 둔다.
+
 ## 실제 AUSG 슬랙과 로컬 안나를 연동해서 테스트하기
 
 슬랙은 개발용 테스트 콜백을 따로 제공하지 않는다. 따라서 **실제** 이벤트를 로컬로 받아서 검증해야 한다. ~~super dog fooding~~ 이 작업 도중엔 슬랙의 안나가 졸게 되므로(작동하지 않으므로) 미리 공지해두는 게 좋다.
