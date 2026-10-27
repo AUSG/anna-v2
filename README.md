@@ -105,6 +105,32 @@ poetry install --with ci
 
 나머지 값(슬랙 토큰, GCP 키 등)은 [anna-v2-secret](https://github.com/AUSG/anna-v2-secret) 레포지토리에서 서브모듈로 받아온다.
 
+### 코드 구성
+
+```
+src/
+  anna.py              앱 생성과 의존성의 조립 및 수명 관리
+  slack_events.py      Bolt 이벤트 등록, ACK와 명령 dispatch
+  slack_router.py      외부 의존성 없는 문자열 명령 분류
+  http_routes.py       HTTP 입력 검증과 응답
+  jobs.py              예약 작업 실행과 관리자 오류 알림
+  gunicorn_config.py   worker 초기화 후 예약 작업 시작
+  features/<기능>/
+    handlers/          슬랙 이벤트와 명령 처리
+    models.py          기능별 값과 정책
+    services/          처리 흐름과 조회
+    presentation/      안내 문구와 답변 표현
+  features/bigchat/calendar.py  빅챗 일정 해석과 캘린더 링크 및 파일 생성
+  integrations/        외부 클라이언트와 시트 저장소
+  shared/              오류 처리, 로딩 이모지, 스케줄러와 유틸리티
+```
+
+`anna.create_app()`은 앱을 생성하고 핸들러가 사용할 의존성을 연결한다. 예약 작업은 시작하지 않는다. `anna.start_jobs(app)`을 호출하면 활성화된 작업을 앱당 한 번씩 시작한다. Gunicorn에서는 `gunicorn_config.py`의 worker 초기화 훅에서 이 함수를 호출한다. `python src/anna.py`로 실행할 때도 앱을 만든 뒤 같은 함수를 호출한다. 예약 작업은 worker 한 개와 인스턴스 한 개로 운영하는 환경을 전제로 한다.
+
+회원 조회와 QA 클라이언트는 처음 필요할 때 생성하고 같은 앱 안에서 공유한다. 이벤트 입력과 `say`, `ack`, 핸들러는 이벤트마다 새로 구성한다. 시트 클라이언트도 필요할 때만 생성하므로 도움말이나 인증에 실패한 캘린더 요청에는 Google 인증이 필요 없다. 캘린더 조회와 소개글 구성은 `features/bigchat/services/calendar.py`가 담당한다.
+
+테스트는 `test/` 아래에 기능별로 배치한다. `test/test_anna.py`, `test/test_slack_events.py`, `test/test_slack_http.py`, `test/test_jobs.py`는 의존성의 수명, 이벤트 연결과 ACK 시점, HTTP 응답, 캘린더 다운로드, 예약 작업의 실패 처리를 검증한다. 테스트에서는 실제 외부 API 대신 테스트 대역을 사용한다.
+
 ## 실제 AUSG 슬랙과 로컬 안나를 연동해서 테스트하기
 
 슬랙은 개발용 테스트 콜백을 따로 제공하지 않는다. 따라서 **실제** 이벤트를 로컬로 받아서 검증해야 한다. ~~super dog fooding~~ 이 작업 도중엔 슬랙의 안나가 졸게 되므로(작동하지 않으므로) 미리 공지해두는 게 좋다.
@@ -115,7 +141,7 @@ poetry install --with ci
 make wakeup_anna
 ```
 
-2. 로컬 포트 개방 — 외부에서 내 컴퓨터로 요청을 쏠 수 있게 해주는 도구로, 여기선 `tunnelmole` 을 쓴다.
+2. 로컬 포트를 개방한다. 외부에서 내 컴퓨터로 요청을 보낼 수 있도록 `tunnelmole`을 사용한다.
 
 ```sh
 # 별도의 shell 에서 진행
@@ -132,7 +158,7 @@ make open_port
 
 [^1]: 예를 들어 포워딩 URL 이 https://a.b.dev 라면, https://a.b.dev/slack/events 을 입력해야 한다.
 
-4. 뒷정리 — 끝났으면 URL 을 원래 값(`https://anna-v2-2023.fly.dev/slack/events`)으로 되돌린다.
+4. 테스트가 끝나면 URL을 원래 값(`https://anna-v2-2023.fly.dev/slack/events`)으로 되돌린다.
 
 ## 배포
 
