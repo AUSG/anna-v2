@@ -3,11 +3,11 @@
 import re
 from collections import Counter
 from datetime import datetime, timezone
-from typing import List, Tuple, Union
+from typing import List, Tuple
 from urllib.parse import urlsplit
 from zoneinfo import ZoneInfo
 
-from features.questions.models import ChatFailure, ChatResult
+from features.questions.models import ChatResult
 
 # URL 안의 한 겹 괄호를 허용한다.
 _URL_WITH_BALANCED_PARENS = r"https?://(?:[^()\s<>|`]+|\([^()\s<>|`]*\))+"
@@ -24,13 +24,14 @@ _TRAILING_HANGUL = re.compile(r"[가-힣ㄱ-ㅎㅏ-ㅣ]+$")
 UNTRUSTED_LINK_MARKER = "[확인되지 않은 링크 제거]"
 
 
-SERVICE_FAILURE_MESSAGE = "앗, 답변 서버가 잠시 응답하지 않아요. 잠시 후 다시 시도해 주세요."
-
-
-def render_parts(result: Union[ChatResult, ChatFailure]) -> Tuple[str, List[str]]:
-    """답변과 인용 출처 링크를 만든다. 인용되지 않은 링크는 답변에서 지운다."""
-    if isinstance(result, ChatFailure):
-        return SERVICE_FAILURE_MESSAGE, []
+def render_parts(result) -> Tuple[str, List[str]]:
+    """답변과 인용 출처 링크를 만든다. 구형 문자열 응답도 받는다."""
+    if result is None:
+        return "앗, 답변 서버가 잠시 응답하지 않아요. 잠시 후 다시 시도해 주세요.", []
+    if isinstance(result, str):
+        return _strip_untrusted_answer_links(result, set()), []
+    if not isinstance(result, ChatResult):
+        return "앗, 답변 서버가 잠시 응답하지 않아요. 잠시 후 다시 시도해 주세요.", []
 
     if result.answer:
         answer = result.answer

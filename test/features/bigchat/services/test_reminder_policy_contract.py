@@ -7,9 +7,8 @@ from typing import Iterable, List, Tuple, get_type_hints
 
 import pytest
 
-from features.bigchat.models import ReminderResult, BigchatEvent
-from features.bigchat.services.reminder_policy import select_bigchats
-from shared.time import KST
+from features.bigchat.models import ReminderResult, select_bigchats
+from features.bigchat.calendar import KST, BigchatEvent
 
 
 def test_select_bigchats_preserves_sheet_order_and_scan_details():
@@ -242,11 +241,9 @@ import threading
 from pathlib import Path
 
 root = Path(sys.argv[1]).resolve()
-# src 의 진입점/조립/통합 모듈과 외부 SDK. 정책 모듈은 features/shared 의 순수 값만 봐야 한다.
 blocked = {
-    'anna', 'app', 'bootstrap', 'config', 'integrations', 'runtime', 'slack_router',
-    'requests', 'slack_sdk', 'slack_bolt', 'flask', 'gunicorn',
-    'gspread', 'gspread_formatting', 'dotenv', 'pydantic_settings', 'google', 'googleapiclient', 'github',
+    'handler', 'implementation', 'config', 'requests', 'slack_sdk', 'slack_bolt',
+    'gspread', 'dotenv', 'pydantic_settings', 'google', 'googleapiclient', 'github',
 }
 assert not [name for name in sys.modules if name.split('.')[0] in blocked]
 attempted = []
@@ -266,9 +263,7 @@ socket.socket.connect = socket.socket.connect_ex = forbidden
 socket.create_connection = socket.getaddrinfo = forbidden
 threading.Thread.start = forbidden
 sys.dont_write_bytecode = True
-# 저장소 밖의 패키지 경로(site-packages 등)는 부모 프로세스에서 넘겨받는다. -I 가 PYTHONPATH 를 무시하기 때문이다.
 sys.path[:0] = [str(root / 'src'), str(root)]
-sys.path += sys.argv[2:]
 
 # finder가 실제로 로딩 전에 거절하는지 확인하고 application의 시도와 구분한다.
 for name in sorted(blocked):
@@ -289,37 +284,23 @@ def forbid_credentials(event, args):
             raise AssertionError('environment or credentials read: ' + str(path))
 
 sys.addaudithook(forbid_credentials)
-module = importlib.import_module('features.bigchat.services.reminder_policy')
-models = importlib.import_module('features.bigchat.models')
-assert Path(module.__file__).resolve() == root / 'src/features/bigchat/services/reminder_policy.py'
-assert models.ReminderResult.__module__ == 'features.bigchat.models'
-assert module.select_bigchats.__module__ == 'features.bigchat.services.reminder_policy'
+module = importlib.import_module('features.bigchat.models')
+assert Path(module.__file__).resolve() == root / 'src/features/bigchat/models.py'
+assert module.ReminderResult.__module__ == 'features.bigchat.models'
+assert module.select_bigchats.__module__ == 'features.bigchat.models'
 assert attempted == []
 assert not [name for name in sys.modules if name.split('.')[0] in blocked]
 for name, loaded in tuple(sys.modules.items()):
     if name.split('.')[0] in {'features', 'shared'}:
         assert Path(loaded.__file__).resolve().is_relative_to(root / 'src'), (name, loaded.__file__)
-print('reminder policy isolated at ' + str(module.__file__))
+print('features.bigchat.models isolated at ' + str(module.__file__))
 """
 
 
 def test_application_bigchat_import_is_isolated_in_a_fresh_process():
     root = Path(__file__).resolve().parents[4]
-    external_paths = [
-        path
-        for path in sys.path
-        if path and not Path(path).resolve().is_relative_to(root)
-    ]
     completed = subprocess.run(
-        [
-            sys.executable,
-            "-I",
-            "-B",
-            "-c",
-            IMPORT_GUARD_SCRIPT,
-            str(root),
-            *external_paths,
-        ],
+        [sys.executable, "-I", "-B", "-c", IMPORT_GUARD_SCRIPT, str(root)],
         cwd=root,
         capture_output=True,
         text=True,
@@ -327,5 +308,5 @@ def test_application_bigchat_import_is_isolated_in_a_fresh_process():
     )
     assert completed.returncode == 0, completed.stdout + completed.stderr
     assert completed.stdout == (
-        f"reminder policy isolated at {root / 'src/features/bigchat/services/reminder_policy.py'}\n"
+        f"features.bigchat.models isolated at {root / 'src/features/bigchat/models.py'}\n"
     )

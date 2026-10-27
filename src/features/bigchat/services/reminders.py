@@ -2,15 +2,16 @@ import logging
 from datetime import datetime, timedelta
 from typing import List, Optional
 
-from features.bigchat.models import BigchatEvent, Recipients, ReminderResult
-from features.bigchat.presentation.reminders import build_reminder
-from features.bigchat.services.reminder_policy import (
-    applicant_email,
-    select_bigchats,
+from features.bigchat.models import ReminderResult as ReminderResult, select_bigchats
+from features.bigchat.presentation.reminders import (
+    WEEKDAYS_KO as WEEKDAYS_KO,
+    build_reminder,
 )
-from features.members.ports import MemberDirectory
-from shared.gateways import SheetsGateway, SlackGateway
-from shared.time import KST
+from features.bigchat.services.reminder_policy import (
+    EMAIL_PAT as EMAIL_PAT,
+    applicant_email,
+)
+from features.bigchat.calendar import KST, BigchatEvent
 
 logger = logging.getLogger(__name__)
 
@@ -18,12 +19,10 @@ logger = logging.getLogger(__name__)
 class RemindBigchat:
     """신청 이메일을 슬랙 계정과 대조해 내일 빅챗의 리마인더를 보낸다."""
 
-    def __init__(
-        self, slack: SlackGateway, sheets: SheetsGateway, members: MemberDirectory
-    ):
-        self.slack = slack
-        self.sheets = sheets
-        self.members = members
+    def __init__(self, slack_client, gs_client, member_manager):
+        self.slack_client = slack_client
+        self.gs_client = gs_client
+        self.member_manager = member_manager
 
     def run(
         self,
@@ -43,7 +42,7 @@ class RemindBigchat:
             f", TEST MODE -> only {only_user_ids}" if only_user_ids else "",
         )
 
-        worksheets = self.sheets.list_worksheets()
+        worksheets = self.gs_client.list_worksheets()
         matched, parsed, ignored = select_bigchats(worksheets, tomorrow)
 
         # 시트 이름이 곧 이벤트 정보라, 왜 매칭이 안 됐는지는 이 두 줄이면 판단할 수 있다
@@ -94,8 +93,8 @@ class RemindBigchat:
         only_user_ids: Optional[List[str]],
         result: ReminderResult,
     ):
-        msg = build_reminder(event)
-        email_to_slack_id = self.members.email_to_slack_ids()
+        msg = self._build_reminder(event)
+        email_to_slack_id = self.member_manager.email_to_slack_ids()
         emails = self._applicant_emails(worksheet_id)
         logger.info(
             "Bigchat %r (worksheet %s): %d applicant(s) in sheet, %d member(s) with email in members sheet",
@@ -107,7 +106,7 @@ class RemindBigchat:
         logger.debug("Reminder message for %r:\n%s", event.name, msg)
 
         # 테스트 모드에서도 신청자와 계정의 매칭 상태를 확인한다.
-        recipients: Recipients = []
+        recipients = []
         for email in emails:
             slack_id = email_to_slack_id.get(email)
             if not slack_id:
@@ -132,7 +131,7 @@ class RemindBigchat:
         sent_cnt = 0
         for slack_id, email in recipients:
             try:
-                self.slack.send_direct_message(slack_id, msg)
+                self.slack_client.send_direct_message(user_id=slack_id, msg=msg)
                 sent_cnt += 1
                 logger.info(
                     "Sent reminder DM to %s <%s> (%s)",
@@ -155,7 +154,7 @@ class RemindBigchat:
 
     def _applicant_emails(self, worksheet_id: int) -> List[str]:
         """각 행의 첫 이메일을 골라 원래 순서대로 중복을 제거한다."""
-        rows = self.sheets.get_values(worksheet_id)
+        rows = self.gs_client.get_values(worksheet_id)
         emails, skipped_rows = [], 0
         for row in rows:
             email = applicant_email(row)
@@ -177,3 +176,7 @@ class RemindBigchat:
             skipped_rows,
         )
         return emails
+
+    @staticmethod
+    def _build_reminder(event: BigchatEvent) -> str:
+        return build_reminder(event)

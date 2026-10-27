@@ -3,19 +3,14 @@ from types import SimpleNamespace
 
 import pytest
 
-from features.bigchat.models import BigchatEvent, ReminderResult
+from features.bigchat.services.reminders import ReminderResult
 from features.bigchat.presentation.reminders import (
     USAGE,
     build_reminder,
     build_report,
     missing_targets_message,
 )
-from features.bigchat.services.commands import (
-    REMINDER_BROADCAST_PHRASE,
-    REMINDER_TEST_PHRASE,
-    REMINDER_TRIGGER,
-)
-from shared.time import KST
+from features.bigchat.calendar import KST, BigchatEvent
 
 NO_EVENTS_REPORT = (
     "2026-08-20 에 시작하는 빅챗을 못 찾았어. 그래서 보낼 것도 없었어.\n"
@@ -237,15 +232,3 @@ def test_usage():
         "- `빅챗 리마인더 테스트 @받을사람`: 멘션한 사람에게만 보내볼게 (발송이 되는지 확인용)\n"
         "- `빅챗 리마인더 지금 전원 발송`: 내일 빅챗 신청자 *전원*에게 진짜로 보낼게"
     )
-
-
-def test_usage_and_missing_targets_reuse_the_command_phrases():
-    """안내문의 명령 문구는 멘션 해석(services/commands)과 같은 상수에서 나와야 둘이 어긋나지 않는다."""
-    assert (REMINDER_TRIGGER, REMINDER_TEST_PHRASE, REMINDER_BROADCAST_PHRASE) == (
-        "빅챗 리마인더",
-        "테스트",
-        "지금 전원 발송",
-    )
-    for text in (USAGE, missing_targets_message("U1")):
-        assert f"`{REMINDER_TRIGGER} {REMINDER_TEST_PHRASE} " in text
-        assert f"`{REMINDER_TRIGGER} {REMINDER_BROADCAST_PHRASE}`" in text

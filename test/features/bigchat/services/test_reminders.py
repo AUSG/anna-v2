@@ -2,32 +2,26 @@ import unittest
 from datetime import date, datetime, timezone
 from unittest.mock import MagicMock, patch
 
-from features.bigchat.models import BigchatEvent, ReminderResult
-from features.bigchat.presentation.reminders import build_reminder
-from features.bigchat.services.reminders import RemindBigchat
-from features.members.ports import MemberDirectory
-from shared.gateways import SheetsGateway, SlackGateway
-from shared.time import KST
+from dateutil.tz import gettz
+
+from features.bigchat.services.reminders import RemindBigchat, ReminderResult
+from features.bigchat.calendar import BigchatEvent
+
+KST = gettz("Asia/Seoul")
 
 # 행사(26-08-20 목요일) 전날 저녁 6시
 NOW = datetime(2026, 8, 19, 18, 0, tzinfo=KST)
 
 
-def _dm_user_ids(slack):
-    return [c.args[0] for c in slack.send_direct_message.call_args_list]
-
-
-class RemindBigchatTestBase(unittest.TestCase):
+class TestRemindBigchat(unittest.TestCase):
     def setUp(self):
-        self.mock_slack_client = MagicMock(spec=SlackGateway)
-        self.mock_gs_client = MagicMock(spec=SheetsGateway)
-        self.mock_member_manager = MagicMock(spec=MemberDirectory)
+        self.mock_slack_client = MagicMock()
+        self.mock_gs_client = MagicMock()
+        self.mock_member_manager = MagicMock()
         self.sut = RemindBigchat(
             self.mock_slack_client, self.mock_gs_client, self.mock_member_manager
         )
 
-
-class TestRemindBigchat(RemindBigchatTestBase):
     def test_run_sends_dm_to_all_applicants_of_tomorrow_bigchat(self):
         self.mock_gs_client.list_worksheets.return_value = [
             (111, "AI 밋업 26-08-20 19:00~21:00"),
@@ -46,8 +40,8 @@ class TestRemindBigchat(RemindBigchatTestBase):
 
         assert result.sent_cnt == 2
         dm_calls = self.mock_slack_client.send_direct_message.call_args_list
-        assert [c.args[0] for c in dm_calls] == ["U0001", "U0002"]
-        msg = dm_calls[0].args[1]
+        assert [c.kwargs["user_id"] for c in dm_calls] == ["U0001", "U0002"]
+        msg = dm_calls[0].kwargs["msg"]
         assert "내일" in msg
         assert "*AI 밋업* 빅챗이 열리는 날이야" in msg
         assert "8월 20일 (목) 19:00~21:00" in msg
@@ -66,7 +60,7 @@ class TestRemindBigchat(RemindBigchatTestBase):
 
         self.sut.run(now=NOW)
 
-        msg = self.mock_slack_client.send_direct_message.call_args.args[1]
+        msg = self.mock_slack_client.send_direct_message.call_args.kwargs["msg"]
         assert "*빅챗*이 열리는 날이야" in msg
         assert "빅챗 빅챗" not in msg
 
@@ -116,7 +110,10 @@ class TestRemindBigchat(RemindBigchatTestBase):
 
         assert result.sent_cnt == 1
         self.mock_slack_client.send_direct_message.assert_called_once()
-        assert self.mock_slack_client.send_direct_message.call_args.args[0] == "U0001"
+        assert (
+            self.mock_slack_client.send_direct_message.call_args.kwargs["user_id"]
+            == "U0001"
+        )
 
     def test_run_picks_email_cell_even_when_company_name_contains_at(self):
         self.mock_gs_client.list_worksheets.return_value = [
@@ -133,7 +130,10 @@ class TestRemindBigchat(RemindBigchatTestBase):
         result = self.sut.run(now=NOW)
 
         assert result.sent_cnt == 1
-        assert self.mock_slack_client.send_direct_message.call_args.args[0] == "U0001"
+        assert (
+            self.mock_slack_client.send_direct_message.call_args.kwargs["user_id"]
+            == "U0001"
+        )
 
     def test_run_dedups_duplicated_application(self):
         self.mock_gs_client.list_worksheets.return_value = [
@@ -198,11 +198,16 @@ class TestRemindBigchat(RemindBigchatTestBase):
         assert result.ignored_sheet_cnt == 2
 
 
-class TestRemindBigchatTestMode(RemindBigchatTestBase):
+class TestRemindBigchatTestMode(unittest.TestCase):
     """only_user_ids 를 주면 신청자 대신 지정한 사람에게만 간다 (수동 트리거)."""
 
     def setUp(self):
-        super().setUp()
+        self.mock_slack_client = MagicMock()
+        self.mock_gs_client = MagicMock()
+        self.mock_member_manager = MagicMock()
+        self.sut = RemindBigchat(
+            self.mock_slack_client, self.mock_gs_client, self.mock_member_manager
+        )
         self.mock_gs_client.list_worksheets.return_value = [
             (111, "AI 밋업 26-08-20 19:00~21:00"),
         ]
@@ -218,7 +223,8 @@ class TestRemindBigchatTestMode(RemindBigchatTestBase):
     def test_sends_only_to_given_users(self):
         result = self.sut.run(now=NOW, only_user_ids=["U9999"])
 
-        assert _dm_user_ids(self.mock_slack_client) == ["U9999"]
+        dm_calls = self.mock_slack_client.send_direct_message.call_args_list
+        assert [c.kwargs["user_id"] for c in dm_calls] == ["U9999"]
         assert result.sent_cnt == 1
 
     def test_still_reports_what_the_real_run_would_have_done(self):
@@ -239,7 +245,15 @@ class TestRemindBigchatTestMode(RemindBigchatTestBase):
         assert result.resolved_cnt == 0  # 신청자는 아무도 매칭 안 됐지만
 
 
-class TestReminderBoundaries(RemindBigchatTestBase):
+class TestReminderBoundaries(unittest.TestCase):
+    def setUp(self):
+        self.mock_slack_client = MagicMock()
+        self.mock_gs_client = MagicMock()
+        self.mock_member_manager = MagicMock()
+        self.sut = RemindBigchat(
+            self.mock_slack_client, self.mock_gs_client, self.mock_member_manager
+        )
+
     def test_tomorrow_at_calendar_and_timezone_boundaries(self):
         for now, target in [
             (datetime(2026, 12, 31, 23, 59, 59, tzinfo=KST), date(2027, 1, 1)),
@@ -311,22 +325,27 @@ class TestReminderBoundaries(RemindBigchatTestBase):
             (22,),
             (11,),
         ]
-        evening = (
-            ":wave: 안녕! 내일 *저녁 빅챗*이 열리는 날이야.\n"
-            ":calendar: 8월 20일 (목) 19:00~21:00\n"
-            "잊지 말고 꼭 와줘! 내일 만나 :raised_hands:"
-        )
-        morning = (
-            ":wave: 안녕! 내일 *오전 빅챗*이 열리는 날이야.\n"
-            ":calendar: 8월 20일 (목) 10:00~12:00\n"
-            "잊지 말고 꼭 와줘! 내일 만나 :raised_hands:"
-        )
         assert [
-            c.args for c in self.mock_slack_client.send_direct_message.call_args_list
+            c.kwargs for c in self.mock_slack_client.send_direct_message.call_args_list
         ] == [
-            ("U1", evening),
-            ("U1", evening),
-            ("U1", morning),
+            {
+                "user_id": "U1",
+                "msg": ":wave: 안녕! 내일 *저녁 빅챗*이 열리는 날이야.\n"
+                ":calendar: 8월 20일 (목) 19:00~21:00\n"
+                "잊지 말고 꼭 와줘! 내일 만나 :raised_hands:",
+            },
+            {
+                "user_id": "U1",
+                "msg": ":wave: 안녕! 내일 *저녁 빅챗*이 열리는 날이야.\n"
+                ":calendar: 8월 20일 (목) 19:00~21:00\n"
+                "잊지 말고 꼭 와줘! 내일 만나 :raised_hands:",
+            },
+            {
+                "user_id": "U1",
+                "msg": ":wave: 안녕! 내일 *오전 빅챗*이 열리는 날이야.\n"
+                ":calendar: 8월 20일 (목) 10:00~12:00\n"
+                "잊지 말고 꼭 와줘! 내일 만나 :raised_hands:",
+            },
         ]
 
     def test_empty_targets_still_count_applicants_without_sending(self):
@@ -341,9 +360,7 @@ class TestReminderBoundaries(RemindBigchatTestBase):
             "a@example.com": "U1"
         }
 
-        with self.assertLogs(
-            "features.bigchat.services.reminders", level="INFO"
-        ) as logs:
+        with self.assertLogs("features.bigchat.services.reminders", level="INFO") as logs:
             result = self.sut.run(now=NOW, only_user_ids=[])
 
         assert result.applicant_cnt == 2
@@ -369,14 +386,15 @@ class TestReminderBoundaries(RemindBigchatTestBase):
             None,
         ]
 
-        with self.assertLogs(
-            "features.bigchat.services.reminders", level="INFO"
-        ) as logs:
+        with self.assertLogs("features.bigchat.services.reminders", level="INFO") as logs:
             result = self.sut.run(now=NOW, only_user_ids=["U9", "U9"])
 
         assert result.applicant_cnt == result.resolved_cnt == 0
         assert result.sent_cnt == 3
-        assert _dm_user_ids(self.mock_slack_client) == ["U9", "U9", "U9", "U9"]
+        assert [
+            c.kwargs["user_id"]
+            for c in self.mock_slack_client.send_direct_message.call_args_list
+        ] == ["U9", "U9", "U9", "U9"]
         errors = [r for r in logs.records if r.levelname == "ERROR"]
         assert [r.getMessage() for r in errors] == ["Failed to DM U9 <?> (첫 빅챗)"]
         assert errors[0].exc_info[0] is RuntimeError
@@ -389,9 +407,7 @@ class TestReminderBoundaries(RemindBigchatTestBase):
             ["@company", "b@example.com"],
             ["no email"],
         ]
-        with self.assertLogs(
-            "features.bigchat.services.reminders", level="DEBUG"
-        ) as logs:
+        with self.assertLogs("features.bigchat.services.reminders", level="DEBUG") as logs:
             assert self.sut._applicant_emails(111) == ["a@example.com", "b@example.com"]
         assert [r.getMessage() for r in logs.records] == [
             "Worksheet 111: no email in row []",
@@ -454,7 +470,10 @@ class TestReminderBoundaries(RemindBigchatTestBase):
         assert result == ReminderResult(
             date(2026, 8, 20), applicant_cnt=6, resolved_cnt=3, sent_cnt=3
         )
-        assert _dm_user_ids(self.mock_slack_client) == ["U1", "U1", "U1"]
+        assert [
+            c.kwargs["user_id"]
+            for c in self.mock_slack_client.send_direct_message.call_args_list
+        ] == ["U1", "U1", "U1"]
         assert [r.getMessage() for r in logs.records if r.levelname == "WARNING"] == [
             "Applicant not found in members sheet, skipping DM: missing@example.com (빅챗)",
             "Applicant not found in members sheet, skipping DM: A@example.com (빅챗)",
@@ -521,9 +540,7 @@ class TestReminderBoundaries(RemindBigchatTestBase):
         }
         self.mock_gs_client.get_values.return_value = [[], ["a@example.com"], [None]]
 
-        with self.assertLogs(
-            "features.bigchat.services.reminders", level="DEBUG"
-        ) as logs:
+        with self.assertLogs("features.bigchat.services.reminders", level="DEBUG") as logs:
             with self.assertRaises(AttributeError):
                 self.sut._remind_applicants(111, event, None, result)
 
@@ -535,9 +552,7 @@ class TestReminderBoundaries(RemindBigchatTestBase):
 
     def test_invalid_sheet_title_propagates_before_scan_summary(self):
         self.mock_gs_client.list_worksheets.return_value = [(1, None)]
-        with self.assertLogs(
-            "features.bigchat.services.reminders", level="INFO"
-        ) as logs:
+        with self.assertLogs("features.bigchat.services.reminders", level="INFO") as logs:
             with self.assertRaises(AttributeError):
                 self.sut.run(now=NOW)
         assert len(logs.records) == 1
@@ -560,29 +575,13 @@ class TestReminderBoundaries(RemindBigchatTestBase):
                 failing_method.side_effect = None
         self.mock_slack_client.send_direct_message.assert_not_called()
 
-    def test_dm_text_is_the_presentation_message_with_internal_unicode_line_indentation(
-        self,
-    ):
-        """DM 본문은 presentation 의 문구를 가공 없이 그대로 보낸다 (이름 안의 줄구분자도 포함)."""
-        self.mock_gs_client.list_worksheets.return_value = [
-            (1, "첫 둘 26-08-20 19:00~21:00")
-        ]
-        self.mock_gs_client.get_values.return_value = [["a@example.com"]]
-        self.mock_member_manager.email_to_slack_ids.return_value = {
-            "a@example.com": "U1"
-        }
+    def test_build_reminder_facade_keeps_internal_unicode_line_indentation(self):
         event = BigchatEvent(
-            "첫 둘",
+            "첫\u2028둘",
             datetime(2026, 8, 20, 19, tzinfo=KST),
             datetime(2026, 8, 20, 21, tzinfo=KST),
         )
-
-        self.sut.run(now=NOW)
-
-        self.mock_slack_client.send_direct_message.assert_called_once_with(
-            "U1", build_reminder(event)
-        )
-        assert build_reminder(event) == (
+        assert self.sut._build_reminder(event) == (
             "            :wave: 안녕! 내일 *첫\n"
             "둘* 빅챗이 열리는 날이야.\n"
             "            :calendar: 8월 20일 (목) 19:00~21:00\n"

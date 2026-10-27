@@ -1,260 +1,122 @@
 [
   {
     "text": "<@UANNA> Q) 새로운 빅챗",
-    "anna_id": "UANNA",
-    "expected": {
-      "command": "Question",
-      "text": "새로운 빅챗",
-      "explicit": true
-    }
+    "expected": "explicit_question"
   },
   {
     "text": "<@UANNA> 앞 문장 q) 뒤의 질문",
-    "anna_id": "UANNA",
-    "expected": {
-      "command": "Question",
-      "text": "뒤의 질문",
-      "explicit": true
-    }
+    "expected": "explicit_question"
   },
   {
     "text": "<@UANNA> q)   <@UOTHER>",
-    "anna_id": "UANNA",
-    "expected": {
-      "command": "Question",
-      "text": "",
-      "explicit": true
-    }
+    "expected": "explicit_question"
   },
   {
     "text": "<@UANNA> shuffle <@U1> <@U2>",
-    "anna_id": "UANNA",
-    "expected": {
-      "command": "Shuffle",
-      "user_ids": [
-        "U1",
-        "U2"
-      ]
-    }
+    "expected": "shuffle"
   },
   {
     "text": "<@UANNA> SHUFFLE",
-    "anna_id": "UANNA",
-    "expected": {
-      "command": "Shuffle",
-      "user_ids": []
-    }
+    "expected": "shuffle"
   },
   {
     "text": "<@UANNA> 섞어줘 <@UANNA> <@U3>",
-    "anna_id": "UANNA",
-    "expected": {
-      "command": "Shuffle",
-      "user_ids": [
-        "U3"
-      ]
-    }
+    "expected": "shuffle"
   },
   {
     "text": "<@UANNA> 빅챗 리마인더",
-    "anna_id": "UANNA",
-    "expected": {
-      "command": "Reminder",
-      "mode": "usage",
-      "target_ids": []
-    }
+    "expected": "reminder"
   },
   {
     "text": "<@UANNA> 빅챗 리마인더 테스트 <@U9> <@UANNA>",
-    "anna_id": "UANNA",
-    "expected": {
-      "command": "Reminder",
-      "mode": "test",
-      "target_ids": [
-        "U9"
-      ]
-    }
+    "expected": "reminder"
   },
   {
     "text": "<@UANNA> 빅챗 리마인더 지금 전원 발송",
-    "anna_id": "UANNA",
-    "expected": {
-      "command": "Reminder",
-      "mode": "broadcast",
-      "target_ids": []
-    }
+    "expected": "reminder"
   },
   {
     "text": "<@UANNA> 새로운 빅챗",
-    "anna_id": "UANNA",
-    "expected": {
-      "command": "CreateBigchat",
-      "sheet_name": ""
-    }
+    "expected": "create_bigchat"
   },
   {
     "text": "<@UANNA> 새로운 빅챗 AI 밋업 26-08-20 19:00~21:00\n소개글",
-    "anna_id": "UANNA",
-    "expected": {
-      "command": "CreateBigchat",
-      "sheet_name": "AI 밋업 26-08-20 19:00~21:00"
-    }
+    "expected": "create_bigchat"
   },
   {
     "text": "<@UANNA> 새 이슈 버그",
-    "anna_id": "UANNA",
-    "expected": {
-      "command": "CreateIssue",
-      "title": "버그",
-      "body": ""
-    }
+    "expected": "create_issue"
   },
   {
     "text": "<@UANNA> 이슈 만들어줘 버그",
-    "anna_id": "UANNA",
-    "expected": {
-      "command": "CreateIssue",
-      "title": "버그",
-      "body": ""
-    }
+    "expected": "create_issue"
   },
   {
     "text": "<@UANNA> 이슈 등록해줘: 버그\n본문 둘째 줄",
-    "anna_id": "UANNA",
-    "expected": {
-      "command": "CreateIssue",
-      "title": "버그",
-      "body": "본문 둘째 줄"
-    }
+    "expected": "create_issue"
   },
   {
     "text": "<@UANNA> 이슈 파줘 버그",
-    "anna_id": "UANNA",
-    "expected": {
-      "command": "CreateIssue",
-      "title": "버그",
-      "body": ""
-    }
+    "expected": "create_issue"
   },
   {
     "text": "<@UANNA> 이슈 따줘 버그",
-    "anna_id": "UANNA",
-    "expected": {
-      "command": "CreateIssue",
-      "title": "버그",
-      "body": ""
-    }
+    "expected": "create_issue"
   },
   {
     "text": "<@UANNA> 새로운 이슈",
-    "anna_id": "UANNA",
-    "expected": {
-      "command": "CreateIssue",
-      "title": "",
-      "body": ""
-    }
+    "expected": "create_issue"
   },
   {
     "text": "<@UANNA> help",
-    "anna_id": "UANNA",
-    "expected": {
-      "command": "Help"
-    }
+    "expected": "help"
   },
   {
     "text": "<@UANNA> 도움말 보여줘",
-    "anna_id": "UANNA",
-    "expected": {
-      "command": "Help"
-    }
+    "expected": "help"
   },
   {
     "text": "<@UANNA> helpful",
-    "anna_id": "UANNA",
-    "expected": {
-      "command": "Help"
-    }
+    "expected": "help"
   },
   {
     "text": "<@UANNA> HELP",
-    "anna_id": "UANNA",
-    "expected": {
-      "command": "Question",
-      "text": "HELP",
-      "explicit": false
-    }
+    "expected": "question"
   },
   {
     "text": "<@UANNA> <@UOTHER> 안녕",
-    "anna_id": "UANNA",
-    "expected": {
-      "command": "Question",
-      "text": "안녕",
-      "explicit": false
-    }
+    "expected": "question"
   },
   {
     "text": "<@UANNA> <@UOTHER> \n\t",
-    "anna_id": "UANNA",
-    "expected": {
-      "command": "Empty"
-    }
+    "expected": "empty"
   },
   {
     "text": "",
-    "anna_id": "UANNA",
-    "expected": {
-      "command": "Empty"
-    }
+    "expected": "empty"
   },
   {
     "text": "   ",
-    "anna_id": "UANNA",
-    "expected": {
-      "command": "Empty"
-    }
+    "expected": "empty"
   },
   {
     "text": "q) shuffle 빅챗 리마인더 새로운 빅챗 새로운 이슈 help",
-    "anna_id": "UANNA",
-    "expected": {
-      "command": "Question",
-      "text": "shuffle 빅챗 리마인더 새로운 빅챗 새로운 이슈 help",
-      "explicit": true
-    }
+    "expected": "explicit_question"
   },
   {
     "text": "shuffle 빅챗 리마인더 새로운 빅챗 새로운 이슈 help",
-    "anna_id": "UANNA",
-    "expected": {
-      "command": "Shuffle",
-      "user_ids": []
-    }
+    "expected": "shuffle"
   },
   {
     "text": "빅챗 리마인더 새로운 빅챗 새로운 이슈 help",
-    "anna_id": "UANNA",
-    "expected": {
-      "command": "Reminder",
-      "mode": "usage",
-      "target_ids": []
-    }
+    "expected": "reminder"
   },
   {
     "text": "새로운 빅챗 새로운 이슈 help",
-    "anna_id": "UANNA",
-    "expected": {
-      "command": "CreateBigchat",
-      "sheet_name": "새로운 이슈 help"
-    }
+    "expected": "create_bigchat"
   },
   {
     "text": "새로운 이슈 help 기능이 고장났어요",
-    "anna_id": "UANNA",
-    "expected": {
-      "command": "CreateIssue",
-      "title": "help 기능이 고장났어요",
-      "body": ""
-    }
+    "expected": "create_issue"
   }
 ]

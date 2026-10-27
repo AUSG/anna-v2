@@ -109,29 +109,24 @@ poetry install --with ci
 
 ```
 src/
-  anna.py            gunicorn 진입점. 런타임을 만들고 앱과 스케줄러를 띄운다
-  app.py             Flask/Bolt 앱 조립과 멘션 디스패치 (import 만으로는 아무것도 시작하지 않는다)
-  bootstrap.py       ProductionRuntime: 설정을 읽고 외부 클라이언트를 만드는 유일한 곳
-  runtime.py         Runtime Protocol. features 가 실행 환경에 요구하는 계약
-  slack_router.py    멘션 본문을 한 번 해석해 명령 값(dataclass)으로 바꾼다
+  anna.py            main 의 Flask/Bolt 진입점, HTTP 라우트와 스케줄러 초기화
+  slack_controller.py  기존 handler/controller.py. 클라이언트 조립과 명령별 핸들러 선택
+  slack_router.py    기존 handler/mention_router.py. 문자열 명령 분류
   features/<기능>/
-    slack.py / http.py / jobs.py   진입점. Slack 페이로드를 값으로 바꾸고 결과를 문구로 답한다 (jobs 는 앱 프로세스 안의 데일리 스케줄러)
-    models.py                      값 객체, 결과 enum. 외부 의존 없음
-    ports.py                       이 기능이 외부에 요구하는 Protocol
-    services/                      판단과 처리. 예외 대신 값을 돌려주고, 외부는 포트로만 부른다
-    presentation/                  문구·블록·캘린더 등 출력 형식. 순수 함수
-  integrations/      포트의 실제 구현 (slack_sdk, gspread, QA 서버, GitHub)
-  shared/            gateways(공통 포트), slack_events(타입화된 이벤트), 오류 경계, 로딩 이모지, 재시도, 스케줄러
+    handlers/        기존 핸들러 클래스. 파일명·클래스명·메서드와 처리 흐름을 유지
+    models.py        기존 application 의 값과 정책
+    services/        기존 공통 처리·조회 코드
+    presentation/    기존 안내 문구·답변 표현 코드
+  features/bigchat/calendar.py  기존 util/bigchat_event.py
+  integrations/      기존 implementation 의 외부 클라이언트와 시트 저장소
+  shared/            기존 오류 데코레이터, 로딩 이모지, 스케줄러와 유틸리티
 ```
 
-규칙은 `test/test_architecture.py` 가 강제한다. 핵심만 적으면:
+이번 단계는 `main` (`6986ed94f080ab48725e9af539d02e424de90423`) 의 코드를 기능별로 **그대로 옮기는 작업**이다. import 경로와 그에 따른 줄바꿈 외에는 프로덕션 코드의 본문을 바꾸지 않는다. 기존 클래스·예외·캐시·설정 singleton·SDK 호출 계약도 유지한다. 기능 개선이나 Rust 이식을 위한 타입·포트 재설계는 이 재배치와 분리한다.
 
-- `features/`·`shared/` 는 `anna`·`app`·`bootstrap`·`slack_router`·`config.env_config` 를 import 하지 않는다.
-- `services/`·`presentation/` 는 `integrations`·`slack_sdk`·`requests` 등 외부 SDK 를 import 하지 않는다.
-- 도메인 결과는 예외가 아니라 enum/dataclass 로 돌려준다. SDK 예외는 `integrations/` 안에서 값으로 바꾼다.
-- 정규식은 lookaround·역참조를 쓰지 않는다 (Rust `regex` crate 로 그대로 옮기기 위해).
+`test/fixtures/main_relocation.json` 에 41개 모듈의 이전/이후 경로, import 목록과 import를 제외한 원문 해시를 기록했다. `test/test_architecture.py` 가 조건·문구·주석까지 원문과 같은지 검사하므로, 옮기는 과정에서 로직을 다시 작성하면 실패한다. 기준 fixture 는 현재 구현에서 자동 갱신하지 않는다.
 
-이 구조는 나중에 Rust 로 1:1 재작성할 것을 전제로 잡았다. `models`·`ports`·`services`·`presentation` 이 I/O 없는 core crate, `integrations` 가 adapters crate, 진입점·`bootstrap`·`slack_router` 가 app crate 에 대응한다. `test/fixtures/contracts/*.json` 은 입력과 기대 출력을 언어 중립으로 적어 둔 계약이라 양쪽 구현이 같은 케이스를 돌릴 수 있다.
+`main` 의 기존 테스트도 같은 기능 위치로 옮겨 유지한다. 추가한 `test/test_main_behavior.py`, `test/test_anna.py`, `test/test_slack_http.py` 는 회원 캐시·QA 문맥 선택·멘션 입력과 모달 오류 안내·자동 등록 실패·캘린더 검증 순서를 확인한다. `test/fixtures/contracts/*.json` 의 언어 중립 계약도 기존 함수의 입출력 계약으로 검증한다.
 
 ## 실제 AUSG 슬랙과 로컬 안나를 연동해서 테스트하기
 

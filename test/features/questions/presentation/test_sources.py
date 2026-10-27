@@ -1,32 +1,42 @@
+from unittest.mock import MagicMock
+
 import pytest
 
-from features.questions import slack as question_slack
-from features.questions.models import ChatFailure, ChatResult
 from features.questions.presentation import answers as question_presentation
-from features.questions.presentation.answers import (
-    SERVICE_FAILURE_MESSAGE,
-    UNTRUSTED_LINK_MARKER,
-    render_parts,
-)
+from features.questions.handlers import question_response
+from features.questions.handlers.question_response import QuestionResponse
+from integrations.qa import ChatResult
 
 
-def test_handler_uses_shared_render_helpers():
-    assert question_slack.render_parts is question_presentation.render_parts
-    assert UNTRUSTED_LINK_MARKER == "[확인되지 않은 링크 제거]"
-    assert render_parts(ChatResult(answer="예전 답변")) == ("예전 답변", [])
-
-
-@pytest.mark.parametrize("reason", ["", "timeout", "invalid json", "HTTP 503"])
-def test_chat_failure_uses_service_failure_message(reason):
-    assert render_parts(ChatFailure(reason)) == (
-        "앗, 답변 서버가 잠시 응답하지 않아요. 잠시 후 다시 시도해 주세요.",
-        [],
+def test_private_helpers_and_legacy_methods_remain_available_at_old_path():
+    assert question_response._safe_source_url is question_presentation._safe_source_url
+    assert (
+        question_response._normalize_answer_url
+        is question_presentation._normalize_answer_url
     )
-    assert render_parts(ChatFailure(reason)) == (SERVICE_FAILURE_MESSAGE, [])
+    assert (
+        question_response._format_timestamp is question_presentation._format_timestamp
+    )
+    assert (
+        question_response._strip_untrusted_answer_links
+        is question_presentation._strip_untrusted_answer_links
+    )
+    assert (
+        question_response._escape_slack_text is question_presentation._escape_slack_text
+    )
+    assert question_response.UNTRUSTED_LINK_MARKER == "[확인되지 않은 링크 제거]"
+    assert QuestionResponse._render_parts("예전 답변") == ("예전 답변", [])
+    assert QuestionResponse._render_result("예전 답변") == "예전 답변"
+
+
+def test_legacy_render_result_none_uses_service_failure_literal():
+    assert QuestionResponse._render_result(None) == (
+        "앗, 답변 서버가 잠시 응답하지 않아요. 잠시 후 다시 시도해 주세요."
+    )
 
 
 @pytest.mark.parametrize(
-    ("answer", "expected"),
+    ("result", "expected"),
     [
         (
             "예전 답변 https://evil.test/plain",
@@ -42,8 +52,8 @@ def test_chat_failure_uses_service_failure_message(reason):
         ),
     ],
 )
-def test_render_parts_removes_untrusted_urls_from_uncited_answers(answer, expected):
-    assert render_parts(ChatResult(answer=answer)) == (expected, [])
+def test_legacy_render_result_removes_untrusted_urls(result, expected):
+    assert QuestionResponse._render_result(result) == expected
 
 
 @pytest.mark.parametrize(
@@ -57,5 +67,17 @@ def test_render_parts_removes_untrusted_urls_from_uncited_answers(answer, expect
         ("", "흐음~ 나도 잘 모르는 일인걸? 오거나이저를 찾아볼까?"),
     ],
 )
-def test_render_parts_uses_status_fallback_for_empty_answer(status, expected):
-    assert render_parts(ChatResult(answer="", status=status)) == (expected, [])
+def test_legacy_render_result_empty_answer_keeps_status_fallback(status, expected):
+    assert (
+        QuestionResponse._render_result(ChatResult(answer="", status=status))
+        == expected
+    )
+
+
+def test_legacy_render_result_uses_patched_class_render_parts(monkeypatch):
+    result = object()
+    render_parts = MagicMock(return_value=("교체 답변", ["첫 출처", "둘째 출처"]))
+    monkeypatch.setattr(QuestionResponse, "_render_parts", staticmethod(render_parts))
+
+    assert QuestionResponse._render_result(result) == "교체 답변\n\n출처: 첫 출처, 둘째 출처"
+    render_parts.assert_called_once_with(result)

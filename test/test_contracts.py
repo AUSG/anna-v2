@@ -4,24 +4,25 @@
 새 케이스는 JSON 에 추가하고 기대값은 손으로 확인해서 적는다.
 """
 
-import dataclasses
 import json
 from datetime import date
 from pathlib import Path
 
 import pytest
 
-from features.bigchat.models import ReminderResult, parse_sheet_name
-from features.bigchat.presentation.calendar import to_gcal_link_truncated, to_ics
+from features.bigchat.models import ReminderResult
+from features.bigchat.calendar import parse_sheet_name, to_gcal_link_truncated, to_ics
 from features.bigchat.presentation.reminders import build_reminder, build_report
 from features.bigchat.services.reminder_policy import applicant_email, select_bigchats
 from features.bigchat.services.sheet_link import extract_worksheet_id
-from features.issues.presentation.content import build_issue_body, build_issue_footer
-from features.issues.services.commands import parse_issue_command
-from features.questions.models import ChatFailure, ChatResult, Source
+from features.issues.presentation.content import (
+    build_issue_body,
+    build_issue_footer,
+    parse_issue_command,
+)
+from features.questions.models import ChatResult, Source
 from features.questions.presentation.answers import render_parts
-from features.questions.services.commands import extract_question
-from slack_router import parse_mention
+from slack_router import classify_mention, extract_question
 
 CONTRACTS = Path(__file__).parent / "fixtures" / "contracts"
 
@@ -35,17 +36,11 @@ def cases(name, key=None):
     return data[key] if key else data
 
 
-def as_json(value):
-    """dataclass 를 JSON 과 비교 가능한 형태로 (tuple 은 list 로)."""
-    return json.loads(json.dumps(dataclasses.asdict(value), ensure_ascii=False))
-
-
 @pytest.mark.parametrize(
     "case", cases("mention_routing.json"), ids=lambda c: c["text"][:40]
 )
 def test_mention_routing(case):
-    command = parse_mention(case["text"], case["anna_id"])
-    assert {"command": type(command).__name__, **as_json(command)} == case["expected"]
+    assert classify_mention(case["text"]) == case["expected"]
 
 
 @pytest.mark.parametrize(
@@ -69,7 +64,8 @@ def test_sheet_names(case):
     "case", cases("issue_commands.json"), ids=lambda c: c["text"][:30]
 )
 def test_issue_commands(case):
-    assert as_json(parse_issue_command(case["text"])) == case["expected"]
+    title, body = parse_issue_command(case["text"])
+    assert {"title": title, "body": body} == case["expected"]
 
 
 @pytest.mark.parametrize(
@@ -84,7 +80,7 @@ def test_question_extraction(case):
 
 def _chat_result(raw):
     if "failure" in raw:
-        return ChatFailure(raw["failure"])
+        return None
     return ChatResult(
         answer=raw["answer"],
         sources=[Source(**source) for source in raw["sources"]],

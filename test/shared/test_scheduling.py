@@ -3,9 +3,8 @@ import time
 import unittest
 from datetime import datetime, timedelta, timezone
 
-from shared.time import KST
-from shared.scheduling import next_fire_time, run_with_admin_alert
-from test.fixtures.runtime import fake_slack
+from features.bigchat.calendar import KST
+from shared.scheduling import next_fire_time
 
 
 class TestNextFireTime(unittest.TestCase):
@@ -41,9 +40,7 @@ class TestFireTimeIsIndependentOfServerTimezone(unittest.TestCase):
                 os.environ["TZ"] = server_tz
                 time.tzset()
 
-                fire_at = next_fire_time(
-                    datetime(2026, 8, 19, 8, 30, tzinfo=KST), 18, 0
-                )
+                fire_at = next_fire_time(datetime(2026, 8, 19, 8, 30, tzinfo=KST), 18, 0)
 
                 assert fire_at.astimezone(timezone.utc) == datetime(
                     2026, 8, 19, 9, 0, tzinfo=timezone.utc
@@ -58,53 +55,4 @@ class TestFireTimeIsIndependentOfServerTimezone(unittest.TestCase):
     def test_kst_is_resolvable_and_utc_plus_9(self):
         """gettz 가 None 을 주면 datetime.now(None) 이 서버 로컬 시각이 되어 발송 시각이 통째로 틀어진다."""
         assert KST is not None
-        assert datetime(2026, 8, 19, 18, 0, tzinfo=KST).utcoffset() == timedelta(
-            hours=9
-        )
-
-
-class TestRunWithAdminAlert(unittest.TestCase):
-    def test_returns_job_result_without_touching_slack(self):
-        slack = fake_slack()
-
-        result = run_with_admin_alert(
-            lambda: "digest posted",
-            label="daily-digest",
-            slack=slack,
-            admin_channel="C_ADMIN",
-        )
-
-        assert result == "digest posted"
-        slack.send_channel_message.assert_not_called()
-
-    def test_swallows_job_failure_and_alerts_admin_with_traceback(self):
-        slack = fake_slack()
-
-        def job():
-            raise RuntimeError("crawler down")
-
-        result = run_with_admin_alert(
-            job, label="daily-digest", slack=slack, admin_channel="C_ADMIN"
-        )
-
-        assert result is None  # 스케줄러 스레드가 죽지 않는다
-        slack.send_channel_message.assert_called_once()
-        channel, text = slack.send_channel_message.call_args.args
-        assert channel == "C_ADMIN"
-        assert "daily-digest" in text
-        assert "RuntimeError: crawler down" in text
-        assert "in job" in text  # traceback
-
-    def test_notification_failure_is_swallowed_too(self):
-        slack = fake_slack()
-        slack.send_channel_message.side_effect = RuntimeError("slack down")
-
-        def job():
-            raise RuntimeError("crawler down")
-
-        assert (
-            run_with_admin_alert(
-                job, label="daily-digest", slack=slack, admin_channel="C_ADMIN"
-            )
-            is None
-        )
+        assert datetime(2026, 8, 19, 18, 0, tzinfo=KST).utcoffset() == timedelta(hours=9)

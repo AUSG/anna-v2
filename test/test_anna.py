@@ -1,261 +1,175 @@
-"""배포·로컬 실행, 앱 등록과 스케줄 시작을 검증한다."""
+"""옮긴 main 진입점의 등록·ack·오류 안내·스케줄 설정을 검증한다."""
 
-import runpy
+import json
 from unittest.mock import MagicMock
 
 import pytest
 from flask import Response
 
-import app
-from features.bigchat import jobs as bigchat_jobs, slack as bigchat_slack
-from features.bigchat.presentation.modals import (
+import slack_controller
+from features.bigchat.calendar import KST
+from features.bigchat.handlers.create_bigchat_modal import (
     CREATE_BIGCHAT_SHORTCUT_ID,
     CREATE_BIGCHAT_VIEW_ID,
 )
-from features.community import jobs as community_jobs, slack as community_slack
-from shared.slack_events import ReactionEvent
-from shared.time import KST
-from test.fixtures.runtime import FakeBoltApp, fake_runtime
+from shared import error_boundary
+from test.fixtures.anna import load_anna
 from test.fixtures.slack_events import (
     create_sample_app_mention_event,
+    create_sample_message_shortcut_body,
     create_sample_reaction_added_event,
+    create_sample_view_submission_body,
 )
 
-ENTRYPOINT_MODULES = {
-    "app_mention": app,
-    "reaction_added": bigchat_slack,
-    "reaction_removed": bigchat_slack,
-    "message": community_slack,
-    "channel_created": community_slack,
-}
 
-
-def untouched(runtime):
-    """핸들러 등록만으로는 어떤 외부 게이트웨이도 만지지 않아야 한다."""
-    return (
-        runtime.slack.mock_calls == []
-        and runtime.sheets().mock_calls == []
-        and runtime.members().mock_calls == []
-        and runtime.qa().mock_calls == []
-        and runtime.github().mock_calls == []
-        and runtime.web_clients == []
-    )
-
-
-@pytest.fixture
-def wired():
-    runtime = fake_runtime()
-    bolt_app = FakeBoltApp()
-    flask_app = app.create_app(runtime, bolt_app=bolt_app)
-    return flask_app, bolt_app, runtime
-
-
-def test_factory_registers_all_slack_entrypoints_without_constructing_clients(wired):
-    flask_app, bolt_app, runtime = wired
-    assert {name for (kind, name) in bolt_app.handlers if kind == "event"} == {
+@pytest.mark.parametrize("reminders", [False, True])
+@pytest.mark.parametrize("digest", [False, True])
+def test_entrypoint_keeps_main_handlers_and_scheduler_settings(
+    monkeypatch, reminders, digest
+):
+    module, bolt, scheduler = load_anna(monkeypatch, reminders=reminders, digest=digest)
+    assert {selector for kind, selector in bolt.handlers if kind == "event"} == {
         "reaction_added",
         "reaction_removed",
-        "message",
-        "channel_created",
         "app_mention",
+        "channel_created",
+        "message",
     }
-    assert ("shortcut", CREATE_BIGCHAT_SHORTCUT_ID) in bolt_app.handlers
-    assert ("view", CREATE_BIGCHAT_VIEW_ID) in bolt_app.handlers
-    actions = [selector for kind, selector in bolt_app.handlers if kind == "action"]
+    assert ("shortcut", CREATE_BIGCHAT_SHORTCUT_ID) in bolt.handlers
+    assert ("view", CREATE_BIGCHAT_VIEW_ID) in bolt.handlers
+    actions = [selector for kind, selector in bolt.handlers if kind == "action"]
     assert len(actions) == 1 and actions[0].match("calendar_gcal")
-    assert flask_app.extensions["slack_app"] is bolt_app
-    assert untouched(runtime)
+    expected = [
+        (enabled, job, hour, name)
+        for enabled, job, hour, name in (
+            (reminders, module.remind_bigchat, 18, "bigchat-reminder"),
+            (digest, module.post_daily_digest, 10, "daily-digest"),
+        )
+        if enabled
+    ]
+    assert scheduler.call_count == len(expected)
+    assert scheduler.return_value.start.call_count == len(expected)
+    for call, (_, job, hour, name) in zip(scheduler.call_args_list, expected):
+        assert call.kwargs == dict(job=job, hour=hour, minute=0, tz=KST, name=name)
 
 
-def test_health_response_and_http_routes(wired):
-    flask_app, _, runtime = wired
-    client = flask_app.test_client()
-    response = client.get("/health")
-    assert response.status_code == 200
-    assert response.json == {"status": "ok"}
-    rules = {rule.rule: rule.methods for rule in flask_app.url_map.iter_rules()}
-    assert "POST" in rules["/slack/events"]
-    assert "GET" in rules["/bigchat/<int:worksheet_id>/event.ics"]
+def test_health_and_slack_http_routes(monkeypatch):
+    module, _, _ = load_anna(monkeypatch)
+    client = module.flask_app.test_client()
+    assert client.get("/health").json == {"status": "ok"}
     assert client.get("/slack/events").status_code == 405
-    assert untouched(runtime)
-
-
-def test_webhook_is_forwarded_to_bolt(monkeypatch):
-    request_handler = MagicMock()
-    request_handler.handle.return_value = Response("accepted", status=202)
-    factory = MagicMock(return_value=request_handler)
-    monkeypatch.setattr(app, "SlackRequestHandler", factory)
-    bolt_app = FakeBoltApp()
-    flask_app = app.create_app(fake_runtime(), bolt_app=bolt_app)
-    response = flask_app.test_client().post(
-        "/slack/events", json={"type": "url_verification"}
-    )
+    handler = MagicMock()
+    handler.handle.return_value = Response("accepted", status=202)
+    monkeypatch.setattr(module, "slack_request_handler", handler)
+    response = client.post("/slack/events", json={"type": "url_verification"})
     assert response.status_code == 202 and response.text == "accepted"
-    factory.assert_called_once_with(bolt_app)
-    request_handler.handle.assert_called_once()
+    handler.handle.assert_called_once()
 
 
+@pytest.mark.parametrize(
+    "event_type,function",
+    [("app_mention", "mention_response"), ("message", "subin_like_response")],
+)
 @pytest.mark.parametrize(
     "edited", [{"edited": {"ts": "2"}}, {"subtype": "message_changed"}]
 )
-@pytest.mark.parametrize("event_type", ["app_mention", "message"])
-def test_edited_messages_are_acked_without_dispatch(
-    wired, monkeypatch, edited, event_type
+def test_edited_events_are_acked_without_running_commands(
+    monkeypatch, event_type, function, edited
 ):
-    _, bolt_app, runtime = wired
+    module, bolt, _ = load_anna(monkeypatch)
     dispatch = MagicMock()
-    if event_type == "app_mention":
-        monkeypatch.setattr(app, "mention_response", dispatch)
-    else:
-        monkeypatch.setattr(community_slack, "subin_like_response", dispatch)
+    monkeypatch.setattr(module, function, dispatch)
     ack = MagicMock()
-    bolt_app.handlers["event", event_type](
-        ack=ack, event={"ts": "1", **edited}, client=MagicMock()
+    bolt.handlers["event", event_type](
+        ack=ack, event={"ts": "1", **edited}, say=MagicMock(), client=MagicMock()
     )
     ack.assert_called_once_with()
     dispatch.assert_not_called()
-    assert untouched(runtime)
 
 
 @pytest.mark.parametrize(
-    ("event_type", "function"),
-    [("reaction_added", "join_bigchat"), ("reaction_removed", "abandon_bigchat")],
-)
-def test_reaction_handlers_ack_before_dispatch(
-    wired, monkeypatch, event_type, function
-):
-    _, bolt_app, runtime = wired
-    trace = MagicMock()
-    monkeypatch.setattr(bigchat_slack, function, trace.dispatch)
-    event = {**create_sample_reaction_added_event("gogo"), "type": event_type}
-    client = MagicMock()
-    bolt_app.handlers["event", event_type](ack=trace.ack, event=event, client=client)
-    assert [call[0] for call in trace.mock_calls] == ["ack", "dispatch"]
-    trace.dispatch.assert_called_once_with(
-        ReactionEvent.from_payload(event), runtime.slack, runtime
-    )
-    runtime.slack.send_channel_message.assert_not_called()
-
-
-@pytest.mark.parametrize(
-    ("event_type", "function", "event"),
+    "event_type,function",
     [
-        (
-            "app_mention",
-            "mention_response",
-            create_sample_app_mention_event("<@UANNA> help"),
-        ),
-        ("reaction_added", "join_bigchat", create_sample_reaction_added_event("gogo")),
-        (
-            "reaction_removed",
-            "abandon_bigchat",
-            {**create_sample_reaction_added_event("gogo"), "type": "reaction_removed"},
-        ),
+        ("reaction_added", "join_bigchat"),
+        ("reaction_removed", "abandon_bigchat"),
+        ("app_mention", "mention_response"),
+        ("channel_created", "announce_new_channel_created"),
+        ("message", "subin_like_response"),
     ],
 )
-def test_handler_failures_are_reported_to_the_admin_channel_from_settings(
-    monkeypatch, event_type, function, event
+def test_events_ack_before_forwarding_the_original_payload(
+    monkeypatch, event_type, function
 ):
-    runtime = fake_runtime(ADMIN_CHANNEL="C_ADMIN_FROM_RUNTIME")
-    bolt_app = FakeBoltApp()
-    app.create_app(runtime, bolt_app=bolt_app)
-    module = ENTRYPOINT_MODULES[event_type]
-    failure = RuntimeError("handler failed")
-    monkeypatch.setattr(module, function, MagicMock(side_effect=failure))
-    report = MagicMock()
-    monkeypatch.setattr(module, "report_failure", report)
-
-    ack = MagicMock()
-    bolt_app.handlers["event", event_type](ack=ack, event=event, client=MagicMock())
-
-    ack.assert_called_once_with()
-    report.assert_called_once_with(
-        runtime.slack, "C_ADMIN_FROM_RUNTIME", event, failure
+    module, bolt, _ = load_anna(monkeypatch)
+    trace = MagicMock()
+    monkeypatch.setattr(module, function, trace.dispatch)
+    event = (
+        create_sample_reaction_added_event("gogo")
+        if event_type.startswith("reaction")
+        else create_sample_app_mention_event("<@U01BN035Y6L> help")
     )
+    say, client = MagicMock(), MagicMock()
+    bolt.handlers["event", event_type](
+        ack=trace.ack, event=event, say=say, client=client
+    )
+    assert [call[0] for call in trace.mock_calls] == ["ack", "dispatch"]
+    trace.dispatch.assert_called_once_with(event=event, say=say, client=client)
 
 
-def test_mention_handler_hands_bolt_client_to_runtime(monkeypatch):
-    runtime = fake_runtime()
-    bolt_app = FakeBoltApp()
-    app.create_app(runtime, bolt_app=bolt_app)
+@pytest.mark.parametrize("thread_ts", [None, "1688800000.000001"])
+def test_shortcut_keeps_main_normalization(monkeypatch, thread_ts):
+    module, bolt, _ = load_anna(monkeypatch)
     dispatch = MagicMock()
-    monkeypatch.setattr(app, "mention_response", dispatch)
-    seen = []
-    runtime.slack_client = lambda client: seen.append(client) or runtime.slack
-
-    client = MagicMock(name="bolt-client")
-    event = create_sample_app_mention_event("<@UANNA> help")
-    bolt_app.handlers["event", "app_mention"](
-        ack=MagicMock(), event=event, client=client
+    monkeypatch.setattr(module, "open_create_bigchat_modal", dispatch)
+    body = create_sample_message_shortcut_body(thread_ts=thread_ts)
+    say, client, ack = MagicMock(), MagicMock(), MagicMock()
+    bolt.handlers["shortcut", CREATE_BIGCHAT_SHORTCUT_ID](
+        ack=ack, body=body, say=say, client=client
     )
-
-    assert seen == [client]
-    dispatch.assert_called_once()
-    assert dispatch.call_args.args[0].text == event["text"]
-    assert dispatch.call_args.args[1] is runtime.slack
-    assert dispatch.call_args.args[2] is runtime
-
-
-@pytest.mark.parametrize("bigchat_enabled", [False, True])
-@pytest.mark.parametrize("digest_enabled", [False, True])
-def test_schedulers_start_only_when_explicitly_requested(
-    monkeypatch, bigchat_enabled, digest_enabled
-):
-    runtime = fake_runtime(
-        BIGCHAT_REMINDER_ENABLED=bigchat_enabled,
-        DAILY_DIGEST_ENABLED=digest_enabled,
-    )
-    reminders, digests = MagicMock(), MagicMock()
-    monkeypatch.setattr(bigchat_jobs, "DailyScheduler", reminders)
-    monkeypatch.setattr(community_jobs, "DailyScheduler", digests)
-    app.create_app(runtime, bolt_app=FakeBoltApp())
-    reminders.assert_not_called()
-    digests.assert_not_called()
-
-    app.start_schedulers(runtime)
-    for enabled, factory, hour, name, job in (
-        (
-            bigchat_enabled,
-            reminders,
-            18,
-            "bigchat-reminder",
-            bigchat_jobs.remind_bigchat,
-        ),
-        (digest_enabled, digests, 10, "daily-digest", community_jobs.post_daily_digest),
-    ):
-        assert factory.call_count == int(enabled)
-        if enabled:
-            assert factory.call_args.kwargs["hour"] == hour
-            assert factory.call_args.kwargs["minute"] == 0
-            assert factory.call_args.kwargs["tz"] is KST
-            assert factory.call_args.kwargs["name"] == name
-            assert factory.call_args.kwargs["job"].func is job
-            assert factory.call_args.kwargs["job"].args == (runtime,)
-            factory.return_value.start.assert_called_once_with()
-    assert untouched(runtime)
+    event = dispatch.call_args.kwargs["event"]
+    assert event["channel"] == body["channel"]["id"]
+    assert event["ts"] == (thread_ts or body["message"]["ts"])
+    assert event["user"] == body["user"]["id"]
+    ack.assert_called_once_with()
 
 
-@pytest.mark.parametrize("module_name", ["anna_boot_test", "__main__"])
-def test_gunicorn_and_local_entrypoints_initialize_the_app(monkeypatch, module_name):
-    runtime = fake_runtime(LOGLEVEL="WARNING")
-    flask_app = MagicMock()
-    bolt_app = flask_app.extensions["slack_app"]
-    factory = MagicMock(return_value=flask_app)
-    schedulers = MagicMock()
-    init_logger = MagicMock()
-    monkeypatch.setattr("bootstrap.create_runtime", MagicMock(return_value=runtime))
-    monkeypatch.setattr(app, "create_app", factory)
-    monkeypatch.setattr(app, "start_schedulers", schedulers)
-    monkeypatch.setattr("config.log_config.init_logger", init_logger)
-
-    namespace = runpy.run_module("anna", run_name=module_name)
-    assert namespace["runtime"] is runtime
-    assert namespace["flask_app"] is flask_app
-    assert namespace["app"] is bolt_app
-    init_logger.assert_called_once_with("WARNING")
-    factory.assert_called_once_with(runtime)
-    schedulers.assert_called_once_with(runtime)
-    if module_name == "__main__":
-        flask_app.run.assert_called_once_with(host="0.0.0.0", port=8080)
+@pytest.mark.parametrize("kind", ["modal", "shortcut"])
+def test_interaction_failures_keep_main_thread_notice(monkeypatch, kind):
+    _, bolt, _ = load_anna(monkeypatch)
+    monkeypatch.setattr(error_boundary, "ADMIN_CHANNEL", "C_ADMIN")
+    monkeypatch.setattr(slack_controller, "GoogleSpreadsheetClient", MagicMock())
+    monkeypatch.setattr(slack_controller, "_get_member_manager", MagicMock())
+    if kind == "modal":
+        body = create_sample_view_submission_body(
+            "AI 밋업", "2026-08-20", "19:00", "21:00"
+        )
+        metadata = json.loads(body["view"]["private_metadata"])
+        channel, ts = metadata["channel"], metadata["thread_ts"]
+        handler = MagicMock()
+        handler.return_value.run.side_effect = RuntimeError("시트 생성 실패")
+        monkeypatch.setattr(slack_controller, "SubmitCreateBigchatModal", handler)
+        callback = bolt.handlers["view", CREATE_BIGCHAT_VIEW_ID]
     else:
-        flask_app.run.assert_not_called()
+        body = create_sample_message_shortcut_body()
+        channel, ts = body["channel"]["id"], body["message"]["ts"]
+        handler = MagicMock()
+        handler.return_value.run.side_effect = RuntimeError("모달 열기 실패")
+        monkeypatch.setattr(slack_controller, "OpenCreateBigchatModal", handler)
+        callback = bolt.handlers["shortcut", CREATE_BIGCHAT_SHORTCUT_ID]
+    say = MagicMock()
+    callback(ack=MagicMock(), body=body, say=say, client=MagicMock())
+    assert say.call_count == 2
+    assert say.call_args_list[0].kwargs["channel"] == "C_ADMIN"
+    assert say.call_args.kwargs["channel"] == channel
+    assert say.call_args.kwargs["thread_ts"] == ts
+    assert "요청이 정상적으로 처리되지 않았어" in say.call_args.kwargs["text"]
+
+
+def test_calendar_button_is_acked_without_other_actions(monkeypatch):
+    _, bolt, _ = load_anna(monkeypatch)
+    callback = next(
+        handler for (kind, _), handler in bolt.handlers.items() if kind == "action"
+    )
+    ack = MagicMock()
+    callback(ack=ack)
+    ack.assert_called_once_with()

@@ -1,5 +1,3 @@
-"""SheetsGateway 의 gspread 구현."""
-
 import logging
 import threading
 from datetime import datetime
@@ -10,9 +8,8 @@ from gspread import service_account_from_dict, Worksheet, Spreadsheet
 from gspread.exceptions import WorksheetNotFound
 from gspread_formatting import set_column_width
 
-from config.env_config import Settings
-from shared.gateways import AppendOutcome
-from shared.retry import retry
+from config.env_config import envs
+from shared.utils import with_retry
 
 # append_row_if_absent 의 확인-후-추가를 원자적으로 만드는 프로세스 전역 락.
 # 이 앱은 단일 프로세스(gunicorn --workers 1)로 떠 있어서 프로세스 락으로 충분하다.
@@ -20,10 +17,27 @@ _APPEND_IF_ABSENT_LOCK = threading.Lock()
 
 
 class GoogleSpreadsheetClient:
-    def __init__(self, settings: Settings):
+    def __init__(self):
         self.logger = logging.getLogger(__name__)
-        self.gs_client = service_account_from_dict(settings.gcp_service_account())
-        self.spreadsheet_id = settings.FORM_SPREADSHEET_ID
+        self.gs_client = self._build_gs_client()
+        self.spreadsheet_id = envs.FORM_SPREADSHEET_ID
+
+    @staticmethod
+    def _build_gs_client():
+        return service_account_from_dict(
+            {
+                "type": envs.GCP_type,
+                "project_id": envs.GCP_project_id,
+                "private_key_id": envs.GCP_private_key_id,
+                "private_key": envs.GCP_private_key.replace("\\n", "\n"),
+                "client_email": envs.GCP_client_email,
+                "client_id": envs.GCP_client_id,
+                "auth_uri": envs.GCP_auth_uri,
+                "token_uri": envs.GCP_token_uri,
+                "auth_provider_x509_cert_url": envs.GCP_auth_provider_x509_cert_url,
+                "client_x509_cert_url": envs.GCP_client_x509_cert_url,
+            }
+        )
 
     def _create_worksheet(
         self,
@@ -50,64 +64,46 @@ class GoogleSpreadsheetClient:
 
         return worksheet.id
 
+    @with_retry(non_retryable_exceptions=(WorksheetNotFound,))
     def append_row(
         self,
         worksheet_id: int,
         values: List[str],
         timestamp_on_first_row: bool = False,
     ):
-        def _append():
-            _values = list(values)
-            worksheet = self._get_worksheet(worksheet_id)
-            if timestamp_on_first_row:
-                _values.insert(0, self._yyyymmddhhmmss())
-            worksheet.append_row(_values)
+        _values = list(values)
+        worksheet = self._get_worksheet(worksheet_id)
 
-        retry(_append, non_retryable=(WorksheetNotFound,))
+        if timestamp_on_first_row:
+            _values.insert(0, self._yyyymmddhhmmss())
 
-    def append_row_if_absent(
-        self, worksheet_id: int, values: List[str]
-    ) -> AppendOutcome:
-        """같은 행이 이미 있으면 추가하지 않는다.
+        worksheet.append_row(_values)
 
-        빅챗 등록은 반응 이벤트와 시트 생성 직후의 일괄 등록이 거의 동시에 같은
-        사람을 처리할 수 있어서, 확인과 추가를 프로세스 전역 락으로 직렬화한다.
+    def append_row_if_absent(self, worksheet_id: int, values: List[str]) -> bool:
+        """같은 행이 이미 있으면 추가하지 않는다. 실제로 추가했으면 True.
+
+        빅챗 등록은 JoinBigchat(reaction_added)과 시트 생성 직후의 일괄 등록(#89)이
+        거의 동시에 같은 사람을 처리할 수 있어서, 확인과 추가를 락으로 직렬화한다.
         """
         with _APPEND_IF_ABSENT_LOCK:
-            try:
-                if list(values) in self._values(worksheet_id):
-                    return AppendOutcome.ALREADY_PRESENT
-                self.append_row(worksheet_id, values)
-            except WorksheetNotFound:
-                return AppendOutcome.WORKSHEET_MISSING
-            return AppendOutcome.ADDED
+            if list(values) in self.get_values(worksheet_id):
+                return False
+            self.append_row(worksheet_id, values)
+            return True
 
-    def _values(self, worksheet_id: int, cell_range=None) -> List[List[str]]:
-        return retry(
-            lambda: self._get_worksheet(worksheet_id).get_values(cell_range),
-            non_retryable=(WorksheetNotFound,),
-        )
-
+    @with_retry(non_retryable_exceptions=(WorksheetNotFound,))
     def get_values(self, worksheet_id: int, cell_range=None) -> List[List[str]]:
-        try:
-            return self._values(worksheet_id, cell_range)
-        except WorksheetNotFound:
-            return []
+        worksheet = self._get_worksheet(worksheet_id)
+        return worksheet.get_values(cell_range)
 
-    def get_worksheet_title(self, worksheet_id: int) -> Optional[str]:
-        try:
-            return retry(
-                lambda: self._get_worksheet(worksheet_id).title,
-                non_retryable=(WorksheetNotFound,),
-            )
-        except WorksheetNotFound:
-            return None
+    @with_retry(non_retryable_exceptions=(WorksheetNotFound,))
+    def get_worksheet_title(self, worksheet_id: int) -> str:
+        return self._get_worksheet(worksheet_id).title
 
+    @with_retry()
     def list_worksheets(self) -> List[Tuple[int, str]]:
         """스프레드시트의 모든 워크시트를 (worksheet_id, title) 목록으로 반환한다."""
-        return retry(
-            lambda: [(ws.id, ws.title) for ws in self._get_spreadsheet().worksheets()]
-        )
+        return [(ws.id, ws.title) for ws in self._get_spreadsheet().worksheets()]
 
     def get_url(self, worksheet_id: int) -> str:
         return f"https://docs.google.com/spreadsheets/d/{self.spreadsheet_id}/edit#gid={str(worksheet_id)}"
@@ -120,30 +116,42 @@ class GoogleSpreadsheetClient:
     def _yyyymmddhhmmss(timezone: str = "Asia/Seoul") -> str:
         return datetime.now(gettz(timezone)).strftime("%Y%m%d %H%M%S")  # korean time
 
+    @with_retry()
     def _get_spreadsheet(self) -> Spreadsheet:
-        return retry(lambda: self.gs_client.open_by_key(self.spreadsheet_id))
+        return self.gs_client.open_by_key(self.spreadsheet_id)
 
+    @with_retry(non_retryable_exceptions=(WorksheetNotFound,))
     def _get_worksheet(self, worksheet_id: int) -> Worksheet:
-        return retry(
-            lambda: self._get_spreadsheet().get_worksheet_by_id(worksheet_id),
-            non_retryable=(WorksheetNotFound,),
+        spreadsheet = self._get_spreadsheet()
+        worksheet = spreadsheet.get_worksheet_by_id(worksheet_id)
+        return worksheet
+
+    @with_retry()
+    def create_bigchat_sheet(self, title=None) -> Optional[int]:
+        worksheet_id: Optional[int] = self._create_worksheet(
+            title=title,
+            header_values=[
+                # csv 만들때 헤더 없는게 낫다고 해서 전부 주석처리 함
+                # "visitor_name",
+                # "visitor_company_name",
+                # "visitor_email",
+                # "visitor_mobile",
+            ],
         )
 
-    def create_bigchat_sheet(self, title: str) -> int:
-        # csv 로 뽑을 때 헤더가 없는 편이 낫다고 해서 헤더 행은 비워 둔다
-        return retry(lambda: self._create_worksheet(title=title, header_values=[]))
+        return worksheet_id
 
-    def delete_row(self, worksheet_id: int, query: str) -> bool:
-        """query와 일치하는 첫 셀의 행을 삭제한다. 일치하는 셀이 없으면 아무것도 하지 않는다."""
+    @with_retry(non_retryable_exceptions=(WorksheetNotFound,))
+    def delete_row(self, worksheet_id: int, query: str):
+        """
+        XXX: 실제로 삭제할 정보가 없어서 아무 동작을 하지 않아도 에러를 뱉지 않는다.
 
-        def _delete():
-            worksheet = self._get_worksheet(worksheet_id)
-            cell = worksheet.find(query)
-            if cell:
-                worksheet.delete_rows(cell.row)
+        :param worksheet_id:
+        :param query: str, re.RegexObject (e.g, re.compile(".*"))
+        :return:
+        """
+        worksheet = self._get_worksheet(worksheet_id)
 
-        try:
-            retry(_delete, non_retryable=(WorksheetNotFound,))
-        except WorksheetNotFound:
-            return False
-        return True
+        cell = worksheet.find(query)
+        if cell:
+            worksheet.delete_rows(cell.row)

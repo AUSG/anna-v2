@@ -1,15 +1,15 @@
 from typing import List, Optional
 
-from features.bigchat.models import ReminderResult, BigchatEvent
-from features.bigchat.services.commands import (
-    REMINDER_BROADCAST_PHRASE as BROADCAST_PHRASE,
-    REMINDER_TEST_PHRASE as TEST_PHRASE,
-    REMINDER_TRIGGER as TRIGGER,
-)
-from shared.text import strip_multiline
+from features.bigchat.models import ReminderResult
+from slack_router import REMINDER_TRIGGER as TRIGGER
+from features.bigchat.calendar import BigchatEvent
+from shared.utils import strip_multiline
 
 # 이름의 줄구분자가 출력 공백에 영향을 주므로 문자열 들여쓰기를 유지한다.
 WEEKDAYS_KO = ["월", "화", "수", "목", "금", "토", "일"]
+TEST_PHRASE = "테스트"
+# 전원 발송은 이 확인 문구가 있을 때만 실행한다.
+BROADCAST_PHRASE = "지금 전원 발송"
 
 USAGE = strip_multiline(
     f"""

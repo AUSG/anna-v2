@@ -8,8 +8,6 @@ def _get_project_root() -> Path:
 
 
 class Settings(BaseSettings):
-    """실행 설정. 전역으로 읽지 않고 bootstrap 이 한 번 만들어 생성자로 넘긴다."""
-
     model_config = SettingsConfigDict(
         env_file=[
             f"{_get_project_root()}/env/.env.secret",
@@ -42,8 +40,6 @@ class Settings(BaseSettings):
     # channels
     ADMIN_CHANNEL: str = ""
     ANNOUNCEMENT_CHANNEL_ID: str = ""
-    FREETALK_CHANNEL_ID: str = "CQJ8HQWUV"  # 새 채널 생성 안내를 올리는 곳
-    AUTO_REPLY_CHANNEL_ID: str = "C03SZTDEDK3"  # fun-anna-house: 새 글에 자동 답글
     # Ids
     ANNA_ID: str = ""
     ORGANIZER_ID: str = ""
@@ -57,7 +53,7 @@ class Settings(BaseSettings):
     QA_SERVER_BASE_URL: str = ""
     QA_API_KEY: str = ""
 
-    # Bigchat calendar buttons
+    # Bigchat calendar buttons (#112)
     PUBLIC_BASE_URL: str = "https://anna-v2-2023.fly.dev"
     ICS_TOKEN_SECRET: str = ""  # 비어 있으면 ics 버튼/엔드포인트 비활성화
 
@@ -75,17 +71,5 @@ class Settings(BaseSettings):
     DAILY_DIGEST_ENABLED: bool = True
     DAILY_DIGEST_CHANNEL_ID: str = "C03SZTDEDK3"  # fun-anna-house
 
-    def gcp_service_account(self) -> dict:
-        """gspread 가 요구하는 서비스 계정 JSON 형태."""
-        return {
-            "type": self.GCP_type,
-            "project_id": self.GCP_project_id,
-            "private_key_id": self.GCP_private_key_id,
-            "private_key": self.GCP_private_key.replace("\\n", "\n"),
-            "client_email": self.GCP_client_email,
-            "client_id": self.GCP_client_id,
-            "auth_uri": self.GCP_auth_uri,
-            "token_uri": self.GCP_token_uri,
-            "auth_provider_x509_cert_url": self.GCP_auth_provider_x509_cert_url,
-            "client_x509_cert_url": self.GCP_client_x509_cert_url,
-        }
+
+envs = Settings()  # Singleton

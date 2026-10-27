@@ -1,8 +1,40 @@
 import unittest
-from unittest.mock import patch
 
-from shared.retry import retry
-from shared.text import strip_multiline
+from shared.utils import search_value, strip_multiline, with_retry
+
+
+class TestUtils(unittest.TestCase):
+    def test_find_str(self):
+        sample = {"key": "value"}
+        assert search_value(sample, "key") == "value"
+
+    def test_find_dict(self):
+        sample = {"key": {"sub_key": "sub_value"}}
+        assert search_value(sample, "key")["sub_key"] == "sub_value"
+
+    def test_find_nested_dict(self):
+        sample = {"key": {"sub_key": {"sub_sub_key": "sub_sub_value"}}}
+        assert search_value(sample, "sub_key")["sub_sub_key"] == "sub_sub_value"
+
+    def test_find_list(self):
+        sample = {"key": ["a", "b", "c"]}
+        assert search_value(sample, "key")[1] == "b"
+
+    def test_find_nested_list(self):
+        sample = {"key": {"sub_key": ["a", "b", "c"]}}
+        assert search_value(sample, "sub_key")[0] == "a"
+        assert search_value(sample, "sub_key")[1] == "b"
+        assert search_value(sample, "sub_key")[2] == "c"
+
+    def test_find_deep_nested_list(self):
+        sample = {"key": {"sub_key": ["a", {"sub_sub_key": ["aa", "bb", "cc"]}, "c"]}}
+        assert search_value(sample, "sub_sub_key")[0] == "aa"
+        assert search_value(sample, "sub_sub_key")[1] == "bb"
+        assert search_value(sample, "sub_sub_key")[2] == "cc"
+
+    def test_find_fail(self):
+        sample = {}
+        assert search_value(sample, "key") is None
 
 
 class TestStripMultiline(unittest.TestCase):
@@ -70,66 +102,49 @@ CCC"""
         )
 
 
-@patch("shared.retry.time.sleep")
-class TestRetry(unittest.TestCase):
-    def test_retry_success(self, mock_sleep):
+class TestWithRetry(unittest.TestCase):
+    def test_with_retry_success(self):
         attempts = 0
 
+        @with_retry(fixed_wait_time_in_sec=0.01)
         def always_succeed():
             nonlocal attempts
             attempts += 1
             return "success"
 
-        self.assertEqual(retry(always_succeed, wait_sec=0.01), "success")
+        self.assertEqual(always_succeed(), "success")
         self.assertEqual(attempts, 1)
-        mock_sleep.assert_not_called()
 
-    def test_retry_failure(self, mock_sleep):
+    def test_with_retry_failure(self):
         attempts = 0
 
+        @with_retry(fixed_wait_time_in_sec=0.01)
         def always_fail():
             nonlocal attempts
             attempts += 1
             raise ValueError("failure")
 
         with self.assertRaises(ValueError):
-            retry(always_fail, wait_sec=0.01)
+            always_fail()
         self.assertEqual(attempts, 10)
-        self.assertEqual(mock_sleep.call_count, 10)
-        mock_sleep.assert_called_with(0.01)
 
-    def test_retry_honours_attempts(self, mock_sleep):
+    def test_with_retry_non_retryable_exception_raises_immediately(self):
         attempts = 0
 
-        def always_fail():
-            nonlocal attempts
-            attempts += 1
-            raise ValueError("failure")
-
-        with self.assertRaises(ValueError):
-            retry(always_fail, attempts=3, wait_sec=0.01)
-        self.assertEqual(attempts, 3)
-
-    def test_retry_non_retryable_exception_raises_immediately(self, mock_sleep):
-        attempts = 0
-
+        @with_retry(fixed_wait_time_in_sec=0.01, non_retryable_exceptions=(KeyError,))
         def always_fail_with_non_retryable():
             nonlocal attempts
             attempts += 1
             raise KeyError("failure")
 
         with self.assertRaises(KeyError):
-            retry(
-                always_fail_with_non_retryable,
-                wait_sec=0.01,
-                non_retryable=(KeyError,),
-            )
+            always_fail_with_non_retryable()
         self.assertEqual(attempts, 1)
-        mock_sleep.assert_not_called()
 
-    def test_retry_partial_success(self, mock_sleep):
+    def test_with_retry_partial_success(self):
         attempts = 0
 
+        @with_retry(fixed_wait_time_in_sec=0.01)
         def succeed_after_two_attempts():
             nonlocal attempts
             attempts += 1
@@ -137,6 +152,5 @@ class TestRetry(unittest.TestCase):
                 raise ValueError("failure")
             return "success"
 
-        self.assertEqual(retry(succeed_after_two_attempts, wait_sec=0.01), "success")
+        self.assertEqual(succeed_after_two_attempts(), "success")
         self.assertEqual(attempts, 3)
-        self.assertEqual(mock_sleep.call_count, 2)

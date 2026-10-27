@@ -1,20 +1,19 @@
-"""SlackGateway 의 slack_sdk 구현. 채널은 항상 명시한다."""
-
 import logging
 import re
 from typing import List, Optional
 
 import requests
+from pydantic import BaseModel
+from slack_bolt import Say
 from slack_sdk import WebClient
 from slack_sdk.errors import SlackApiError
-
-from shared.slack_models import Message, Reaction
 
 logger = logging.getLogger(__name__)
 
 # 안나가 보내는 메시지에는 링크/이미지 미리보기(unfurl)를 붙이지 않는다. 시트 URL 이나
 # permalink 를 그대로 실어 보내는 메시지가 많아서, 미리보기가 붙으면 본문보다 커져 스레드가
-# 지저분해진다. chat.postEphemeral 은 unfurl 옵션을 지원하지 않아 적용 대상이 아니다.
+# 지저분해진다. chat.postMessage / say 에 그대로 펼쳐서 넘긴다.
+# XXX: chat.postEphemeral 은 unfurl 옵션을 지원하지 않아 적용 대상이 아니다.
 NO_UNFURL = {"unfurl_links": False, "unfurl_media": False}
 
 # markdown 블록 한 개에 넣을 수 있는 글자 수. 넘으면 text 한 덩어리로 보낸다
@@ -29,46 +28,39 @@ def to_markdown_links(text: str) -> str:
     )
 
 
+class Message(BaseModel):
+    ts: str
+    thread_ts: str
+    channel: str
+    user: str
+    text: str
+
+
+class Emoji(BaseModel):
+    user: str
+    name: str
+
+
+class Reaction(BaseModel):
+    name: str
+    users: List[str]
+    count: int
+
+
 class SlackClient:
-    def __init__(self, web_client: WebClient):
+    def __init__(self, say: Optional[Say], web_client: WebClient):
+        """say 는 슬랙 이벤트 컨텍스트에서만 존재한다. 스케줄 발송처럼 이벤트 없이 쓸 땐
+        None 을 넘기고, web_client 기반 메서드만 사용해야 한다."""
+        self.say = say
         self.web_client = web_client
 
-    def send_thread_message(
-        self,
-        channel: str,
-        ts: str,
-        text: str,
-        blocks: Optional[List[dict]] = None,
-    ) -> None:
-        self.web_client.chat_postMessage(
-            channel=channel, thread_ts=ts, text=text, blocks=blocks, **NO_UNFURL
-        )
+    def send_message(self, msg: str, ts: str):
+        self.say(msg, thread_ts=ts, **NO_UNFURL)
 
-    def send_channel_message(self, channel: str, text: str) -> None:
-        self.web_client.chat_postMessage(channel=channel, text=text, **NO_UNFURL)
-
-    def send_markdown(self, channel: str, text: str) -> None:
-        """채널에 새 글을 markdown 블록으로 올린다. 블록이 거절되면 text 한 덩어리로 보낸다."""
-        try:
-            self.web_client.chat_postMessage(
-                channel=channel,
-                text=text,
-                blocks=[{"type": "markdown", "text": to_markdown_links(text)}],
-                **NO_UNFURL,
-            )
-        except SlackApiError as ex:
-            logger.warning(
-                "markdown blocks rejected (%s); sending plain text",
-                ex.response.get("error") if ex.response else ex,
-            )
-            self.send_channel_message(channel, text)
-
-    def send_answer(
-        self, channel: str, ts: str, answer: str, sources: List[str]
-    ) -> None:
+    def send_answer(self, answer: str, sources: List[str], ts: str):
         """질문 답변. 본문은 표준 마크다운을 그리는 markdown 블록, 출처는 회색 작은 글씨(context 블록)로 보낸다.
 
-        text 는 알림·검색용 대체 문자열이다. 블록이 거절되면 text 한 덩어리로 보낸다.
+        text 는 알림·검색용 대체 문자열이다. 블록이 거절되면 예전처럼 text 한 덩어리로 보낸다.
         """
         source_line = ("출처: " + " · ".join(sources)) if sources else ""
         text = answer + (f"\n\n{source_line}" if source_line else "")
@@ -82,36 +74,46 @@ class SlackClient:
                     }
                 )
             try:
-                self.send_thread_message(channel, ts, text, blocks)
+                self.say(text=text, blocks=blocks, thread_ts=ts, **NO_UNFURL)
                 return
             except SlackApiError as ex:
                 logger.warning(
                     "markdown blocks rejected (%s); sending plain text",
                     ex.response.get("error") if ex.response else ex,
                 )
-        self.send_thread_message(channel, ts, text)
+        self.send_message(text, ts)
 
-    def send_direct_message(self, user_id: str, text: str) -> None:
-        """유저와 앱 사이의 DM. channel 에 user id 를 주면 슬랙이 DM 채널로 라우팅한다."""
-        self.web_client.chat_postMessage(channel=user_id, text=text, **NO_UNFURL)
+    def post_markdown(self, channel: str, text: str):
+        """채널에 새 글을 markdown 블록으로 올린다. 블록이 거절되면 text 한 덩어리로 보낸다."""
+        try:
+            self.web_client.chat_postMessage(
+                channel=channel,
+                text=text,
+                blocks=[{"type": "markdown", "text": to_markdown_links(text)}],
+                **NO_UNFURL,
+            )
+        except SlackApiError as ex:
+            logger.warning(
+                "markdown blocks rejected (%s); sending plain text",
+                ex.response.get("error") if ex.response else ex,
+            )
+            self.web_client.chat_postMessage(channel=channel, text=text, **NO_UNFURL)
 
-    def send_ephemeral(
-        self,
-        channel: str,
-        user_id: str,
-        text: str,
-        ts: Optional[str] = None,
-        blocks: Optional[List[dict]] = None,
-    ) -> None:
-        self.web_client.chat_postEphemeral(
-            text=text, blocks=blocks, channel=channel, user=user_id, thread_ts=ts
+    def send_direct_message(self, user_id: str, msg: str):
+        """유저와 앱 사이의 DM 으로 메시지를 보낸다. channel 에 user id 를 주면 슬랙이 DM 채널로 라우팅한다."""
+        self.web_client.chat_postMessage(channel=user_id, text=msg, **NO_UNFURL)
+
+    def send_thread_message(self, msg: str, channel: str, ts: str):
+        """say 컨텍스트가 없는 경우(모달 제출 등)에 채널/스레드를 직접 지정해서 메시지를 보낸다."""
+        self.web_client.chat_postMessage(
+            channel=channel, text=msg, thread_ts=ts, **NO_UNFURL
         )
 
-    def send_response_url_message(self, response_url: str, text: str) -> None:
+    def send_response_url_message(self, response_url: str, msg: str):
         """상호작용 payload의 response_url로 응답한다. 봇이 채널 멤버가 아니어도 전달된다."""
         resp = requests.post(
             response_url,
-            json={"response_type": "ephemeral", "text": text},
+            json={"response_type": "ephemeral", "text": msg},
             timeout=10,
         )
         resp.raise_for_status()
@@ -130,8 +132,11 @@ class SlackClient:
             logger.warning(f"Failed to download Slack file: {e}")
             return None
 
+    def send_message_to_freetalk(self, msg: str):
+        self.say(msg, channel="CQJ8HQWUV", **NO_UNFURL)
+
     def get_permalink(self, channel: str, ts: str) -> Optional[str]:
-        """메시지 permalink. 실패 시 None."""
+        """메시지 permalink를 반환. 실패 시 None."""
         try:
             resp = self.web_client.chat_getPermalink(channel=channel, message_ts=ts)
             return resp["permalink"]
@@ -139,11 +144,20 @@ class SlackClient:
             logger.warning(f"Failed to get permalink: {ex}")
             return None
 
-    def open_view(self, trigger_id: str, view: dict) -> None:
-        self.web_client.views_open(trigger_id=trigger_id, view=view)
+    def send_message_only_visible_to_user(
+        self,
+        msg: str,
+        user_id: str,
+        channel: str,
+        ts: Optional[str] = None,
+        blocks: Optional[List[dict]] = None,
+    ):
+        self.web_client.chat_postEphemeral(
+            text=msg, blocks=blocks, channel=channel, user=user_id, thread_ts=ts
+        )
 
     @staticmethod
-    def _to_messages(messages, channel) -> List[Message]:
+    def _messages_to_members(messages, channel):
         return [
             Message(
                 ts=msg["ts"],
@@ -156,8 +170,27 @@ class SlackClient:
             for msg in messages
         ]
 
-    def get_thread(self, channel: str, thread_ts: str) -> List[Message]:
-        """스레드의 첫 페이지 메시지. 페이지네이션은 하지 않는다."""
+    def get_replies(
+        self, channel: str, thread_ts: str = None, ts: str = None
+    ) -> List[Message]:
+        """
+        해당 스레드 첫 댓글의 ts, 즉 thread_ts 를 넣어야 정상적으로 목록을 가져옴 (대댓글 X)
+
+        :param ts: thread_ts 를 모를 경우, ts 를 이용해 해당 message 로 구성된 1 length replies 를
+          가져온 후, 그 message 에 포함된 thread_ts 를 이용해 다시 조회해온다.
+
+        ref: https://api.slack.com/methods/conversations.replies#examples
+        XXX: 대댓글이 하나도 없을 경우 thread_ts 값이 비어있을 수 있음
+        """
+        # [FIXME] default 값이 해당 쓰레드의 메시지 1000 개를 가져오는 것인데,
+        #     혹시라도 쓰레드의 댓글이 첫 글 포함 1000개가 넘을경우 먼저 작성된 1000개를 가져올지,
+        #     아니면 나중에 작성된 1000개를 가져올지에 대해 체크해보지 않음.
+        #     만약 후자일 경우 이 코드가 쓰레드의 제일 첫번째 메시지를 가져올 수 있도록 수정해야 함.
+
+        if ts:
+            msg = self.get_replies(thread_ts=ts, channel=channel)[0]
+            thread_ts = msg.thread_ts
+
         for attempt in range(3):
             try:
                 resp = self.web_client.conversations_replies(
@@ -171,14 +204,9 @@ class SlackClient:
         if resp.status_code != 200:
             raise Exception(f"Failed to get message, ts={thread_ts}, channel={channel}")
 
-        return self._to_messages(resp["messages"], channel)
+        return self._messages_to_members(resp["messages"], channel)
 
-    def get_thread_of_message(self, channel: str, ts: str) -> List[Message]:
-        """ts 메시지를 먼저 조회해 그 thread_ts 로 스레드를 다시 읽는다."""
-        first = self.get_thread(channel, ts)[0]
-        return self.get_thread(channel, first.thread_ts)
-
-    def add_reaction(self, channel: str, ts: str, emoji_name: str) -> None:
+    def add_emoji(self, channel, ts, emoji_name):
         try:
             self.web_client.reactions_add(
                 channel=channel, name=emoji_name, timestamp=ts
@@ -188,12 +216,10 @@ class SlackClient:
                 return
             raise ex
 
-    def get_reaction(
-        self, channel: str, ts: str, emoji_name: str
-    ) -> Optional[Reaction]:
-        """channel의 ts 메시지에 달린 emoji_name 반응(누른 사람 목록 포함).
+    def get_emoji(self, channel: str, ts: str, emoji_name: str) -> Optional[Reaction]:
+        """channel의 ts 메시지에 달린 emoji_name 반응(누른 사람 목록 포함)을 가져온다.
 
-        해당 반응이 없거나 메시지를 읽지 못하면 None.
+        해당 반응이 없거나 메시지를 읽지 못하면 None을 반환한다.
         """
         for attempt in range(3):
             try:
@@ -214,12 +240,12 @@ class SlackClient:
             if reaction["name"] == emoji_name:
                 return Reaction(
                     name=reaction["name"],
-                    users=list(reaction["users"]),
+                    users=reaction["users"],
                     count=reaction["count"],
                 )
         return None
 
-    def remove_reaction(self, channel: str, ts: str, emoji_name: str) -> None:
+    def remove_emoji(self, channel, ts, emoji_name):
         try:
             self.web_client.reactions_remove(
                 channel=channel, name=emoji_name, timestamp=ts
