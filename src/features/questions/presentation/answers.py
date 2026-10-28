@@ -40,7 +40,7 @@ def render_parts(result) -> tuple[str, list[str]]:
         answer = "흐음~ 기록이 서로 달라서 확답하기 어렵네요."
     else:
         answer = "흐음~ 나도 잘 모르는 일인걸? 오거나이저를 찾아볼까?"
-    cited_ids = {citation for citation in result.citations if isinstance(citation, str)}
+    cited_ids = set(result.citations)
     source_counts = Counter(source.document_id for source in result.sources)
     unique_cited_sources = [
         source

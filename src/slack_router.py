@@ -1,7 +1,7 @@
 """클라이언트 생성이나 API 호출 없이 멘션 명령을 판별한다."""
 
 import re
-from typing import Literal
+from typing import Literal, assert_never
 
 MentionCommand = Literal[
     "explicit_question",
@@ -51,7 +51,7 @@ def matches_mention(command: MentionCommand, text: str) -> bool:
         case "empty":
             return not extract_question(text, require_prefix=False)
         case _:
-            raise ValueError(f"Unknown mention command: {command}")
+            assert_never(command)
 
 
 def classify_mention(text: str) -> MentionCommand:
