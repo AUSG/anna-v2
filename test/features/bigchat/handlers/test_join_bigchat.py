@@ -1,14 +1,13 @@
 import unittest
 from unittest.mock import MagicMock, patch
 
-from test.fixtures.slack_events import create_sample_reaction_added_event
-
 from config.env_config import envs
 from features.bigchat.handlers.join_bigchat import JoinBigchat
-from shared.loading_emoji import LoadingEmoji
-from integrations.google_sheets import WorksheetNotFound
 from features.members.services.directory import Member
+from integrations.google_sheets import WorksheetNotFound
 from integrations.slack import Message
+from shared.loading_emoji import LoadingEmoji
+from test.fixtures.slack_events import create_sample_reaction_added_event
 
 
 class TestJoinBigchat(unittest.TestCase):

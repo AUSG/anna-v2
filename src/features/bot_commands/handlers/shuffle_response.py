@@ -1,5 +1,6 @@
 import random
 import re
+
 from shared.mention_handler import MentionHandler
 from slack_router import matches_mention
 

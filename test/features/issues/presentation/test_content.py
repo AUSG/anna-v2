@@ -92,8 +92,10 @@ def test_command_body_is_not_truncated_with_the_title():
             "요청 본문\n  코드",
             "> **U1**: 첫 대화\n>\n> **U2**: 다음 대화",
             "---\n슬랙에서 `U3` 가 안나에게 요청해서 만들어진 이슈야.\n원문: https://example.test/p1",
-            "요청 본문\n  코드\n\n### 슬랙 스레드\n\n> **U1**: 첫 대화\n>\n> **U2**: 다음 대화"
-            "\n\n---\n슬랙에서 `U3` 가 안나에게 요청해서 만들어진 이슈야.\n원문: https://example.test/p1",
+            (
+                "요청 본문\n  코드\n\n### 슬랙 스레드\n\n> **U1**: 첫 대화\n>\n> **U2**: 다음 대화"
+                "\n\n---\n슬랙에서 `U3` 가 안나에게 요청해서 만들어진 이슈야.\n원문: https://example.test/p1"
+            ),
         ),
         (
             " \n본문\r\n  ",
@@ -120,16 +122,20 @@ def test_body_assembly_preserves_order_and_exact_whitespace(
         (
             "U1",
             "https://example.test/p1?a=1&b=2",
-            "---\n슬랙에서 `U1` 가 안나에게 요청해서 만들어진 이슈야."
-            "\n원문: https://example.test/p1?a=1&b=2",
+            (
+                "---\n슬랙에서 `U1` 가 안나에게 요청해서 만들어진 이슈야."
+                "\n원문: https://example.test/p1?a=1&b=2"
+            ),
         ),
         (None, "", "---\n슬랙에서 `None` 가 안나에게 요청해서 만들어진 이슈야."),
         ("", "", "---\n슬랙에서 `` 가 안나에게 요청해서 만들어진 이슈야."),
         (
             "한글 🐍 <@U1>|`",
             " \nhttps://example.test/p1\t ",
-            "---\n슬랙에서 `한글 🐍 <@U1>|`` 가 안나에게 요청해서 만들어진 이슈야."
-            "\n원문:  \nhttps://example.test/p1\t ",
+            (
+                "---\n슬랙에서 `한글 🐍 <@U1>|`` 가 안나에게 요청해서 만들어진 이슈야."
+                "\n원문:  \nhttps://example.test/p1\t "
+            ),
         ),
     ],
 )

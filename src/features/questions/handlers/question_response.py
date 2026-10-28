@@ -1,7 +1,6 @@
 # 다국어(한국어) 시스템 프롬프트 문자열이 길어, 이 파일은 줄길이(E501) 검사를 예외 처리한다.
-# ruff: noqa: E501
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from features.questions.models import (
     MAX_CONVERSATION_AUTHOR_CHARS,
@@ -9,10 +8,10 @@ from features.questions.models import (
     MAX_CONVERSATION_TIMESTAMP_CHARS,
     select_conversation,
 )
-from shared.mention_handler import MentionHandler
 from features.questions.presentation.answers import render_parts
-from slack_router import extract_question, matches_mention
 from integrations.qa import QAClient
+from shared.mention_handler import MentionHandler
+from slack_router import extract_question, matches_mention
 
 logger = logging.getLogger(__name__)
 
@@ -45,7 +44,7 @@ class QuestionResponse(MentionHandler):
         slack_client,
         qa_client: QAClient,
         require_prefix=True,
-        assistant_id: Optional[str] = None,
+        assistant_id: str | None = None,
     ):
         """require_prefix가 참이면 q) 질문만, 거짓이면 일반 질문 멘션도 받는다.
 
@@ -95,7 +94,7 @@ class QuestionResponse(MentionHandler):
 
         return True
 
-    def _fetch_conversation(self) -> List[Dict[str, str]]:
+    def _fetch_conversation(self) -> list[dict[str, str]]:
         """스레드 발화를 읽고 전송량에 맞춰 고른다."""
         if not self.channel or not self.thread_ts:
             return []
@@ -112,7 +111,7 @@ class QuestionResponse(MentionHandler):
             return []
         return select_conversation(normalized, self._extract_question())
 
-    def _normalize_conversation(self, messages) -> List[Dict[str, str]]:
+    def _normalize_conversation(self, messages) -> list[dict[str, str]]:
         """SDK 응답을 발화로 바꾸고 필드별 길이를 제한한다."""
         normalized = []
         for message in messages or []:

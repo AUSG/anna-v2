@@ -1,9 +1,8 @@
 import unittest
 from unittest.mock import MagicMock
 
-from test.fixtures.slack_events import create_sample_app_mention_event
-
 from features.bot_commands.handlers.help_response import HelpResponse
+from test.fixtures.slack_events import create_sample_app_mention_event
 
 
 class TestHelpResponse(unittest.TestCase):

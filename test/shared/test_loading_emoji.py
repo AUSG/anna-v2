@@ -21,9 +21,8 @@ class TestLoadingEmoji(unittest.TestCase):
     def test_removes_even_when_body_raises(self):
         mock_slack_client = MagicMock()
 
-        with self.assertRaises(RuntimeError):
-            with LoadingEmoji(mock_slack_client, "C1", "123.456"):
-                raise RuntimeError("boom")
+        with self.assertRaises(RuntimeError), LoadingEmoji(mock_slack_client, "C1", "123.456"):
+            raise RuntimeError("boom")
 
         mock_slack_client.remove_emoji.assert_called_once()
 
@@ -45,9 +44,8 @@ class TestLoadingEmoji(unittest.TestCase):
         mock_slack_client = MagicMock()
         mock_slack_client.remove_emoji.side_effect = RuntimeError("api down")
 
-        with self.assertRaises(ValueError):
-            with LoadingEmoji(mock_slack_client, "C1", "123.456"):
-                raise ValueError("본 작업 실패")
+        with self.assertRaises(ValueError), LoadingEmoji(mock_slack_client, "C1", "123.456"):
+            raise ValueError("본 작업 실패")
 
     def test_does_nothing_without_channel_or_ts(self):
         mock_slack_client = MagicMock()

@@ -1,7 +1,7 @@
 import os
 import time
 import unittest
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from features.bigchat.calendar import KST
 from shared.scheduling import next_fire_time
@@ -42,8 +42,8 @@ class TestFireTimeIsIndependentOfServerTimezone(unittest.TestCase):
 
                 fire_at = next_fire_time(datetime(2026, 8, 19, 8, 30, tzinfo=KST), 18, 0)
 
-                assert fire_at.astimezone(timezone.utc) == datetime(
-                    2026, 8, 19, 9, 0, tzinfo=timezone.utc
+                assert fire_at.astimezone(UTC) == datetime(
+                    2026, 8, 19, 9, 0, tzinfo=UTC
                 ), server_tz  # 18:00 KST == 09:00 UTC
         finally:
             if original_tz is None:

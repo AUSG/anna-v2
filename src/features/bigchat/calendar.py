@@ -2,8 +2,7 @@ import hashlib
 import hmac
 import re
 from dataclasses import dataclass
-from datetime import datetime, timezone
-from typing import Optional
+from datetime import UTC, datetime
 from urllib.parse import urlencode
 from zoneinfo import ZoneInfo
 
@@ -26,7 +25,7 @@ class BigchatEvent:
     end: datetime  # tz-aware (KST)
 
 
-def parse_sheet_name(sheet_name: str) -> Optional[BigchatEvent]:
+def parse_sheet_name(sheet_name: str) -> BigchatEvent | None:
     """포맷 불일치, 존재하지 않는 날짜/시각, 종료가 시작보다 빠르거나 같으면 None (보정 없음)."""
     match = SHEET_NAME_PAT.match(sheet_name.strip())
     if not match:
@@ -79,7 +78,7 @@ def to_ics(event: BigchatEvent, uid: str, description: str = "") -> str:
         "PRODID:-//AUSG//anna//KO",
         "BEGIN:VEVENT",
         f"UID:{uid}",
-        f"DTSTAMP:{_fmt_utc(datetime.now(tz=timezone.utc))}",
+        f"DTSTAMP:{_fmt_utc(datetime.now(tz=UTC))}",
         f"DTSTART:{_fmt_utc(event.start)}",
         f"DTEND:{_fmt_utc(event.end)}",
         f"SUMMARY:{_escape_ics_text(event.name)}",
@@ -111,7 +110,7 @@ def _fmt_local(dt: datetime) -> str:
 
 
 def _fmt_utc(dt: datetime) -> str:
-    return dt.astimezone(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    return dt.astimezone(UTC).strftime("%Y%m%dT%H%M%SZ")
 
 
 def _escape_ics_text(text: str) -> str:

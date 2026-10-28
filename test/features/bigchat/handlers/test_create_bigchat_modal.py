@@ -216,7 +216,7 @@ class TestSubmitCreateBigchatModal(unittest.TestCase):
         """봇이 채널에 없으면 대체 안내를 보내고 사전 등록은 건너뛴다."""
         for error in ("not_in_channel", "channel_not_found"):
             with self.subTest(error=error):
-                sut, mock_ack, mock_slack_client, _ = self._build_sut()
+                sut, _, mock_slack_client, _ = self._build_sut()
                 mock_slack_client.send_thread_message.side_effect = SlackApiError(
                     "boom", {"error": error}
                 )

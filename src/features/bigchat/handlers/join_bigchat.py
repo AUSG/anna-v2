@@ -1,21 +1,19 @@
 import logging
 from contextlib import nullcontext
-from typing import List, Optional
-
-from config.env_config import envs
-from features.bigchat.presentation.messages import build_registration_info_message
-from features.bigchat.services.sheet_link import extract_worksheet_id
-from integrations.google_sheets import WorksheetNotFound
-from features.members.services.directory import MemberNotFound, MemberLackInfo
-from integrations.slack import Message
 from urllib.parse import urlencode
 
+from config.env_config import envs
 from features.bigchat.calendar import (
     calendar_payload,
     calendar_token,
     parse_sheet_name,
     to_gcal_link_truncated,
 )
+from features.bigchat.presentation.messages import build_registration_info_message
+from features.bigchat.services.sheet_link import extract_worksheet_id
+from features.members.services.directory import MemberLackInfo, MemberNotFound
+from integrations.google_sheets import WorksheetNotFound
+from integrations.slack import Message
 
 logger = logging.getLogger(__name__)
 
@@ -47,7 +45,7 @@ class JoinBigchat:
 
     def _build_calendar_blocks(
         self, msg: str, worksheet_id: int, intro_text: str
-    ) -> Optional[List[dict]]:
+    ) -> list[dict] | None:
         """시트 이름에서 이벤트 정보를 파싱해 캘린더 버튼 블록을 만든다. 구형식 시트 등 파싱 불가면 None.
 
         gcal 버튼은 캘린더 템플릿 URL을 직접 사용한다. 서버의 302 리다이렉트를 거치면
@@ -60,7 +58,7 @@ class JoinBigchat:
         try:
             sheet_name = self.gs_client.get_worksheet_title(worksheet_id)
             event = parse_sheet_name(sheet_name)
-        except Exception as ex:
+        except Exception as ex:  # noqa: BLE001
             logger.warning(f"Failed to build calendar buttons: {ex}")
             return None
         if not event:
@@ -123,7 +121,7 @@ class JoinBigchat:
         with self.loading_emoji:
             return self._register(worksheet_id, messages)
 
-    def _register(self, worksheet_id: int, messages: List[Message]) -> bool:
+    def _register(self, worksheet_id: int, messages: list[Message]) -> bool:
         try:
             member = self.member_manager.find(self.user)
         except MemberNotFound:

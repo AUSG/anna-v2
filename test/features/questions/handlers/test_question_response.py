@@ -4,19 +4,18 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from test.fixtures.slack_events import create_sample_app_mention_event
-
+from features.questions.handlers.question_response import (
+    DEFAULT_SYSTEM_PROMPT,
+    QuestionResponse,
+)
 from features.questions.models import (
     MAX_CONVERSATION_CHARS,
     MAX_CONVERSATION_MESSAGES,
     ChatResult,
     Source,
 )
-from features.questions.handlers.question_response import (
-    DEFAULT_SYSTEM_PROMPT,
-    QuestionResponse,
-)
 from integrations.slack import Message
+from test.fixtures.slack_events import create_sample_app_mention_event
 
 _DEFAULT_ANSWER = "답변이야!"
 _QUESTION_TEXT = "<@UANNA> q) 질문"

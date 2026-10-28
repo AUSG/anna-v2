@@ -1,9 +1,7 @@
-from typing import List, Optional
-
-from features.bigchat.models import ReminderResult
-from slack_router import REMINDER_TRIGGER as TRIGGER
 from features.bigchat.calendar import BigchatEvent
+from features.bigchat.models import ReminderResult
 from shared.utils import strip_multiline
+from slack_router import REMINDER_TRIGGER as TRIGGER
 
 # 이름의 줄구분자가 출력 공백에 영향을 주므로 문자열 들여쓰기를 유지한다.
 WEEKDAYS_KO = ["월", "화", "수", "목", "금", "토", "일"]
@@ -44,7 +42,7 @@ def build_reminder(event: BigchatEvent) -> str:
     )
 
 
-def build_report(result: "ReminderResult", targets: Optional[List[str]]) -> str:
+def build_report(result: ReminderResult, targets: list[str] | None) -> str:
     if not result.bigchat_names:
         return strip_multiline(
             f"""

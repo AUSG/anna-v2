@@ -17,6 +17,4 @@ def is_edited_message(event) -> bool:
         return True
     if event.get("edited"):
         return True
-    if (event.get("message") or {}).get("edited"):
-        return True
-    return False
+    return bool((event.get("message") or {}).get("edited"))

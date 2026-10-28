@@ -2,8 +2,9 @@
 
 import logging
 import re
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
-from typing import Callable, Mapping, Protocol
+from typing import Protocol
 
 from slack_sdk import WebClient
 

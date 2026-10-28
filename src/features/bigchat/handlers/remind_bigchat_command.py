@@ -2,8 +2,6 @@ import logging
 import re
 
 from features.bigchat.models import ReminderResult
-from shared.mention_handler import MentionHandler
-from features.bigchat.services.reminders import RemindBigchat
 from features.bigchat.presentation.reminders import (
     BROADCAST_PHRASE,
     TEST_PHRASE,
@@ -11,6 +9,8 @@ from features.bigchat.presentation.reminders import (
     build_report,
     missing_targets_message,
 )
+from features.bigchat.services.reminders import RemindBigchat
+from shared.mention_handler import MentionHandler
 from slack_router import matches_mention
 
 logger = logging.getLogger(__name__)

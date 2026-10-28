@@ -1,5 +1,4 @@
 import logging
-from typing import Dict, List
 
 from cachetools.func import ttl_cache
 from pydantic import BaseModel
@@ -15,7 +14,7 @@ class Member(BaseModel):
     phone: str
     school_name_or_company_name: str
 
-    def transform_for_spreadsheet(self) -> List[str]:
+    def transform_for_spreadsheet(self) -> list[str]:
         return [
             self.kor_name,  # visitor_name (Korean name)
             self.school_name_or_company_name,  # visitor_company_name
@@ -55,7 +54,7 @@ class MemberManager:
         self.logger.debug(member)
         return member
 
-    def email_to_slack_ids(self) -> Dict[str, str]:
+    def email_to_slack_ids(self) -> dict[str, str]:
         """소문자 이메일로 슬랙 user_id를 찾는 매핑을 만든다. 빅챗 신청자의 계정을 찾을 때 쓴다."""
         members = self._fetch_members()
         return {
@@ -67,7 +66,7 @@ class MemberManager:
     @ttl_cache(maxsize=1, ttl=60)  # not thread-safe
     # 시트 생성 직후의 일괄 등록(#89)이 N명을 연달아 조회해도 멤버 시트 읽기는 1회면 된다.
     # ttl 이 길면 방금 멤버 시트에 추가된 사람이 그만큼 늦게 조회되므로 60초로 짧게 잡았다.
-    def _fetch_members(self) -> Dict[str, Member]:
+    def _fetch_members(self) -> dict[str, Member]:
         member_info_cols = "J:O"  # 열 순서: user_id, kor_name, eng_name, email, phone, school_name or company_name
         raw_members = self.gs_client.get_values(
             self.members_worksheet_id, member_info_cols

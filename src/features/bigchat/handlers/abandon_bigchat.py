@@ -1,8 +1,8 @@
 from contextlib import nullcontext
 
 from features.bigchat.services.sheet_link import extract_worksheet_id
+from features.members.services.directory import MemberLackInfo, MemberNotFound
 from integrations.google_sheets import WorksheetNotFound
-from features.members.services.directory import MemberNotFound, MemberLackInfo
 
 
 class AbandonBigchat:

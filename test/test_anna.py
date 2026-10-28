@@ -37,9 +37,13 @@ def test_schedulers_start_only_explicitly_and_once(monkeypatch, reminders, diges
     assert scheduler.call_count == len(expected)
     assert scheduler.return_value.start.call_count == len(expected)
     for call, job in zip(scheduler.call_args_list, jobs):
-        assert call.kwargs == dict(
-            job=job.callback, hour=job.hour, minute=0, tz=KST, name=job.name
-        )
+        assert call.kwargs == {
+            "job": job.callback,
+            "hour": job.hour,
+            "minute": 0,
+            "tz": KST,
+            "name": job.name,
+        }
 
 
 def test_scheduler_start_retry_does_not_restart_successful_jobs(monkeypatch):
