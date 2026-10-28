@@ -150,11 +150,20 @@ class TestSubmitCreateBigchatModal(unittest.TestCase):
 
     def test_rejected_by_invalid_fields(self):
         cases = [
-            ({"start": "21:00", "end": "19:00"}, {END_BLOCK: "종료 시각은 시작 시각보다 늦어야 해!"}),
-            ({"start": "19:00", "end": "19:00"}, {END_BLOCK: "종료 시각은 시작 시각보다 늦어야 해!"}),
+            (
+                {"start": "21:00", "end": "19:00"},
+                {END_BLOCK: "종료 시각은 시작 시각보다 늦어야 해!"},
+            ),
+            (
+                {"start": "19:00", "end": "19:00"},
+                {END_BLOCK: "종료 시각은 시작 시각보다 늦어야 해!"},
+            ),
             ({"name": "   "}, {NAME_BLOCK: "이름을 입력해줘!"}),
             # 위젯이 형식을 보장하지만, 존재하지 않는 날짜는 방어적으로 거른다
-            ({"date": "2026-02-30"}, {NAME_BLOCK: "형식이 올바르지 않아. 입력값을 다시 확인해줘!"}),
+            (
+                {"date": "2026-02-30"},
+                {NAME_BLOCK: "형식이 올바르지 않아. 입력값을 다시 확인해줘!"},
+            ),
             # 필드 오류가 있으면 형식 오류는 덧붙이지 않는다
             (
                 {"name": "   ", "start": "21:00", "end": "19:00"},
@@ -195,7 +204,10 @@ class TestSubmitCreateBigchatModal(unittest.TestCase):
                 assert self.mock_member_manager.mock_calls == []
 
     def test_creation_error_is_not_reported_as_validation_error(self):
-        for failure in (RuntimeError("시트 생성 실패"), InvalidBigchatName("생성 중 오류")):
+        for failure in (
+            RuntimeError("시트 생성 실패"),
+            InvalidBigchatName("생성 중 오류"),
+        ):
             with self.subTest(failure=type(failure).__name__):
                 sut, ack, slack, sheets = self._build_sut()
                 sheets.create_bigchat_sheet.side_effect = failure

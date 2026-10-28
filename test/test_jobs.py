@@ -92,7 +92,9 @@ def test_digest_failure_notifies_admin_and_does_not_escape(web, failure):
         admin_channel="C_ADMIN",
     )
     assert web.chat_postMessage.call_args.kwargs["channel"] == "C_ADMIN"
-    assert "데일리 핫스레드 게시 중 에러" in web.chat_postMessage.call_args.kwargs["text"]
+    assert (
+        "데일리 핫스레드 게시 중 에러" in web.chat_postMessage.call_args.kwargs["text"]
+    )
 
 
 def test_job_factories_remain_lazy_and_use_app_services(monkeypatch, web):

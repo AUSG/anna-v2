@@ -43,7 +43,9 @@ class GithubClient:
         self, title: str, body: str = "", labels: list[str] | None = None
     ) -> Issue:
         if not self.is_enabled():
-            raise GithubApiError("깃허브 토큰이나 레포 설정이 비어 있어. 운영진에게 알려줘!")
+            raise GithubApiError(
+                "깃허브 토큰이나 레포 설정이 비어 있어. 운영진에게 알려줘!"
+            )
 
         payload = {"title": title, "body": body}
         if labels:
@@ -62,7 +64,9 @@ class GithubClient:
             )
         except requests.exceptions.RequestException as ex:
             logger.warning("GitHub issue creation failed to reach the API: %s", ex)
-            raise GithubApiError("깃허브에 연결하지 못했어. 잠시 뒤에 다시 시도해줘!") from ex
+            raise GithubApiError(
+                "깃허브에 연결하지 못했어. 잠시 뒤에 다시 시도해줘!"
+            ) from ex
 
         if resp.status_code != 201:
             logger.warning(
@@ -80,7 +84,9 @@ class GithubClient:
             return f"깃허브가 내 토큰을 거절했어 (HTTP {status_code}). 토큰 권한을 확인해줘!"
         if status_code == 404:
             # 이슈 권한이 없는 토큰도 404 를 준다 (레포 존재 여부를 숨기려는 GitHub 의 동작)
-            return f"`{self.repo}` 레포를 찾지 못했어. 레포 이름이나 토큰 권한을 확인해줘!"
+            return (
+                f"`{self.repo}` 레포를 찾지 못했어. 레포 이름이나 토큰 권한을 확인해줘!"
+            )
         if status_code == 410:
             return f"`{self.repo}` 레포의 이슈 기능이 꺼져 있어."
         if status_code == 422:

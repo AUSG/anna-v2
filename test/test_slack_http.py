@@ -115,7 +115,9 @@ def test_calendar_lookup_failures_return_404(calendar_app, failure):
     if failure == "constructor":
         sheets.side_effect = RuntimeError("자격증명 초기화 실패")
     elif failure == "read":
-        sheets.return_value.get_worksheet_title.side_effect = RuntimeError("시트 조회 실패")
+        sheets.return_value.get_worksheet_title.side_effect = RuntimeError(
+            "시트 조회 실패"
+        )
     else:
         sheets.return_value.get_worksheet_title.return_value = (
             None if failure == "missing" else "구형식 시트"

@@ -89,7 +89,9 @@ class TestCalendarLinks(unittest.TestCase):
         assert "SUMMARY:반가워\\, AUSG\\; friends" in ics.replace("\r\n ", "")
 
     def test_ics_folds_long_lines(self):
-        ics = to_ics(self.event, uid="uid", description="가나다라마바사아자차카타파하 " * 30)
+        ics = to_ics(
+            self.event, uid="uid", description="가나다라마바사아자차카타파하 " * 30
+        )
 
         for line in ics.split("\r\n"):
             assert len(line.encode("utf-8")) <= 75, line

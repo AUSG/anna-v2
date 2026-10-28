@@ -191,7 +191,7 @@ def _as_optional_string(value: Any) -> str | None:
 def _as_float(value: Any) -> float:
     try:
         return float(value)
-    except (TypeError, ValueError):
+    except TypeError, ValueError:
         return 0.0
 
 

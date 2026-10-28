@@ -21,7 +21,14 @@ class TestMemberManager(unittest.TestCase):
                 "010-1234-5678",
                 "AUSG대",
             ],
-            ["U0002", "박영희", "Park Younghee", "", "010-2345-6789", "AUSG사"],  # 이메일 없음
+            [
+                "U0002",
+                "박영희",
+                "Park Younghee",
+                "",
+                "010-2345-6789",
+                "AUSG사",
+            ],  # 이메일 없음
             ["U0003", "이몽룡"],  # 값 누락 행 (스킵됨)
         ]
         self.sut = MemberManager(mock_gs_client)

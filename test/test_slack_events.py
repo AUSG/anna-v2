@@ -75,7 +75,9 @@ def test_help_executes_without_external_dependencies(
     event, say, web_client = run_mention(runtime, "<@U01BN035Y6L> help")
     slack_events.SlackClient.assert_called_once_with(say, web_client)
     slack_client.send_message.assert_called_once()
-    assert "사용할 수 있는 명령어야" in slack_client.send_message.call_args.kwargs["msg"]
+    assert (
+        "사용할 수 있는 명령어야" in slack_client.send_message.call_args.kwargs["msg"]
+    )
     for factory in external_factories.values():
         factory.assert_not_called()
     slack_client.add_emoji.assert_called_once_with(
@@ -122,7 +124,12 @@ def test_explicit_question_with_command_keywords_reaches_qa(
             ("sheets", "members"),
             None,
         ),
-        ("빅챗 리마인더 테스트 <@UOTHER>", "RemindBigchatCommand", ("sheets", "members"), None),
+        (
+            "빅챗 리마인더 테스트 <@UOTHER>",
+            "RemindBigchatCommand",
+            ("sheets", "members"),
+            None,
+        ),
         ("", "SimpleResponse", (), None),
     ],
 )

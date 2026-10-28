@@ -44,8 +44,7 @@ class SlackContext:
 
 
 class EventHandler(Protocol):
-    def run(self):
-        ...
+    def run(self): ...
 
 
 @dataclass(frozen=True)

@@ -1,7 +1,9 @@
 import unittest
 from unittest.mock import MagicMock
 
-from features.community.handlers.announce_new_channel_created import AnnounceNewChannelCreated
+from features.community.handlers.announce_new_channel_created import (
+    AnnounceNewChannelCreated,
+)
 from test.fixtures.slack_events import create_sample_channel_created_event
 
 

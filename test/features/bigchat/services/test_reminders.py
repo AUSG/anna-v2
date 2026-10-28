@@ -25,7 +25,12 @@ class TestRemindBigchat(unittest.TestCase):
         self.mock_gs_client.get_values.return_value = [
             [],  # 시트 생성 시 들어가는 빈 헤더 행
             ["김철수", "AUSG대", "chulsoo@example.com", "010-1234-5678"],
-            ["박영희", "AUSG사", " YoungHee@Example.com ", "010-2345-6789"],  # 대소문자/공백
+            [
+                "박영희",
+                "AUSG사",
+                " YoungHee@Example.com ",
+                "010-2345-6789",
+            ],  # 대소문자/공백
         ]
         self.mock_member_manager.email_to_slack_ids.return_value = {
             "chulsoo@example.com": "U0001",

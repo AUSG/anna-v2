@@ -33,7 +33,9 @@ def build_reminder(event: BigchatEvent) -> str:
         f"{d.strftime('%H:%M')}~{event.end.strftime('%H:%M')}"
     )
     # 이름이 '빅챗'으로 끝나면 접미사를 중복하지 않는다.
-    subject = f"*{event.name}*" if event.name.endswith("빅챗") else f"*{event.name}* 빅챗"
+    subject = (
+        f"*{event.name}*" if event.name.endswith("빅챗") else f"*{event.name}* 빅챗"
+    )
     return strip_multiline(
         f"""
             :wave: 안녕! 내일 {subject}이 열리는 날이야.

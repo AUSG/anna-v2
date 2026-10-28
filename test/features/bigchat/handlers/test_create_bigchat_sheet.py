@@ -113,7 +113,9 @@ class TestCreateBigchatSheet(unittest.TestCase):
         ):
             with self.subTest(failure=type(failure).__name__):
                 self.setUp()
-                event = create_sample_app_mention_event("<@U01BN035Y6L> 새로운 빅챗 nope")
+                event = create_sample_app_mention_event(
+                    "<@U01BN035Y6L> 새로운 빅챗 nope"
+                )
                 self.mock_slack_client.send_message_only_visible_to_user.side_effect = (
                     failure
                 )

@@ -26,7 +26,9 @@ class CreateBigchatSheet(MentionHandler):
         if not self.can_handle():
             return False
 
-        sheet_name = self.text.split("새로운 빅챗", maxsplit=1)[1].split("\n")[0].strip()
+        sheet_name = (
+            self.text.split("새로운 빅챗", maxsplit=1)[1].split("\n")[0].strip()
+        )
         try:
             command = CreateBigchatCommand(sheet_name)
         except InvalidBigchatName:

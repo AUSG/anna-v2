@@ -107,7 +107,9 @@ def test_empty_explicit_question_shows_usage_without_calling_qa():
     assert sut.handle_mention() is True
     qa_client.chat.assert_not_called()
     slack_client.send_message.assert_called_once()
-    assert "질문을 이해하지 못했어요" in slack_client.send_message.call_args.kwargs["msg"]
+    assert (
+        "질문을 이해하지 못했어요" in slack_client.send_message.call_args.kwargs["msg"]
+    )
     slack_client.send_answer.assert_not_called()
 
 
@@ -135,7 +137,12 @@ class TestConversationRoles(unittest.TestCase):
                     "username": "GeekNews",
                     "text": "[GeekNews] 패스키",
                 },
-                {"ts": "2", "user": "UANNA", "bot_id": "BANNA", "text": "예전 안나 답변"},
+                {
+                    "ts": "2",
+                    "user": "UANNA",
+                    "bot_id": "BANNA",
+                    "text": "예전 안나 답변",
+                },
                 {"ts": "3", "user": "U1", "text": "사람 답글"},
             ]
         )
@@ -194,7 +201,13 @@ def test_sdk_values_current_event_filter_and_unicode_clipping_are_preserved():
         {"text": "  <@UANNA> q) 현재 질문  "},
         {"ts": "2", "text": "<@UANNA> q) 현재 질문", "user": "U1"},
         SimpleNamespace(ts="3", text=" 안나\r\n답\u2028😀 ", user="UANNA"),
-        {"ts": "4", "text": "다른 봇", "user": 42, "username": "GeekNews", "bot_id": "B1"},
+        {
+            "ts": "4",
+            "text": "다른 봇",
+            "user": 42,
+            "username": "GeekNews",
+            "bot_id": "B1",
+        },
         {"ts": "5", "text": "작성자 우선", "author": "author", "username": "username"},
         {"ts": 42, "text": "형식 유지", "user": None, "author": [], "username": False},
         SimpleNamespace(ts="시" * 101, text=" 😀" + "가" * 4000, user="작" * 201),
@@ -214,7 +227,12 @@ def test_sdk_values_current_event_filter_and_unicode_clipping_are_preserved():
             "timestamp": "3",
         },
         {"role": "user", "content": "다른 봇", "author": "GeekNews", "timestamp": "4"},
-        {"role": "user", "content": "작성자 우선", "author": "author", "timestamp": "5"},
+        {
+            "role": "user",
+            "content": "작성자 우선",
+            "author": "author",
+            "timestamp": "5",
+        },
         {"role": "user", "content": "형식 유지"},
         {
             "role": "user",

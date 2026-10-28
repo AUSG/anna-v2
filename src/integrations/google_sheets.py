@@ -109,7 +109,7 @@ class GoogleSpreadsheetClient:
 
     @staticmethod
     def _convert_list_to_sheet_range(size: int) -> str:
-        return f'A:{chr(ord("A") + max(size, 1) - 1)}'
+        return f"A:{chr(ord('A') + max(size, 1) - 1)}"
 
     @staticmethod
     def _yyyymmddhhmmss(timezone: str = "Asia/Seoul") -> str:

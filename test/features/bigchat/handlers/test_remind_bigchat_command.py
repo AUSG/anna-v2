@@ -38,8 +38,12 @@ class RemindBigchatCommandTestBase(unittest.TestCase):
 
 class TestCanHandle(RemindBigchatCommandTestBase):
     def test_can_handle(self):
-        assert self._build_sut(f"<@{ANNA_ID}> 빅챗 리마인더 테스트 <@U0001>").can_handle()
-        assert self._build_sut(f"<@{ANNA_ID}> 빅챗 리마인더 지금 전원 발송").can_handle()
+        assert self._build_sut(
+            f"<@{ANNA_ID}> 빅챗 리마인더 테스트 <@U0001>"
+        ).can_handle()
+        assert self._build_sut(
+            f"<@{ANNA_ID}> 빅챗 리마인더 지금 전원 발송"
+        ).can_handle()
         assert not self._build_sut(
             f"<@{ANNA_ID}> 새로운 빅챗 AI 밋업 26-08-20 19:00~21:00"
         ).can_handle()
@@ -78,7 +82,9 @@ class TestTestMode(RemindBigchatCommandTestBase):
         ]
         report = self._reply()
         assert "<@U0001>" in report and "<@U0002>" in report
-        assert "5명" in report and "4명" in report  # 실제 발송이었다면 어땠을지도 알려준다
+        assert (
+            "5명" in report and "4명" in report
+        )  # 실제 발송이었다면 어땠을지도 알려준다
 
     def test_refuses_without_a_target(self):
         """대상 없이 테스트하면 아무에게도 보내지 않는다 (신청자 전원 오발송 방지)."""
@@ -117,7 +123,9 @@ class TestTestMode(RemindBigchatCommandTestBase):
 
         report = self._reply()
         assert "못 찾았어" in report
-        assert "3개" in report and "7개" in report  # 시트 형식 문제인지 바로 판단할 수 있게
+        assert (
+            "3개" in report and "7개" in report
+        )  # 시트 형식 문제인지 바로 판단할 수 있게
 
 
 class TestBroadcastMode(RemindBigchatCommandTestBase):

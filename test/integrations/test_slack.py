@@ -25,7 +25,12 @@ class TestSlackClient(unittest.TestCase):
             data=None,
             __getitem__=lambda _, k: {
                 "messages": [
-                    {"ts": "1.0", "thread_ts": "1.0", "bot_id": "B0450NN7ESV", "text": "피드"},
+                    {
+                        "ts": "1.0",
+                        "thread_ts": "1.0",
+                        "bot_id": "B0450NN7ESV",
+                        "text": "피드",
+                    },
                     {"ts": "1.1", "thread_ts": "1.0", "user": "U0001", "text": "gogo"},
                 ]
             }[k],
