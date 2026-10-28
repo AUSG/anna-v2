@@ -91,11 +91,21 @@ class CreateIssueTestBase(unittest.TestCase):
 
 class TestCanHandle(CreateIssueTestBase):
     def test_can_handle(self):
-        assert self._build_sut(f"<@{ANNA_ID}> 새로운 이슈 리마인더가 두 번 와요").can_handle()
-        assert self._build_sut(f"<@{ANNA_ID}> 새 이슈 리마인더가 두 번 와요").can_handle()
-        assert self._build_sut(f"<@{ANNA_ID}> 이슈 만들어줘 리마인더가 두 번 와요").can_handle()
-        assert self._build_sut(f"<@{ANNA_ID}> 이슈 등록해줘 리마인더가 두 번 와요").can_handle()
-        assert self._build_sut(f"<@{ANNA_ID}> 이슈 파줘 리마인더가 두 번 와요").can_handle()
+        assert self._build_sut(
+            f"<@{ANNA_ID}> 새로운 이슈 리마인더가 두 번 와요"
+        ).can_handle()
+        assert self._build_sut(
+            f"<@{ANNA_ID}> 새 이슈 리마인더가 두 번 와요"
+        ).can_handle()
+        assert self._build_sut(
+            f"<@{ANNA_ID}> 이슈 만들어줘 리마인더가 두 번 와요"
+        ).can_handle()
+        assert self._build_sut(
+            f"<@{ANNA_ID}> 이슈 등록해줘 리마인더가 두 번 와요"
+        ).can_handle()
+        assert self._build_sut(
+            f"<@{ANNA_ID}> 이슈 파줘 리마인더가 두 번 와요"
+        ).can_handle()
 
     def test_can_not_handle(self):
         assert not self._build_sut(f"<@{ANNA_ID}> 안녕").can_handle()
@@ -179,8 +189,12 @@ class TestCreateIssue(CreateIssueTestBase):
             ),
         }.items():
             with self.subTest(case=name):
-                sut = self._build_sut(f"<@{ANNA_ID}> 새로운 이슈 제목\n본문", in_thread=True)
-                self.mock_slack_client.get_replies.return_value = [_message("U1", "대화")]
+                sut = self._build_sut(
+                    f"<@{ANNA_ID}> 새로운 이슈 제목\n본문", in_thread=True
+                )
+                self.mock_slack_client.get_replies.return_value = [
+                    _message("U1", "대화")
+                ]
                 self.mock_slack_client.get_replies.side_effect = thread_error
                 self.mock_slack_client.get_permalink.side_effect = link_error
                 with self.assertLogs(
@@ -237,7 +251,12 @@ class TestCreateIssue(CreateIssueTestBase):
 
     def test_refusal_before_lookups(self):
         for name, (text, in_thread, enabled, expected) in {
-            "usage-original": (f"<@{ANNA_ID}> 이슈 만들어줘", False, True, [USAGE_REPLY]),
+            "usage-original": (
+                f"<@{ANNA_ID}> 이슈 만들어줘",
+                False,
+                True,
+                [USAGE_REPLY],
+            ),
             "usage-thread": (f"<@{ANNA_ID}> 새로운 이슈", True, True, [USAGE_REPLY]),
             "empty-first-line": (
                 f"<@{ANNA_ID}> 새로운 이슈 ?\n본문만 있음",
@@ -399,7 +418,9 @@ class TestCreateIssue(CreateIssueTestBase):
             with self.subTest(case=name):
                 slack = MagicMock()
                 slack.get_replies.return_value = messages
-                sut = CreateIssue(_event(f"<@{ANNA_ID}> 새로운 이슈 제목", True), slack, None)
+                sut = CreateIssue(
+                    _event(f"<@{ANNA_ID}> 새로운 이슈 제목", True), slack, None
+                )
                 assert sut._fetch_thread_context() == expected
                 assert slack.mock_calls == [
                     call.get_replies(

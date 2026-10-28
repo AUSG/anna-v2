@@ -51,7 +51,15 @@ def test_build_reminder_exact_message(name, subject, start_hour, end_hour, hours
 
 @pytest.mark.parametrize(
     ("day", "weekday"),
-    [(17, "월"), (18, "화"), (19, "수"), (20, "목"), (21, "금"), (22, "토"), (23, "일")],
+    [
+        (17, "월"),
+        (18, "화"),
+        (19, "수"),
+        (20, "목"),
+        (21, "금"),
+        (22, "토"),
+        (23, "일"),
+    ],
 )
 def test_build_reminder_weekdays(day, weekday):
     assert build_reminder(_event("빅챗", day)) == (
@@ -92,7 +100,10 @@ def test_build_report_broadcast_reports_unresolved_applicants():
     report = build_report(result, None)
     assert "신청 시트에서 찾은 신청자: 5명" in report
     assert "실제로 DM 을 보낸 사람: 2명" in report
-    assert "신청자 2명은 멤버 시트에서 슬랙 계정을 못 찾아서 못 보냈어. (누군지는 로그에 남겼어!)" in report
+    assert (
+        "신청자 2명은 멤버 시트에서 슬랙 계정을 못 찾아서 못 보냈어. (누군지는 로그에 남겼어!)"
+        in report
+    )
 
 
 def test_build_report_test_targets():

@@ -3,6 +3,7 @@
 멘션과 모달 핸들러가 공유하는 register_early_reacted_users를 직접 검사한다.
 핸들러 테스트는 이 함수가 링크 게시 뒤에 올바른 모집글 위치로 호출되는지만 본다.
 """
+
 import unittest
 from unittest.mock import MagicMock, call
 
@@ -147,7 +148,8 @@ class TestRegisterEarlyReactedUsers(unittest.TestCase):
         assert self.sheets.append_row_if_absent.call_args_list == [
             call(WORKSHEET_ID, SAMPLE_ROW),
             call(
-                WORKSHEET_ID, ["김철수", "AUSG대", "Chulsoo@Example.com", "010-1234-5678"]
+                WORKSHEET_ID,
+                ["김철수", "AUSG대", "Chulsoo@Example.com", "010-1234-5678"],
             ),
         ]
         assert (

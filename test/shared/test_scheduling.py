@@ -40,7 +40,9 @@ class TestFireTimeIsIndependentOfServerTimezone(unittest.TestCase):
                 os.environ["TZ"] = server_tz
                 time.tzset()
 
-                fire_at = next_fire_time(datetime(2026, 8, 19, 8, 30, tzinfo=KST), 18, 0)
+                fire_at = next_fire_time(
+                    datetime(2026, 8, 19, 8, 30, tzinfo=KST), 18, 0
+                )
 
                 assert fire_at.astimezone(UTC) == datetime(
                     2026, 8, 19, 9, 0, tzinfo=UTC
@@ -55,4 +57,6 @@ class TestFireTimeIsIndependentOfServerTimezone(unittest.TestCase):
     def test_kst_is_resolvable_and_utc_plus_9(self):
         """KST 가 None 이면 datetime.now(None) 이 서버 로컬 시각이 되어 발송 시각이 통째로 틀어진다."""
         assert KST is not None
-        assert datetime(2026, 8, 19, 18, 0, tzinfo=KST).utcoffset() == timedelta(hours=9)
+        assert datetime(2026, 8, 19, 18, 0, tzinfo=KST).utcoffset() == timedelta(
+            hours=9
+        )

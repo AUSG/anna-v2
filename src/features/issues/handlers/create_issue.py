@@ -62,7 +62,9 @@ class CreateIssue(MentionHandler):
             return False
 
         if not self.github_client.is_enabled():
-            self._reply_only_to_requester("깃허브 토큰이 설정되지 않아서 이슈를 만들 수 없어. 운영진에게 알려줘!")
+            self._reply_only_to_requester(
+                "깃허브 토큰이 설정되지 않아서 이슈를 만들 수 없어. 운영진에게 알려줘!"
+            )
             return False
 
         try:
@@ -71,7 +73,9 @@ class CreateIssue(MentionHandler):
             )
         except GithubApiError as ex:
             logger.warning("Failed to create an issue for %s: %s", self.user, ex.reason)
-            self._reply_only_to_requester(f":blob-fearful: 이슈를 만들지 못했어. {ex.reason}")
+            self._reply_only_to_requester(
+                f":blob-fearful: 이슈를 만들지 못했어. {ex.reason}"
+            )
             return False
 
         logger.info("Issue #%d created by %s: %s", issue.number, self.user, issue.title)

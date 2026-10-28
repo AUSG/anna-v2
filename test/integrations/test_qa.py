@@ -48,7 +48,10 @@ def test_chat_parses_structured_result_and_source_metadata():
 
 def test_source_evidence_urls_default_and_malformed_value_is_ignored():
     result = QAClient._parse_chat_response(
-        {"answer": "답변", "sources": [{"document_id": "doc-1", "evidence_urls": "bad"}]}
+        {
+            "answer": "답변",
+            "sources": [{"document_id": "doc-1", "evidence_urls": "bad"}],
+        }
     )
     assert result.sources[0].evidence_urls == []
 
@@ -92,7 +95,9 @@ def test_chat_sends_conversation_separately_and_bounds_it():
         {"role": "system", "content": "should be dropped"},
     ]
     with patch("integrations.qa.requests.post", return_value=response) as post:
-        QAClient("https://qa.test", "secret").chat("현재 질문", conversation=conversation)
+        QAClient("https://qa.test", "secret").chat(
+            "현재 질문", conversation=conversation
+        )
 
     payload = post.call_args.kwargs["json"]
     assert payload["question"] == "현재 질문"

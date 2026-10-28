@@ -171,10 +171,14 @@ _UNKNOWN_ANSWER = "흐음~ 나도 잘 모르는 일인걸? 오거나이저를 �
                 citations=["same"],
                 sources=[
                     Source(
-                        document_id="same", title="#첫번째", url="https://example.test/1"
+                        document_id="same",
+                        title="#첫번째",
+                        url="https://example.test/1",
                     ),
                     Source(
-                        document_id="same", title="#두번째", url="https://example.test/2"
+                        document_id="same",
+                        title="#두번째",
+                        url="https://example.test/2",
                     ),
                 ],
             ),

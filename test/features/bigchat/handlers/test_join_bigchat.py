@@ -142,7 +142,10 @@ class TestJoinBigchat(unittest.TestCase):
         result = sut.run()
 
         assert result is True
-        assert "이미 등록되어 있어" in mock_slack_client.send_message.call_args.kwargs["msg"]
+        assert (
+            "이미 등록되어 있어"
+            in mock_slack_client.send_message.call_args.kwargs["msg"]
+        )
         mock_slack_client.send_message_only_visible_to_user.assert_not_called()
 
     def test_run_with_deleted_sheet_notifies_user(self):
@@ -197,7 +200,9 @@ class TestJoinBigchat(unittest.TestCase):
         sut = JoinBigchat(event, "gogo", mock_slack_client, mock_gs_client, MagicMock())
 
         with patch.object(envs, "ICS_TOKEN_SECRET", "testsecret"):
-            blocks = sut._build_calendar_blocks("등록했어", 161837744, "이번 빅챗 소개글입니다")
+            blocks = sut._build_calendar_blocks(
+                "등록했어", 161837744, "이번 빅챗 소개글입니다"
+            )
 
         assert blocks is not None
         buttons = blocks[1]["elements"]
@@ -224,7 +229,9 @@ class TestJoinBigchat(unittest.TestCase):
         blocks = sut._build_calendar_blocks("등록했어", 161837744, "긴 소개글 " * 2000)
 
         gcal_url = blocks[1]["elements"][0]["url"]
-        assert "ausg.slack.com" in gcal_url  # 소개글이 잘려도 맨 앞의 permalink는 남는다
+        assert (
+            "ausg.slack.com" in gcal_url
+        )  # 소개글이 잘려도 맨 앞의 permalink는 남는다
 
     def test_build_calendar_blocks_falls_back_to_intro_without_permalink(self):
         event = create_sample_reaction_added_event("gogo")
@@ -234,7 +241,9 @@ class TestJoinBigchat(unittest.TestCase):
         mock_gs_client.get_worksheet_title.return_value = "AI 밋업 26-08-20 19:00~21:00"
         sut = JoinBigchat(event, "gogo", mock_slack_client, mock_gs_client, MagicMock())
 
-        blocks = sut._build_calendar_blocks("등록했어", 161837744, "이번 빅챗 소개글입니다")
+        blocks = sut._build_calendar_blocks(
+            "등록했어", 161837744, "이번 빅챗 소개글입니다"
+        )
 
         gcal_url = blocks[1]["elements"][0]["url"]
         assert "details=" in gcal_url  # permalink 실패 시 (잘린) 소개글로 폴백

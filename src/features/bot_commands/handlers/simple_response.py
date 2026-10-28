@@ -9,7 +9,8 @@ class SimpleResponse(MentionHandler):
 
     def handle_mention(self):
         self.slack_client.send_message(
-            msg="앗, 잘못입력한 것 같아.\n나를 멘션하면서 help를 한 번 입력해봐!", ts=self.ts
+            msg="앗, 잘못입력한 것 같아.\n나를 멘션하면서 help를 한 번 입력해봐!",
+            ts=self.ts,
         )
         return True
 

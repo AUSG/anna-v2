@@ -152,7 +152,9 @@ class RemindBigchat:
         for row in rows:
             email = applicant_email(row)
             if not email:
-                skipped_rows += 1  # 빈 헤더 행이 보통 하나 있고, 그 외는 수기 편집 흔적일 수 있다
+                skipped_rows += (
+                    1  # 빈 헤더 행이 보통 하나 있고, 그 외는 수기 편집 흔적일 수 있다
+                )
                 logger.debug("Worksheet %s: no email in row %r", worksheet_id, row)
                 continue
             if email in emails:

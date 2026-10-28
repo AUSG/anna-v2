@@ -123,9 +123,11 @@ def _strip_untrusted_answer_links(answer: str, allowed_urls: set[str]) -> str:
     answer = _ANSWER_SLACK_LINK.sub(slack_link, answer)
     # 닫는 꺾쇠가 빠진 링크도 허용 목록으로 검사한다.
     answer = _ANSWER_MALFORMED_SLACK_LINK.sub(
-        lambda match: match.group(0)
-        if match.group(1) in allowed_urls
-        else (match.group(2) or "") + UNTRUSTED_LINK_MARKER,
+        lambda match: (
+            match.group(0)
+            if match.group(1) in allowed_urls
+            else (match.group(2) or "") + UNTRUSTED_LINK_MARKER
+        ),
         answer,
     )
     answer = _ANSWER_MARKDOWN_LINK.sub(markdown_link, answer)
@@ -146,11 +148,9 @@ def _format_timestamp(value: str) -> str:
         if re.fullmatch(r"\d+(?:\.\d+)?", value):
             parsed = datetime.fromtimestamp(float(value), tz=UTC)
         else:
-            parsed = datetime.fromisoformat(
-                value.replace("Z", "+00:00")  # noqa: FURB162
-            )
+            parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))  # noqa: FURB162
             if parsed.tzinfo is None:
                 parsed = parsed.replace(tzinfo=UTC)
         return parsed.astimezone(ZoneInfo("Asia/Seoul")).strftime("%Y-%m-%d %H:%M KST")
-    except (TypeError, ValueError, OverflowError):
+    except TypeError, ValueError, OverflowError:
         return value

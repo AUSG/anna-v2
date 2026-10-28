@@ -89,7 +89,7 @@ class MemberManager:
                     phone=phone,
                     school_name_or_company_name=school_name_or_company_name,
                 )
-            except (IndexError, ValueError):
+            except IndexError, ValueError:
                 pass  # 일부 값이 누락될 경우 이쪽으로 올 수 있다
         return members
 
