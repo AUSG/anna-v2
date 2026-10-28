@@ -42,5 +42,8 @@ source = ["src"]
 line-length = 88
 src = ["src", "."]
 
+[tool.ruff.lint]
+extend-select = ["B"]
+
 [tool.ty.environment]
 root = ["./src", "."]
