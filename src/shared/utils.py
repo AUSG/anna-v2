@@ -40,7 +40,9 @@ def strip_multiline(text, *args, ignore_first_line=True):
     else:
         lines = text.splitlines()
     for line in lines:
-        min_space_sz = min(min_space_sz, len(line) - len(line.lstrip()))
+        # 빈 줄은 들여쓰기를 계산할 때 제외한다. 공백 없는 빈 줄 때문에 전체 들여쓰기가 남지 않게 한다.
+        if line.strip():
+            min_space_sz = min(min_space_sz, len(line) - len(line.lstrip()))
 
     parts = []
     for line in lines:
