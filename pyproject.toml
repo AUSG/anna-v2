@@ -43,7 +43,7 @@ line-length = 88
 src = ["src", "."]
 
 [tool.ruff.lint]
-extend-select = ["B", "G"]
+extend-select = ["B", "G", "RET"]
 
 [tool.ty.environment]
 root = ["./src", "."]
