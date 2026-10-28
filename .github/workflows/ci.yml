@@ -16,6 +16,8 @@ jobs:
         with:
           poetry-version: 1.5.1
       - name: ready
-        run: poetry install --with ci
+        run: |
+          poetry env use python
+          poetry install --with ci
       - name: go
         run: make ci
