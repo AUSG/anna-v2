@@ -12,6 +12,6 @@ jobs:
         with:
           enable-cache: true
       - name: ready
-        run: uv sync --frozen
+        run: uv sync --locked
       - name: go
         run: make ci
