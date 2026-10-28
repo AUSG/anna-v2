@@ -72,7 +72,7 @@ class QuestionResponse(MentionHandler):
             )
             return True
 
-        logger.info(f"Processing question: {question[:100]}...")
+        logger.info("Processing question: %s...", question[:100])
 
         conversation = self._fetch_conversation()
         if conversation:

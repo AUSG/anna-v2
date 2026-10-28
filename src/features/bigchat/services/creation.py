@@ -69,7 +69,7 @@ def register_early_reacted_users(
                 )
             except SlackApiError as ex:
                 # 슬랙 API 오류로 안내하지 못해도 다음 사용자로 진행한다.
-                logger.warning(f"Failed to send registration info to {user}: {ex}")
+                logger.warning("Failed to send registration info to %s: %s", user, ex)
     except Exception:
         logger.exception("Failed to backfill early reactions")
         slack_client.send_thread_message(

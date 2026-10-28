@@ -52,10 +52,10 @@ class QAClient:
             response.raise_for_status()
             return self._parse_chat_response(response.json())
         except requests.exceptions.RequestException as e:
-            logger.error(f"QA server request failed: {e}")
+            logger.error("QA server request failed: %s", e)
             return None
         except (TypeError, ValueError) as e:
-            logger.error(f"QA server response parsing failed: {e}")
+            logger.error("QA server response parsing failed: %s", e)
             return None
 
     @staticmethod
@@ -146,10 +146,10 @@ class QAClient:
             response.raise_for_status()
             return response.json()["answer"]
         except requests.exceptions.RequestException as e:
-            logger.error(f"QA server generate failed: {e}")
+            logger.error("QA server generate failed: %s", e)
             return None
         except (KeyError, TypeError, ValueError) as e:
-            logger.error(f"QA server generate parsing failed: {e}")
+            logger.error("QA server generate parsing failed: %s", e)
             return None
 
     def daily_digest(self) -> str:

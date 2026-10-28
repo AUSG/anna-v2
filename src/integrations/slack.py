@@ -141,7 +141,7 @@ class SlackClient:
             resp.raise_for_status()
             return resp.content
         except requests.exceptions.RequestException as e:
-            logger.warning(f"Failed to download Slack file: {e}")
+            logger.warning("Failed to download Slack file: %s", e)
             return None
 
     def send_message_to_freetalk(self, msg: str):
@@ -153,7 +153,7 @@ class SlackClient:
             resp = self.web_client.chat_getPermalink(channel=channel, message_ts=ts)
             return resp["permalink"]
         except SlackApiError as ex:
-            logger.warning(f"Failed to get permalink: {ex}")
+            logger.warning("Failed to get permalink: %s", ex)
             return None
 
     def send_message_only_visible_to_user(
@@ -244,11 +244,11 @@ class SlackClient:
                 )
                 break
             except SlackApiError as ex:
-                logger.warning(f"Failed to get reactions: {ex}")
+                logger.warning("Failed to get reactions: %s", ex)
                 return None
             except OSError as ex:
                 if attempt >= 2:
-                    logger.warning(f"Failed to get reactions: {ex}")
+                    logger.warning("Failed to get reactions: %s", ex)
                     return None
 
         message = response.get("message") or {}
