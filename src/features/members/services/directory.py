@@ -1,10 +1,10 @@
 import logging
 
-from cachetools.func import ttl_cache
 from pydantic import BaseModel
 
 from config.env_config import envs
 from integrations.google_sheets import GoogleSpreadsheetClient
+from shared.cache import ttl_cache
 
 
 class Member(BaseModel):
@@ -39,12 +39,9 @@ class MemberManager:
         )
         self.logger = logging.getLogger(__name__)
 
-    @ttl_cache(
-        maxsize=30, ttl=600
-    )  # not thread-safe, 'maxsize' means 'cache call limit'
+    @ttl_cache(maxsize=30, ttl=600)
     def find(self, slack_unique_id: str) -> Member:
-        # cachetools 타입 선언은 데코레이터를 씌운 메서드의 self 바인딩을 표현하지 못한다.
-        members = self._fetch_members()  # ty: ignore[missing-argument]
+        members = self._fetch_members()
 
         member = members.get(slack_unique_id)
 
@@ -57,14 +54,14 @@ class MemberManager:
 
     def email_to_slack_ids(self) -> dict[str, str]:
         """소문자 이메일로 슬랙 user_id를 찾는 매핑을 만든다. 빅챗 신청자의 계정을 찾을 때 쓴다."""
-        members = self._fetch_members()  # ty: ignore[missing-argument]
+        members = self._fetch_members()
         return {
             member.email.strip().lower(): user_id
             for user_id, member in members.items()
             if member.email.strip()
         }
 
-    @ttl_cache(maxsize=1, ttl=60)  # not thread-safe
+    @ttl_cache(maxsize=1, ttl=60)
     # 시트 생성 직후의 일괄 등록(#89)이 N명을 연달아 조회해도 멤버 시트 읽기는 1회면 된다.
     # ttl 이 길면 방금 멤버 시트에 추가된 사람이 그만큼 늦게 조회되므로 60초로 짧게 잡았다.
     def _fetch_members(self) -> dict[str, Member]:

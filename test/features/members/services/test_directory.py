@@ -37,7 +37,7 @@ class TestMemberManager(unittest.TestCase):
         assert self.sut.email_to_slack_ids() == {"chulsoo@example.com": "U0001"}
 
     def test_finds_member_and_builds_registration_row(self):
-        member = self.sut.find("U0001")  # ty: ignore[missing-argument, invalid-argument-type]
+        member = self.sut.find("U0001")
 
         assert member.eng_name == "Kim Chulsoo"
         assert member.transform_for_spreadsheet() == [
@@ -49,8 +49,8 @@ class TestMemberManager(unittest.TestCase):
 
     def test_missing_member_is_reported(self):
         with self.assertRaises(MemberNotFound):
-            self.sut.find("U_UNKNOWN")  # ty: ignore[missing-argument, invalid-argument-type]
+            self.sut.find("U_UNKNOWN")
 
     def test_incomplete_member_is_reported(self):
         with self.assertRaises(MemberLackInfo):
-            self.sut.find("U0002")  # ty: ignore[missing-argument, invalid-argument-type]
+            self.sut.find("U0002")
