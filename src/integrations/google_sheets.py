@@ -2,8 +2,8 @@ import logging
 import threading
 from datetime import datetime
 from typing import List, Optional, Tuple
+from zoneinfo import ZoneInfo
 
-from dateutil.tz import gettz
 from gspread import service_account_from_dict, Worksheet, Spreadsheet
 from gspread.exceptions import WorksheetNotFound
 from gspread_formatting import set_column_width
@@ -114,7 +114,7 @@ class GoogleSpreadsheetClient:
 
     @staticmethod
     def _yyyymmddhhmmss(timezone: str = "Asia/Seoul") -> str:
-        return datetime.now(gettz(timezone)).strftime("%Y%m%d %H%M%S")  # korean time
+        return datetime.now(ZoneInfo(timezone)).strftime("%Y%m%d %H%M%S")  # korean time
 
     @with_retry()
     def _get_spreadsheet(self) -> Spreadsheet:

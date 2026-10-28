@@ -5,10 +5,9 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Optional
 from urllib.parse import urlencode
+from zoneinfo import ZoneInfo
 
-from dateutil.tz import gettz
-
-KST = gettz("Asia/Seoul")
+KST = ZoneInfo("Asia/Seoul")
 
 # 빅챗 시트 이름이 곧 이벤트 정보 저장소다: "<name> yy-MM-DD HH:mm~HH:mm"
 # e.g. "AI 밋업 26-08-20 19:00~21:00"

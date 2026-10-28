@@ -53,6 +53,6 @@ class TestFireTimeIsIndependentOfServerTimezone(unittest.TestCase):
             time.tzset()
 
     def test_kst_is_resolvable_and_utc_plus_9(self):
-        """gettz 가 None 을 주면 datetime.now(None) 이 서버 로컬 시각이 되어 발송 시각이 통째로 틀어진다."""
+        """KST 가 None 이면 datetime.now(None) 이 서버 로컬 시각이 되어 발송 시각이 통째로 틀어진다."""
         assert KST is not None
         assert datetime(2026, 8, 19, 18, 0, tzinfo=KST).utcoffset() == timedelta(hours=9)

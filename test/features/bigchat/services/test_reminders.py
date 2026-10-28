@@ -2,11 +2,8 @@ import unittest
 from datetime import date, datetime
 from unittest.mock import MagicMock, patch
 
-from dateutil.tz import gettz
-
+from features.bigchat.calendar import KST
 from features.bigchat.services.reminders import RemindBigchat
-
-KST = gettz("Asia/Seoul")
 
 # 행사(26-08-20 목요일) 전날 저녁 6시
 NOW = datetime(2026, 8, 19, 18, 0, tzinfo=KST)
