@@ -84,7 +84,7 @@
 
 ## 개발환경 구축
 
-Python 3.11 와 [uv](https://docs.astral.sh/uv/) 가 필요하다.
+Python 3.15 와 [uv](https://docs.astral.sh/uv/) 가 필요하다.
 
 ```sh
 make setup_local_env
