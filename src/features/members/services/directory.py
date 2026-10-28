@@ -73,8 +73,7 @@ class MemberManager:
             self.members_worksheet_id, member_info_cols
         )
 
-        members = self._build_members_info(raw_members)
-        return members
+        return self._build_members_info(raw_members)
 
     @staticmethod
     def _build_members_info(raw_members):

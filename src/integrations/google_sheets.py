@@ -122,8 +122,7 @@ class GoogleSpreadsheetClient:
     @with_retry(non_retryable_exceptions=(WorksheetNotFound,))
     def _get_worksheet(self, worksheet_id: int) -> Worksheet:
         spreadsheet = self._get_spreadsheet()
-        worksheet = spreadsheet.get_worksheet_by_id(worksheet_id)
-        return worksheet
+        return spreadsheet.get_worksheet_by_id(worksheet_id)
 
     @with_retry()
     def create_bigchat_sheet(self, title=None) -> int | None:
