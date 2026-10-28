@@ -1,5 +1,5 @@
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import requests
 
@@ -26,9 +26,9 @@ class QAClient:
     def chat(
         self,
         question: str,
-        system_prompt: Optional[str] = None,
-        conversation: Optional[List[Dict[str, str]]] = None,
-    ) -> Optional[ChatResult]:
+        system_prompt: str | None = None,
+        conversation: list[dict[str, str]] | None = None,
+    ) -> ChatResult | None:
         payload = {
             "question": question,
             "namespace": self.namespace,
@@ -59,12 +59,12 @@ class QAClient:
             return None
 
     @staticmethod
-    def _parse_chat_response(data: Any) -> Optional[ChatResult]:
+    def _parse_chat_response(data: Any) -> ChatResult | None:
         """응답을 파싱하고 answer가 문자열인지 검사한다."""
         if not isinstance(data, dict) or not isinstance(data.get("answer"), str):
-            raise ValueError("chat response must contain a string answer")
+            raise TypeError("chat response must contain a string answer")
 
-        sources: List[Source] = []
+        sources: list[Source] = []
         raw_sources = data.get("sources", [])
         if isinstance(raw_sources, list):
             for raw_source in raw_sources:
@@ -123,10 +123,10 @@ class QAClient:
     def generate(
         self,
         content: str,
-        system_prompt: Optional[str] = None,
+        system_prompt: str | None = None,
         max_tokens: int = 512,
-        images: Optional[List[str]] = None,
-    ) -> Optional[str]:
+        images: list[str] | None = None,
+    ) -> str | None:
         """검색 없이 답변을 생성한다. images는 비전 입력용 data URL 목록이다."""
         payload = {"content": content, "max_tokens": max_tokens}
         if system_prompt:
@@ -184,7 +184,7 @@ def _as_string(value: Any) -> str:
     return value if isinstance(value, str) else ""
 
 
-def _as_optional_string(value: Any) -> Optional[str]:
+def _as_optional_string(value: Any) -> str | None:
     return value if isinstance(value, str) and value else None
 
 
@@ -195,11 +195,11 @@ def _as_float(value: Any) -> float:
         return 0.0
 
 
-def _bound_conversation(conversation: Any) -> List[Dict[str, str]]:
+def _bound_conversation(conversation: Any) -> list[dict[str, str]]:
     """대화 입력을 API 개수와 길이 제한에 맞춘다."""
     if not isinstance(conversation, list):
         return []
-    bounded: List[Dict[str, str]] = []
+    bounded: list[dict[str, str]] = []
     total_chars = 0
     for item in conversation[:MAX_CONVERSATION_MESSAGES]:
         if not isinstance(item, dict) or item.get("role") not in {"user", "assistant"}:

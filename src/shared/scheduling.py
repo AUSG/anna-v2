@@ -1,7 +1,7 @@
 import logging
 import threading
 import time
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 logger = logging.getLogger(__name__)
 
@@ -45,7 +45,7 @@ class DailyScheduler(threading.Thread):
                 "[%s] next fire at %s (= %s UTC), in %s",
                 self.name,
                 fire_at.isoformat(timespec="seconds"),
-                fire_at.astimezone(timezone.utc).strftime("%Y-%m-%d %H:%M:%S"),
+                fire_at.astimezone(UTC).strftime("%Y-%m-%d %H:%M:%S"),
                 _fmt_duration((fire_at - now).total_seconds()),
             )
             self._sleep_until(fire_at)

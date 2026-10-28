@@ -1,6 +1,5 @@
 import logging
 import re
-from typing import List, Optional
 
 import requests
 from pydantic import BaseModel
@@ -43,12 +42,12 @@ class Emoji(BaseModel):
 
 class Reaction(BaseModel):
     name: str
-    users: List[str]
+    users: list[str]
     count: int
 
 
 class SlackClient:
-    def __init__(self, say: Optional[Say], web_client: WebClient):
+    def __init__(self, say: Say | None, web_client: WebClient):
         """say 는 슬랙 이벤트 컨텍스트에서만 존재한다. 스케줄 발송처럼 이벤트 없이 쓸 땐
         None 을 넘기고, web_client 기반 메서드만 사용해야 한다."""
         self.say = say
@@ -57,7 +56,7 @@ class SlackClient:
     def send_message(self, msg: str, ts: str):
         self.say(msg, thread_ts=ts, **NO_UNFURL)
 
-    def send_answer(self, answer: str, sources: List[str], ts: str):
+    def send_answer(self, answer: str, sources: list[str], ts: str):
         """질문 답변. 본문은 표준 마크다운을 그리는 markdown 블록, 출처는 회색 작은 글씨(context 블록)로 보낸다.
 
         text는 알림과 검색에 사용하는 대체 문자열이다. 블록 전송이 거절되면 text만 보낸다.
@@ -118,7 +117,7 @@ class SlackClient:
         )
         resp.raise_for_status()
 
-    def download_file(self, url: str) -> Optional[bytes]:
+    def download_file(self, url: str) -> bytes | None:
         """Slack url_private 파일을 봇 토큰으로 다운로드 (이미지 등). 실패 시 None."""
         try:
             resp = requests.get(
@@ -135,7 +134,7 @@ class SlackClient:
     def send_message_to_freetalk(self, msg: str):
         self.say(msg, channel="CQJ8HQWUV", **NO_UNFURL)
 
-    def get_permalink(self, channel: str, ts: str) -> Optional[str]:
+    def get_permalink(self, channel: str, ts: str) -> str | None:
         """메시지 permalink를 반환. 실패 시 None."""
         try:
             resp = self.web_client.chat_getPermalink(channel=channel, message_ts=ts)
@@ -149,8 +148,8 @@ class SlackClient:
         msg: str,
         user_id: str,
         channel: str,
-        ts: Optional[str] = None,
-        blocks: Optional[List[dict]] = None,
+        ts: str | None = None,
+        blocks: list[dict] | None = None,
     ):
         self.web_client.chat_postEphemeral(
             text=msg, blocks=blocks, channel=channel, user=user_id, thread_ts=ts
@@ -171,8 +170,8 @@ class SlackClient:
         ]
 
     def get_replies(
-        self, channel: str, thread_ts: str = None, ts: str = None
-    ) -> List[Message]:
+        self, channel: str, thread_ts: str | None = None, ts: str | None = None
+    ) -> list[Message]:
         """
         해당 스레드 첫 댓글의 ts, 즉 thread_ts 를 넣어야 정상적으로 목록을 가져옴 (대댓글 X)
 
@@ -202,7 +201,9 @@ class SlackClient:
                     raise
 
         if resp.status_code != 200:
-            raise Exception(f"Failed to get message, ts={thread_ts}, channel={channel}")
+            raise RuntimeError(
+                f"Failed to get message, ts={thread_ts}, channel={channel}"
+            )
 
         return self._messages_to_members(resp["messages"], channel)
 
@@ -214,9 +215,9 @@ class SlackClient:
         except SlackApiError as ex:
             if ex.response.data["error"] == "already_reacted":
                 return
-            raise ex
+            raise
 
-    def get_emoji(self, channel: str, ts: str, emoji_name: str) -> Optional[Reaction]:
+    def get_emoji(self, channel: str, ts: str, emoji_name: str) -> Reaction | None:
         """channel의 ts 메시지에 달린 emoji_name 반응(누른 사람 목록 포함)을 가져온다.
 
         해당 반응이 없거나 메시지를 읽지 못하면 None을 반환한다.
@@ -253,4 +254,4 @@ class SlackClient:
         except SlackApiError as ex:
             if ex.response.data["error"] == "no_reaction":
                 return
-            raise ex
+            raise

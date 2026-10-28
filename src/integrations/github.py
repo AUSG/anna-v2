@@ -1,5 +1,4 @@
 import logging
-from typing import List, Optional
 
 import requests
 from pydantic import BaseModel
@@ -41,7 +40,7 @@ class GithubClient:
         return bool(self.token and self.repo)
 
     def create_issue(
-        self, title: str, body: str = "", labels: Optional[List[str]] = None
+        self, title: str, body: str = "", labels: list[str] | None = None
     ) -> Issue:
         if not self.is_enabled():
             raise GithubApiError("깃허브 토큰이나 레포 설정이 비어 있어. 운영진에게 알려줘!")

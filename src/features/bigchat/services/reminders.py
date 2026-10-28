@@ -1,11 +1,10 @@
 import logging
 from datetime import datetime, timedelta
-from typing import List, Optional
 
+from features.bigchat.calendar import KST, BigchatEvent
 from features.bigchat.models import ReminderResult, select_bigchats
 from features.bigchat.presentation.reminders import build_reminder
 from features.bigchat.services.reminder_policy import applicant_email
-from features.bigchat.calendar import KST, BigchatEvent
 
 logger = logging.getLogger(__name__)
 
@@ -20,8 +19,8 @@ class RemindBigchat:
 
     def run(
         self,
-        now: Optional[datetime] = None,
-        only_user_ids: Optional[List[str]] = None,
+        now: datetime | None = None,
+        only_user_ids: list[str] | None = None,
     ) -> ReminderResult:
         """내일 시작하는 빅챗을 찾아 발송하고 결과를 모은다.
 
@@ -84,7 +83,7 @@ class RemindBigchat:
         self,
         worksheet_id: int,
         event: BigchatEvent,
-        only_user_ids: Optional[List[str]],
+        only_user_ids: list[str] | None,
         result: ReminderResult,
     ):
         msg = build_reminder(event)
@@ -146,7 +145,7 @@ class RemindBigchat:
         )
         result.sent_cnt += sent_cnt
 
-    def _applicant_emails(self, worksheet_id: int) -> List[str]:
+    def _applicant_emails(self, worksheet_id: int) -> list[str]:
         """각 행의 첫 이메일을 골라 원래 순서대로 중복을 제거한다."""
         rows = self.gs_client.get_values(worksheet_id)
         emails, skipped_rows = [], 0

@@ -1,10 +1,9 @@
 import logging
 import threading
 from datetime import datetime
-from typing import List, Optional, Tuple
 from zoneinfo import ZoneInfo
 
-from gspread import service_account_from_dict, Worksheet, Spreadsheet
+from gspread import Spreadsheet, Worksheet, service_account_from_dict
 from gspread.exceptions import WorksheetNotFound
 from gspread_formatting import set_column_width
 
@@ -41,8 +40,8 @@ class GoogleSpreadsheetClient:
 
     def _create_worksheet(
         self,
-        title: str = None,
-        header_values: List[str] = None,
+        title: str | None = None,
+        header_values: list[str] | None = None,
         row_size: int = 100,
         col_size: int = 30,
         col_width: int = 220,
@@ -68,7 +67,7 @@ class GoogleSpreadsheetClient:
     def append_row(
         self,
         worksheet_id: int,
-        values: List[str],
+        values: list[str],
         timestamp_on_first_row: bool = False,
     ):
         _values = list(values)
@@ -79,7 +78,7 @@ class GoogleSpreadsheetClient:
 
         worksheet.append_row(_values)
 
-    def append_row_if_absent(self, worksheet_id: int, values: List[str]) -> bool:
+    def append_row_if_absent(self, worksheet_id: int, values: list[str]) -> bool:
         """같은 행이 이미 있으면 추가하지 않는다. 실제로 추가했으면 True.
 
         빅챗 등록은 JoinBigchat(reaction_added)과 시트 생성 직후의 일괄 등록(#89)이
@@ -92,7 +91,7 @@ class GoogleSpreadsheetClient:
             return True
 
     @with_retry(non_retryable_exceptions=(WorksheetNotFound,))
-    def get_values(self, worksheet_id: int, cell_range=None) -> List[List[str]]:
+    def get_values(self, worksheet_id: int, cell_range=None) -> list[list[str]]:
         worksheet = self._get_worksheet(worksheet_id)
         return worksheet.get_values(cell_range)
 
@@ -101,12 +100,12 @@ class GoogleSpreadsheetClient:
         return self._get_worksheet(worksheet_id).title
 
     @with_retry()
-    def list_worksheets(self) -> List[Tuple[int, str]]:
+    def list_worksheets(self) -> list[tuple[int, str]]:
         """스프레드시트의 모든 워크시트를 (worksheet_id, title) 목록으로 반환한다."""
         return [(ws.id, ws.title) for ws in self._get_spreadsheet().worksheets()]
 
     def get_url(self, worksheet_id: int) -> str:
-        return f"https://docs.google.com/spreadsheets/d/{self.spreadsheet_id}/edit#gid={str(worksheet_id)}"
+        return f"https://docs.google.com/spreadsheets/d/{self.spreadsheet_id}/edit#gid={worksheet_id!s}"
 
     @staticmethod
     def _convert_list_to_sheet_range(size: int) -> str:
@@ -127,8 +126,8 @@ class GoogleSpreadsheetClient:
         return worksheet
 
     @with_retry()
-    def create_bigchat_sheet(self, title=None) -> Optional[int]:
-        worksheet_id: Optional[int] = self._create_worksheet(
+    def create_bigchat_sheet(self, title=None) -> int | None:
+        worksheet_id: int | None = self._create_worksheet(
             title=title,
             header_values=[
                 # csv 만들때 헤더 없는게 낫다고 해서 전부 주석처리 함

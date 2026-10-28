@@ -2,7 +2,7 @@
 
 import re
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 # crawler 의 /api/v1/chat 상한(services/conversation.py)과 맞춘다
 MAX_CONVERSATION_MESSAGES = 100
@@ -21,12 +21,12 @@ class Source:
     title: str = ""
     url: str = ""
     content_preview: str = ""
-    channel_id: Optional[str] = None
-    thread_ts: Optional[str] = None
-    user_id: Optional[str] = None
-    timestamp: Optional[str] = None
+    channel_id: str | None = None
+    thread_ts: str | None = None
+    user_id: str | None = None
+    timestamp: str | None = None
     truncated: bool = False
-    evidence_urls: List[str] = field(default_factory=list)
+    evidence_urls: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -34,16 +34,16 @@ class ChatResult:
     """답변과 출처를 담는다. 추가 필드의 기본값은 구형 응답을 지원한다."""
 
     answer: str
-    sources: List[Source] = field(default_factory=list)
-    timing: Dict[str, Any] = field(default_factory=dict)
+    sources: list[Source] = field(default_factory=list)
+    timing: dict[str, Any] = field(default_factory=dict)
     status: str = "answered"
-    citations: List[str] = field(default_factory=list)
+    citations: list[str] = field(default_factory=list)
     trace_id: str = ""
 
 
 def select_conversation(
-    normalized: List[Dict[str, str]], question: str
-) -> List[Dict[str, str]]:
+    normalized: list[dict[str, str]], question: str
+) -> list[dict[str, str]]:
     """선택한 원본 객체를 입력 순서로 반환한다."""
     if not normalized:
         return []

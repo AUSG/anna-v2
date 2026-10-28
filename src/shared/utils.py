@@ -72,7 +72,7 @@ def with_retry(max_try_cnt=10, fixed_wait_time_in_sec=3, non_retryable_exception
                     return func(*args, **kwargs)
                 except non_retryable_exceptions:
                     raise
-                except Exception as ex:
+                except Exception as ex:  # noqa: BLE001
                     last_exception = ex
                     time.sleep(fixed_wait_time_in_sec)
             raise last_exception

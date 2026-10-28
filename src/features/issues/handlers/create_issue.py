@@ -5,10 +5,11 @@ from features.issues.presentation.content import (
     build_issue_footer,
     parse_issue_command,
 )
-from shared.mention_handler import MentionHandler
-from slack_router import MENTION_PATTERN as MENTION_PAT, matches_mention
 from integrations.github import GithubApiError
+from shared.mention_handler import MentionHandler
 from shared.utils import strip_multiline
+from slack_router import MENTION_PATTERN as MENTION_PAT
+from slack_router import matches_mention
 
 logger = logging.getLogger(__name__)
 

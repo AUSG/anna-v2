@@ -2,6 +2,7 @@ from datetime import date, datetime
 
 import pytest
 
+from features.bigchat.calendar import KST, BigchatEvent
 from features.bigchat.models import ReminderResult
 from features.bigchat.presentation.reminders import (
     USAGE,
@@ -9,7 +10,6 @@ from features.bigchat.presentation.reminders import (
     build_report,
     missing_targets_message,
 )
-from features.bigchat.calendar import KST, BigchatEvent
 
 NO_EVENTS_REPORT = (
     "2026-08-20 에 시작하는 빅챗을 못 찾았어. 그래서 보낼 것도 없었어.\n"

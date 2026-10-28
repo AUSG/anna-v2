@@ -1,6 +1,6 @@
+from collections.abc import Iterable
 from dataclasses import dataclass, field
 from datetime import date
-from typing import Iterable, List, Tuple
 
 from features.bigchat.calendar import BigchatEvent, parse_sheet_name
 
@@ -31,7 +31,7 @@ class ReminderResult:
     """리마인더 발송 결과."""
 
     target_date: date
-    bigchat_names: List[str] = field(default_factory=list)
+    bigchat_names: list[str] = field(default_factory=list)
     parsed_sheet_cnt: int = 0
     ignored_sheet_cnt: int = 0
     applicant_cnt: int = 0  # 신청 시트에서 찾은 이메일 수
@@ -40,8 +40,8 @@ class ReminderResult:
 
 
 def select_bigchats(
-    worksheets: Iterable[Tuple[int, str]], target_date: date
-) -> Tuple[List[Tuple[int, BigchatEvent]], List[str], List[str]]:
+    worksheets: Iterable[tuple[int, str]], target_date: date
+) -> tuple[list[tuple[int, BigchatEvent]], list[str], list[str]]:
     matched, parsed, ignored = [], [], []
     for worksheet_id, title in worksheets:
         event = parse_sheet_name(title)

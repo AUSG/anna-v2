@@ -2,8 +2,8 @@
 
 import logging
 import traceback
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Callable
 
 from slack_sdk.http_retry.builtin_handlers import RateLimitErrorRetryHandler
 

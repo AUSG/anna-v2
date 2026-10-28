@@ -1,6 +1,6 @@
 from shared.mention_handler import MentionHandler
-from slack_router import matches_mention
 from shared.utils import strip_multiline
+from slack_router import matches_mention
 
 
 class HelpResponse(MentionHandler):

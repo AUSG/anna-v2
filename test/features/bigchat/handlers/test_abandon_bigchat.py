@@ -1,13 +1,12 @@
 import unittest
 from unittest.mock import MagicMock
 
-from test.fixtures.slack_events import create_sample_reaction_removed_event
-
 from features.bigchat.handlers.abandon_bigchat import AbandonBigchat
-from shared.loading_emoji import LoadingEmoji
-from integrations.google_sheets import WorksheetNotFound
 from features.members.services.directory import Member
+from integrations.google_sheets import WorksheetNotFound
 from integrations.slack import Message
+from shared.loading_emoji import LoadingEmoji
+from test.fixtures.slack_events import create_sample_reaction_removed_event
 
 
 class TestAbandonBigchat(unittest.TestCase):

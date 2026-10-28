@@ -1,5 +1,4 @@
 # fun-anna-house 자동 답글: 한국어 페르소나 프롬프트가 길어 줄길이(E501) 검사를 예외 처리한다.
-# ruff: noqa: E501
 import base64
 import logging
 import re
@@ -132,6 +131,4 @@ class SubinLikeResponse:
         if self.anna_id and f"<@{self.anna_id}>" in self.text:
             return False
         # 텍스트도 이미지도 없으면 무시
-        if not self.text.strip() and not self._image_files():
-            return False
-        return True
+        return bool(self.text.strip() or self._image_files())

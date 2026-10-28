@@ -1,5 +1,7 @@
 from slack_router import (
     ISSUE_TRIGGER_PATTERN as TRIGGER_PAT,
+)
+from slack_router import (
     MENTION_PATTERN as MENTION_PAT,
 )
 

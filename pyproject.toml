@@ -23,7 +23,7 @@ dev = [
     "black~=23.7.0",
     "pytest~=9.2.0",
     "pytest-cov~=7.1.0",
-    "ruff~=0.0.278",
+    "ruff~=0.17.3",
 ]
 
 [tool.uv]
@@ -39,3 +39,4 @@ source = ["src"]
 
 [tool.ruff]
 line-length = 120
+src = ["src", "."]

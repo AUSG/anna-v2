@@ -20,7 +20,7 @@ def catch_global_error(*, admin_channel=None):
             try:
                 logger.debug("event=%s", event)
                 f(*args, **kwargs)
-            except BaseException as ex:
+            except BaseException as ex:  # noqa: BLE001
                 err_msg = strip_multiline(
                     """
                     :blob-fearful: 예상치 못한 에러가 발생했어!

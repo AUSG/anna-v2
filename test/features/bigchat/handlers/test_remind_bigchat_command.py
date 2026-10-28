@@ -2,8 +2,8 @@ import unittest
 from datetime import date
 from unittest.mock import MagicMock, patch
 
-from features.bigchat.models import ReminderResult
 from features.bigchat.handlers.remind_bigchat_command import RemindBigchatCommand
+from features.bigchat.models import ReminderResult
 
 ANNA_ID = "UANNA"
 

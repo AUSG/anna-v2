@@ -2,11 +2,10 @@ import unittest
 from types import SimpleNamespace
 from unittest.mock import MagicMock, call
 
-from test.fixtures.slack_events import create_sample_app_mention_event
-
 from features.issues.handlers.create_issue import CreateIssue
 from integrations.github import GithubApiError, Issue
 from integrations.slack import Message
+from test.fixtures.slack_events import create_sample_app_mention_event
 
 ANNA_ID = "U01BN035Y6L"
 FOOTER = "---\n슬랙에서 `UQJ8HQJG5` 가 안나에게 요청해서 만들어진 이슈야."

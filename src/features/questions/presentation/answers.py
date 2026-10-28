@@ -2,8 +2,7 @@
 
 import re
 from collections import Counter
-from datetime import datetime, timezone
-from typing import List, Tuple
+from datetime import UTC, datetime
 from urllib.parse import urlsplit
 from zoneinfo import ZoneInfo
 
@@ -24,7 +23,7 @@ _TRAILING_HANGUL = re.compile(r"[가-힣ㄱ-ㅎㅏ-ㅣ]+$")
 UNTRUSTED_LINK_MARKER = "[확인되지 않은 링크 제거]"
 
 
-def render_parts(result) -> Tuple[str, List[str]]:
+def render_parts(result) -> tuple[str, list[str]]:
     """답변과 인용 출처 링크를 만든다. 구형 문자열 응답도 받는다."""
     if result is None:
         return "앗, 답변 서버가 잠시 응답하지 않아요. 잠시 후 다시 시도해 주세요.", []
@@ -145,11 +144,13 @@ def _format_timestamp(value: str) -> str:
     """시각을 KST로 표시하며 형식이나 범위 오류면 원문을 남긴다."""
     try:
         if re.fullmatch(r"\d+(?:\.\d+)?", value):
-            parsed = datetime.fromtimestamp(float(value), tz=timezone.utc)
+            parsed = datetime.fromtimestamp(float(value), tz=UTC)
         else:
-            parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+            parsed = datetime.fromisoformat(
+                value.replace("Z", "+00:00")  # noqa: FURB162
+            )
             if parsed.tzinfo is None:
-                parsed = parsed.replace(tzinfo=timezone.utc)
+                parsed = parsed.replace(tzinfo=UTC)
         return parsed.astimezone(ZoneInfo("Asia/Seoul")).strftime("%Y-%m-%d %H:%M KST")
     except (TypeError, ValueError, OverflowError):
         return value
