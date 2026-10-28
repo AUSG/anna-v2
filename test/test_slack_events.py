@@ -37,11 +37,16 @@ def runtime(monkeypatch):
 
 
 @pytest.fixture
-def slack_client(monkeypatch):
+def slack_client_factory(monkeypatch):
     factory = create_autospec(slack_events.SlackClient, spec_set=True)
     factory.return_value.get_replies.return_value = []
     monkeypatch.setattr(slack_events, "SlackClient", factory)
-    return factory.return_value
+    return factory
+
+
+@pytest.fixture
+def slack_client(slack_client_factory):
+    return slack_client_factory.return_value
 
 
 @pytest.fixture
@@ -70,12 +75,10 @@ def run_mention(runtime, text):
 
 
 def test_help_executes_without_external_dependencies(
-    runtime, slack_client, external_factories
+    runtime, slack_client_factory, slack_client, external_factories
 ):
     event, say, web_client = run_mention(runtime, "<@U01BN035Y6L> help")
-    slack_events.SlackClient.assert_called_once_with(  # ty: ignore[unresolved-attribute]
-        say, web_client
-    )
+    slack_client_factory.assert_called_once_with(say, web_client)
     slack_client.send_message.assert_called_once()
     assert (
         "사용할 수 있는 명령어야" in slack_client.send_message.call_args.kwargs["msg"]

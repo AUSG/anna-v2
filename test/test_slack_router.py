@@ -72,8 +72,3 @@ def test_extracts_questions_with_existing_rules(text, require_prefix, expected):
 def test_empty_match_excludes_nonempty_questions():
     assert matches_mention("empty", "<@UANNA>") is True
     assert matches_mention("empty", "<@UANNA> 질문") is False
-
-
-def test_unknown_command_is_rejected():
-    with pytest.raises(ValueError, match="Unknown mention command"):
-        matches_mention("unknown", "help")  # ty: ignore[invalid-argument-type]

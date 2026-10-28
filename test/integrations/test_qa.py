@@ -57,6 +57,14 @@ def test_source_evidence_urls_default_and_malformed_value_is_ignored():
     assert result.sources[0].evidence_urls == []
 
 
+def test_non_string_citations_are_dropped():
+    result = QAClient._parse_chat_response(
+        {"answer": "답변", "citations": ["doc-1", None, 3, "doc-2"]}
+    )
+    assert result is not None
+    assert result.citations == ["doc-1", "doc-2"]
+
+
 def test_chat_accepts_legacy_answer_only_response():
     response = _response({"answer": "예전 답변"})
     with patch("integrations.qa.requests.post", return_value=response):
