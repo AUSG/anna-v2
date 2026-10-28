@@ -59,7 +59,7 @@ class JoinBigchat:
             sheet_name = self.gs_client.get_worksheet_title(worksheet_id)
             event = parse_sheet_name(sheet_name)
         except Exception as ex:  # noqa: BLE001
-            logger.warning(f"Failed to build calendar buttons: {ex}")
+            logger.warning("Failed to build calendar buttons: %s", ex)
             return None
         if not event:
             return None
