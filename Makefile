@@ -29,6 +29,7 @@ open_port:
 _lintfmt:
 	uv run --frozen ruff format --check
 	uv run --frozen ruff check
+	uv run --frozen ty check
 
 .PHONY: _test
 _test:

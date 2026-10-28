@@ -205,6 +205,7 @@ class TestJoinBigchat(unittest.TestCase):
             )
 
         assert blocks is not None
+        assert blocks is not None
         buttons = blocks[1]["elements"]
         assert [b["action_id"] for b in buttons] == ["calendar_gcal", "calendar_ics"]
         gcal_url, ics_url = buttons[0]["url"], buttons[1]["url"]
@@ -228,6 +229,7 @@ class TestJoinBigchat(unittest.TestCase):
 
         blocks = sut._build_calendar_blocks("등록했어", 161837744, "긴 소개글 " * 2000)
 
+        assert blocks is not None
         gcal_url = blocks[1]["elements"][0]["url"]
         assert (
             "ausg.slack.com" in gcal_url
@@ -245,6 +247,7 @@ class TestJoinBigchat(unittest.TestCase):
             "등록했어", 161837744, "이번 빅챗 소개글입니다"
         )
 
+        assert blocks is not None
         gcal_url = blocks[1]["elements"][0]["url"]
         assert "details=" in gcal_url  # permalink 실패 시 (잘린) 소개글로 폴백
 
@@ -256,6 +259,7 @@ class TestJoinBigchat(unittest.TestCase):
 
         blocks = sut._build_calendar_blocks("등록했어", 161837744, "소개글")
 
+        assert blocks is not None
         buttons = blocks[1]["elements"]
         assert [b["action_id"] for b in buttons] == ["calendar_gcal"]
 
