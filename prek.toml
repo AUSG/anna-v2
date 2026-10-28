@@ -1,0 +1,36 @@
+[[repos]]
+repo = "builtin"
+hooks = [
+  { id = "check-added-large-files" },
+  { id = "check-merge-conflict" },
+  { id = "check-toml" },
+  { id = "check-yaml" },
+  { id = "end-of-file-fixer" },
+  { id = "trailing-whitespace" },
+]
+
+# ruff 와 ty 는 uv.lock 에 고정된 버전을 쓴다.
+[[repos]]
+repo = "local"
+
+[[repos.hooks]]
+id = "ruff-check"
+name = "ruff check"
+language = "system"
+entry = "uv run --frozen ruff check --fix"
+types = ["python"]
+
+[[repos.hooks]]
+id = "ruff-format"
+name = "ruff format"
+language = "system"
+entry = "uv run --frozen ruff format"
+types = ["python"]
+
+[[repos.hooks]]
+id = "ty"
+name = "ty check"
+language = "system"
+entry = "uv run --frozen ty check"
+types = ["python"]
+pass_filenames = false

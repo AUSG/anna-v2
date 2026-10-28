@@ -90,7 +90,7 @@ Python 3.15 와 [uv](https://docs.astral.sh/uv/) 가 필요하다.
 make setup_local_env
 ```
 
-커밋 훅을 등록하고 서브모듈을 받은 뒤 `uv sync` 로 의존성을 설치한다. 이후 명령어는 `uv run` 으로 실행한다. 테스트와 린트는 `make ci` 로 한 번에 돌린다.
+서브모듈을 받고 `uv sync` 로 의존성을 설치한 뒤 [prek](https://prek.j178.dev/) 커밋 훅(`prek.toml`)을 등록한다. 이후 명령어는 `uv run` 으로 실행한다. 포맷 검사(`ruff format`), 린트(`ruff check`), 타입 검사(`ty check`), 테스트(`pytest`)는 `make ci` 로 한 번에 돌린다.
 
 로컬에서 켜고 끌 만한 환경변수:
 

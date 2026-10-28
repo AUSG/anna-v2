@@ -28,7 +28,7 @@ def catch_global_error(*, admin_channel=None):
                     ```
                     {}
                     ```
-                    
+
                     :point_right: exception:
                     ```
                     {}
