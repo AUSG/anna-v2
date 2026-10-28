@@ -8,16 +8,10 @@ jobs:
     runs-on: ubuntu-26.04
     steps:
       - uses: actions/checkout@v7
-      - uses: actions/setup-python@v7
+      - uses: astral-sh/setup-uv@v10.3.2
         with:
-          python-version: "3.11"
-      - name: install poetry
-        uses: abatilo/actions-poetry@v4
-        with:
-          poetry-version: 1.5.1
+          enable-cache: true
       - name: ready
-        run: |
-          poetry env use python
-          poetry install --with ci
+        run: uv sync --frozen
       - name: go
         run: make ci
