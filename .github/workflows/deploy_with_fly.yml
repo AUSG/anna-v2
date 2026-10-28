@@ -11,19 +11,11 @@ env:
 jobs:
   deploy:
     name: ANNA grows old
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v7
         with:
           token: ${{ secrets.ACCESS_TOKEN_FOR_CHECKOUT_SUBMODULE }}
           submodules: true
-      - uses: actions/setup-python@v4
-        with:
-          python-version: "3.11"
-      - uses: abatilo/actions-poetry@v2
-        with:
-          poetry-version: 1.5.1
-      - name: ready
-        run: poetry install --with ci
-      - uses: superfly/flyctl-actions/setup-flyctl@master
+      - uses: superfly/flyctl-actions/setup-flyctl@1.6
       - run: flyctl deploy --config .meta/deploy/fly.toml --dockerfile .meta/deploy/Dockerfile --remote-only
