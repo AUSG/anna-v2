@@ -12,6 +12,7 @@ import pytest
 import anna
 from config.env_config import Settings
 from features.bigchat.calendar import KST
+from features.bot_commands.handlers.help_response import HelpResponse
 from slack_events import SlackContext
 from test.fixtures.anna import FakeBoltApp, load_anna
 from test.fixtures.slack_events import create_sample_app_mention_event
@@ -157,6 +158,7 @@ def test_handlers_and_slack_context_are_event_scoped():
     first = handlers.mentions["help"](context1)
     second = handlers.mentions["help"](context2)
     assert first is not second
+    assert isinstance(first, HelpResponse) and isinstance(second, HelpResponse)
     assert first.ts == event1["ts"] and second.ts == "different"
     assert first.slack_client is context1.slack_client
     assert second.slack_client is context2.slack_client
@@ -200,6 +202,7 @@ def test_import_does_not_initialize_bolt_clients_or_scheduler(monkeypatch):
     monkeypatch.setattr("slack_sdk.WebClient", web_client)
     monkeypatch.setattr("threading.Thread.start", start_thread)
     spec = importlib.util.spec_from_file_location("anna_import_check", anna.__file__)
+    assert spec is not None and spec.loader is not None
     module = importlib.util.module_from_spec(spec)
     monkeypatch.setitem(sys.modules, spec.name, module)
 
@@ -243,6 +246,7 @@ def test_gunicorn_loads_factory_and_starts_jobs_only_in_worker_hook(monkeypatch)
     assert app.test_client().get("/health").json == {"status": "ok"}
     scheduler.assert_not_called()
     worker = MagicMock(wsgi=app)
+    assert application.cfg is not None
     application.cfg.post_worker_init(worker)
     assert scheduler.call_count == 2
     assert scheduler.return_value.start.call_count == 2

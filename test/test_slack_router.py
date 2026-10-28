@@ -76,4 +76,4 @@ def test_empty_match_excludes_nonempty_questions():
 
 def test_unknown_command_is_rejected():
     with pytest.raises(ValueError, match="Unknown mention command"):
-        matches_mention("unknown", "help")
+        matches_mention("unknown", "help")  # ty: ignore[invalid-argument-type]

@@ -1,5 +1,6 @@
 import logging
 import re
+from typing import TypedDict
 
 import requests
 from pydantic import BaseModel
@@ -13,7 +14,14 @@ logger = logging.getLogger(__name__)
 # permalink 를 그대로 실어 보내는 메시지가 많아서, 미리보기가 붙으면 본문보다 커져 스레드가
 # 지저분해진다. chat.postMessage / say 에 그대로 펼쳐서 넘긴다.
 # XXX: chat.postEphemeral 은 unfurl 옵션을 지원하지 않아 적용 대상이 아니다.
-NO_UNFURL = {"unfurl_links": False, "unfurl_media": False}
+
+
+class _UnfurlOptions(TypedDict):
+    unfurl_links: bool
+    unfurl_media: bool
+
+
+NO_UNFURL: _UnfurlOptions = {"unfurl_links": False, "unfurl_media": False}
 
 # markdown 블록 한 개에 넣을 수 있는 글자 수. 넘으면 text 한 덩어리로 보낸다
 MARKDOWN_BLOCK_LIMIT = 12000
@@ -53,8 +61,13 @@ class SlackClient:
         self.say = say
         self.web_client = web_client
 
+    def _require_say(self) -> Say:
+        if self.say is None:
+            raise RuntimeError("say 는 슬랙 이벤트 컨텍스트에서만 사용할 수 있다")
+        return self.say
+
     def send_message(self, msg: str, ts: str):
-        self.say(msg, thread_ts=ts, **NO_UNFURL)
+        self._require_say()(msg, thread_ts=ts, **NO_UNFURL)
 
     def send_answer(self, answer: str, sources: list[str], ts: str):
         """질문 답변. 본문은 표준 마크다운을 그리는 markdown 블록, 출처는 회색 작은 글씨(context 블록)로 보낸다.
@@ -73,7 +86,7 @@ class SlackClient:
                     }
                 )
             try:
-                self.say(text=text, blocks=blocks, thread_ts=ts, **NO_UNFURL)
+                self._require_say()(text=text, blocks=blocks, thread_ts=ts, **NO_UNFURL)
                 return
             except SlackApiError as ex:
                 logger.warning(
@@ -132,7 +145,7 @@ class SlackClient:
             return None
 
     def send_message_to_freetalk(self, msg: str):
-        self.say(msg, channel="CQJ8HQWUV", **NO_UNFURL)
+        self._require_say()(msg, channel="CQJ8HQWUV", **NO_UNFURL)
 
     def get_permalink(self, channel: str, ts: str) -> str | None:
         """메시지 permalink를 반환. 실패 시 None."""
@@ -189,6 +202,8 @@ class SlackClient:
         if ts:
             msg = self.get_replies(thread_ts=ts, channel=channel)[0]
             thread_ts = msg.thread_ts
+        if thread_ts is None:
+            raise ValueError("thread_ts 나 ts 중 하나는 있어야 한다")
 
         for attempt in range(3):
             try:

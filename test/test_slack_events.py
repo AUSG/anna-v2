@@ -73,7 +73,9 @@ def test_help_executes_without_external_dependencies(
     runtime, slack_client, external_factories
 ):
     event, say, web_client = run_mention(runtime, "<@U01BN035Y6L> help")
-    slack_events.SlackClient.assert_called_once_with(say, web_client)
+    slack_events.SlackClient.assert_called_once_with(  # ty: ignore[unresolved-attribute]
+        say, web_client
+    )
     slack_client.send_message.assert_called_once()
     assert (
         "사용할 수 있는 명령어야" in slack_client.send_message.call_args.kwargs["msg"]

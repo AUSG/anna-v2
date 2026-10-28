@@ -53,6 +53,7 @@ def test_source_evidence_urls_default_and_malformed_value_is_ignored():
             "sources": [{"document_id": "doc-1", "evidence_urls": "bad"}],
         }
     )
+    assert result is not None
     assert result.sources[0].evidence_urls == []
 
 
@@ -61,6 +62,7 @@ def test_chat_accepts_legacy_answer_only_response():
     with patch("integrations.qa.requests.post", return_value=response):
         result = QAClient("https://qa.test", "secret").chat("질문")
 
+    assert result is not None
     assert result.answer == "예전 답변"
     assert result.sources == []
     assert result.citations == []
@@ -77,6 +79,7 @@ def test_chat_malformed_status_is_treated_as_answered():
     with patch("integrations.qa.requests.post", return_value=response):
         result = QAClient("https://qa.test", "secret").chat("질문")
 
+    assert result is not None
     assert result.status == "answered"
 
 

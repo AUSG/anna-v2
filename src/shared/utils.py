@@ -66,7 +66,7 @@ def with_retry(max_try_cnt=10, fixed_wait_time_in_sec=3, non_retryable_exception
     def decorator(func):
         @functools.wraps(func)
         def wrapper(*args, **kwargs):
-            last_exception = None
+            last_exception: Exception = RuntimeError("max_try_cnt must be >= 1")
             for attempt in range(max_try_cnt):
                 try:
                     return func(*args, **kwargs)

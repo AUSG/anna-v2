@@ -42,7 +42,9 @@ class TestParseSheetName(unittest.TestCase):
 
 class TestCalendarLinks(unittest.TestCase):
     def setUp(self):
-        self.event = parse_sheet_name("AI meetup 26-08-20 19:00~21:00")
+        event = parse_sheet_name("AI meetup 26-08-20 19:00~21:00")
+        assert event is not None
+        self.event = event
 
     def test_gcal_link(self):
         link = to_gcal_link(self.event)
@@ -83,6 +85,7 @@ class TestCalendarLinks(unittest.TestCase):
 
     def test_ics_escapes_special_chars(self):
         event = parse_sheet_name("반가워, AUSG; friends 26-08-20 19:00~21:00")
+        assert event is not None
 
         ics = to_ics(event, uid="uid")
 

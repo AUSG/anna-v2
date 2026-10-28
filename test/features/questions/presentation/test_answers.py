@@ -292,7 +292,7 @@ def test_timestamp_conversion_and_invalid_input_fallback(value, expected):
 def test_source_order_escaping_current_source_and_ambiguous_ids_are_preserved():
     result = ChatResult(
         answer="확인했어요.",
-        citations=["doc-2", None, "same", "conversation:current", "doc-1", "doc-1"],
+        citations=["doc-2", None, "same", "conversation:current", "doc-1", "doc-1"],  # ty: ignore[invalid-argument-type]
         sources=[
             Source(document_id="doc-1", title="A&B <공지>", url="https://a.test/1"),
             Source(document_id="same", url="https://a.test/dup1"),

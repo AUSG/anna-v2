@@ -43,7 +43,8 @@ class MemberManager:
         maxsize=30, ttl=600
     )  # not thread-safe, 'maxsize' means 'cache call limit'
     def find(self, slack_unique_id: str) -> Member:
-        members = self._fetch_members()
+        # cachetools 타입 선언은 데코레이터를 씌운 메서드의 self 바인딩을 표현하지 못한다.
+        members = self._fetch_members()  # ty: ignore[missing-argument]
 
         member = members.get(slack_unique_id)
 
@@ -56,7 +57,7 @@ class MemberManager:
 
     def email_to_slack_ids(self) -> dict[str, str]:
         """소문자 이메일로 슬랙 user_id를 찾는 매핑을 만든다. 빅챗 신청자의 계정을 찾을 때 쓴다."""
-        members = self._fetch_members()
+        members = self._fetch_members()  # ty: ignore[missing-argument]
         return {
             member.email.strip().lower(): user_id
             for user_id, member in members.items()
