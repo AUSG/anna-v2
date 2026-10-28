@@ -37,7 +37,7 @@ def test_schedulers_start_only_explicitly_and_once(monkeypatch, reminders, diges
     anna.start_jobs(runtime.flask_app)
     assert scheduler.call_count == len(expected)
     assert scheduler.return_value.start.call_count == len(expected)
-    for call, job in zip(scheduler.call_args_list, jobs):
+    for call, job in zip(scheduler.call_args_list, jobs, strict=True):
         assert call.kwargs == {
             "job": job.callback,
             "hour": job.hour,
