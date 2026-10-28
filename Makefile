@@ -2,15 +2,17 @@
 
 .PHONY: _set_hooks
 _set_hooks:
-	git config core.hooksPath .github/hooks
+	git config --unset-all core.hooksPath || true
+	uv run --frozen prek install
 
 .PHONY: _update_submodule
 _update_submodule:
 	git submodule update --recursive --remote
 
 .PHONY: setup_local_env
-setup_local_env: _set_hooks _update_submodule
+setup_local_env: _update_submodule
 	uv sync --frozen
+	$(MAKE) _set_hooks
 
 
 .PHONY: wakeup_anna
