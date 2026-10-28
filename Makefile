@@ -10,13 +10,12 @@ _update_submodule:
 
 .PHONY: setup_local_env
 setup_local_env: _set_hooks _update_submodule
+	uv sync --frozen
 
 
 .PHONY: wakeup_anna
 wakeup_anna:
-	pip install poetry
-	poetry install
-	poetry run gunicorn --config src/gunicorn_config.py --chdir src 'anna:create_app()' --bind 0.0.0.0:8080 --workers 1 --threads 8 --timeout 120
+	uv run --frozen gunicorn --config src/gunicorn_config.py --chdir src 'anna:create_app()' --bind 0.0.0.0:8080 --workers 1 --threads 8 --timeout 120
 
 .PHONY: open_port
 open_port:
@@ -28,12 +27,12 @@ open_port:
 
 .PHONY: _lintfmt
 _lintfmt:
-	poetry run black src/
-	poetry run ruff check src/
+	uv run --frozen black src/
+	uv run --frozen ruff check src/
 
 .PHONY: _test
 _test:
-	PYTHONPATH=src poetry run pytest --rootdir=./test --cov=./src --cov-report=html -c .meta/develop/pytest.ini
+	uv run --frozen pytest --cov --cov-report=html
 
 .PHONY: ci
 ci: _lintfmt _test

@@ -84,14 +84,13 @@
 
 ## 개발환경 구축
 
+Python 3.11 와 [uv](https://docs.astral.sh/uv/) 가 필요하다.
+
 ```sh
-poetry shell
 make setup_local_env
-# virtual env sub-shell 접속
-poetry install --with ci
 ```
 
-이후의 명령어들은 모두 poetry 로 의존성을 설치했다는 가정으로 설명한다. 테스트와 린트는 `make ci` 로 한 번에 돌린다.
+커밋 훅을 등록하고 서브모듈을 받은 뒤 `uv sync` 로 의존성을 설치한다. 이후 명령어는 `uv run` 으로 실행한다. 테스트와 린트는 `make ci` 로 한 번에 돌린다.
 
 로컬에서 켜고 끌 만한 환경변수:
 

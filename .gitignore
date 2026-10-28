@@ -9,5 +9,4 @@ __pycache__/
 .coverage
 htmlcov/
 
-poetry-convert.py
 dist/
