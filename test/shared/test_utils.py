@@ -74,6 +74,10 @@ class TestStripMultiline(unittest.TestCase):
 C"""
         )
 
+    def test_multiline_ignores_blank_lines_for_indent(self):
+        sample = "\n        A\n\n            B\n        C"
+        assert strip_multiline(sample) == "A\n\n    B\nC"
+
     def test_multiline_with_first_line(self):
         sample = """hello
         A
