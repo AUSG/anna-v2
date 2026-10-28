@@ -153,7 +153,9 @@ class SubmitCreateBigchatModal:
         return errors
 
     def _create_and_notify(self, command: CreateBigchatCommand) -> bool:
-        created = self._bigchats.create(command.sheet_name)
+        created = self._bigchats.create(
+            command.sheet_name, channel=self.channel, thread_ts=self.thread_ts
+        )
         try:
             self.slack_client.send_thread_message(
                 msg=bigchat_created_message(created.sheet_url, created.sheet_name),

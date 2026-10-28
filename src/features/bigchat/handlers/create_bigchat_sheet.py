@@ -44,7 +44,11 @@ class CreateBigchatSheet(MentionHandler):
             )
             return False
 
-        created = self._bigchats.create(command.sheet_name)
+        created = self._bigchats.create(
+            command.sheet_name,
+            channel=self.channel,
+            thread_ts=self.thread_ts or self.ts,
+        )
         self.slack_client.send_message(
             msg=bigchat_created_message(created.sheet_url, created.sheet_name),
             ts=self.ts,

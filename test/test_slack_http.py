@@ -238,7 +238,8 @@ def test_real_bolt_registration_calendar_roundtrip(monkeypatch, ics_enabled):
             phone="010-1234-5678",
             school_name_or_company_name="AUSG",
         )
-        sheets.append_row_if_absent.return_value = True
+        sheets.find_bigchat.return_value = WORKSHEET_ID
+        sheets.register_bigchat.return_value = True
         sheets.get_worksheet_title.return_value = SHEET_NAME
         monkeypatch.setattr(module.services, "members", lambda: members)
         monkeypatch.setattr(module.services, "sheets", lambda: sheets)
@@ -254,8 +255,12 @@ def test_real_bolt_registration_calendar_roundtrip(monkeypatch, ics_enabled):
             secret,
         )
         assert response.status_code == 200
-        sheets.append_row_if_absent.assert_called_once_with(
-            WORKSHEET_ID, ["김철수", "AUSG", "me@example.com", "010-1234-5678"]
+        sheets.register_bigchat.assert_called_once_with(
+            WORKSHEET_ID,
+            event["user"],
+            ["김철수", "AUSG", "me@example.com", "010-1234-5678"],
+            channel=event["item"]["channel"],
+            thread_ts=event["item"]["ts"],
         )
         ephemeral = [
             call.kwargs["json"]

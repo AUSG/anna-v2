@@ -10,7 +10,6 @@ from features.bigchat.calendar import (
     to_gcal_link_truncated,
 )
 from features.bigchat.presentation.messages import build_registration_info_message
-from features.bigchat.services.sheet_link import extract_worksheet_id
 from features.members.services.directory import MemberLackInfo, MemberNotFound
 from integrations.google_sheets import WorksheetNotFound
 from integrations.slack import Message
@@ -110,12 +109,13 @@ class JoinBigchat:
         if self.type != "reaction_added" or self.reaction != self.target_emoji:
             return False
 
-        messages = self.slack_client.get_replies(channel=self.channel, ts=self.ts)
-        if messages[0].ts != self.ts:
+        worksheet_id = self.gs_client.find_bigchat(
+            channel=self.channel, thread_ts=self.ts
+        )
+        if worksheet_id is None:
             return False
-
-        worksheet_id = extract_worksheet_id(message.text for message in messages)
-        if not worksheet_id:
+        messages = self.slack_client.get_replies(channel=self.channel, ts=self.ts)
+        if not messages or messages[0].ts != self.ts:
             return False
 
         # 여기부터가 실제 동작이다. 위 검사들에서 걸러진 이벤트(관심 없는 이모지, 빅챗 글이
@@ -140,8 +140,12 @@ class JoinBigchat:
             return False
 
         try:
-            added = self.gs_client.append_row_if_absent(
-                worksheet_id, member.transform_for_spreadsheet()
+            added = self.gs_client.register_bigchat(
+                worksheet_id,
+                self.user,
+                member.transform_for_spreadsheet(),
+                channel=self.channel,
+                thread_ts=self.ts,
             )
         except WorksheetNotFound:
             self.slack_client.send_message(

@@ -45,8 +45,12 @@ def register_early_reacted_users(
                     ts=thread_ts,
                 )
             else:
-                if gs_client.append_row_if_absent(
-                    worksheet_id, member.transform_for_spreadsheet()
+                if gs_client.register_bigchat(
+                    worksheet_id,
+                    user,
+                    member.transform_for_spreadsheet(),
+                    channel=channel,
+                    thread_ts=thread_ts,
                 ):
                     registered.append((user, member))
 

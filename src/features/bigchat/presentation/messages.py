@@ -2,7 +2,7 @@ from shared.utils import strip_multiline
 
 
 def bigchat_created_message(sheet_url: str, sheet_name: str) -> str:
-    # 참여 신청은 이 답글의 시트 ID를 기준으로 처리한다.
+    # URL은 사용자 안내용이다. 참여 대상은 저장된 스레드 연결로 조회한다.
     return f"새로운 빅챗, 등록 완료! <{sheet_url}|{sheet_name}> :google_spreadsheets:"
 
 

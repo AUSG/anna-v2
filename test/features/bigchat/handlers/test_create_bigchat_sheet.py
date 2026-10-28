@@ -36,7 +36,11 @@ class TestCreateBigchatSheet(unittest.TestCase):
 
         assert result is True
         assert self.mock_gs_client.mock_calls == [
-            call.create_bigchat_sheet("AI 밋업 26-08-20 19:00~21:00"),
+            call.create_bigchat_sheet(
+                "AI 밋업 26-08-20 19:00~21:00",
+                channel=event["channel"],
+                thread_ts=event.get("thread_ts") or event["ts"],
+            ),
             call.get_url(161837744),
         ]
         self.mock_slack_client.send_message.assert_called_once_with(
@@ -140,7 +144,11 @@ class TestCreateBigchatSheet(unittest.TestCase):
 
         assert error.exception is failure
         assert self.mock_gs_client.mock_calls == [
-            call.create_bigchat_sheet("AI 밋업 26-08-20 19:00~21:00"),
+            call.create_bigchat_sheet(
+                "AI 밋업 26-08-20 19:00~21:00",
+                channel=event["channel"],
+                thread_ts=event.get("thread_ts") or event["ts"],
+            ),
             call.get_url(161837744),
         ]
         assert self.mock_slack_client.mock_calls == []
@@ -156,7 +164,9 @@ class TestCreateBigchatSheet(unittest.TestCase):
 
         assert error.exception is failure
         self.mock_gs_client.create_bigchat_sheet.assert_called_once_with(
-            "AI 밋업 26-08-20 19:00~21:00"
+            "AI 밋업 26-08-20 19:00~21:00",
+            channel=event["channel"],
+            thread_ts=event.get("thread_ts") or event["ts"],
         )
         self.mock_slack_client.send_message.assert_called_once()
         self.mock_slack_client.send_message_only_visible_to_user.assert_not_called()
@@ -169,5 +179,7 @@ class TestCreateBigchatSheet(unittest.TestCase):
         assert self.create_sut(event).handle_mention() is True
 
         self.mock_gs_client.create_bigchat_sheet.assert_called_once_with(
-            "AI 밋업 26-08-20 19:00~21:00"
+            "AI 밋업 26-08-20 19:00~21:00",
+            channel=event["channel"],
+            thread_ts=event.get("thread_ts") or event["ts"],
         )
