@@ -4,8 +4,6 @@ Values stay in A:D for exports. Row metadata follows inserted/moved rows; cancel
 clears only the participant's four cells, never a previously observed row number.
 """
 
-import hashlib
-import json
 import threading
 import time
 
@@ -13,25 +11,22 @@ from gspread.exceptions import APIError
 from requests.exceptions import RequestException
 
 from features.bigchat.models import BigchatSheet
+from integrations.bigchat_schema import (
+    EVENT_KEY,
+    PARTICIPANT_KEY,
+    SHEET_KEY,
+    MetadataIdentity,
+    create_participant_requests,
+    create_sheet_requests,
+    read_values_request,
+    write_values_request,
+)
 
-EVENT_KEY = "anna.bigchat.v1"
-PARTICIPANT_KEY = "anna.participant.v1"
 _WRITES = threading.RLock()
 
 
 class BigchatIntegrityError(RuntimeError):
     pass
-
-
-def _identity(kind, *parts):
-    if any(not isinstance(part, str) or not part for part in parts):
-        raise ValueError("Bigchat identity fields must be nonempty strings")
-    value = json.dumps(list(parts), ensure_ascii=False, separators=(",", ":"))
-    digest = hashlib.sha256(f"{kind}:{value}".encode()).digest()
-    # IDs are spreadsheet-scoped positive int32s. Compare the complete value on
-    # every lookup: a hash collision must fail closed, never select another user.
-    metadata_id = int.from_bytes(digest[:4], "big") & 0x7FFFFFFF or 1
-    return {"metadataId": metadata_id, "metadataKey": kind, "metadataValue": value}
 
 
 def _status(error):
@@ -53,17 +48,17 @@ class BigchatStore:
     def __init__(self, client):
         self._client = client
 
-    def _metadata(self, identity):
+    def _metadata(self, identity: MetadataIdentity):
         try:
             metadata = self._client.sheets_request(
-                "get", f"/developerMetadata/{identity['metadataId']}"
+                "get", f"/developerMetadata/{identity.metadata_id}"
             )
         except APIError as error:
             if _status(error) == 404:
                 return None
             raise
         if metadata.get("visibility") != "DOCUMENT" or any(
-            metadata.get(key) != value for key, value in identity.items()
+            metadata.get(key) != value for key, value in identity.to_api().items()
         ):
             raise BigchatIntegrityError(
                 "Metadata identity conflict; refusing to use this record"
@@ -81,21 +76,21 @@ class BigchatStore:
         return sheet_id
 
     @staticmethod
-    def event_identity(channel, thread_ts):
-        return _identity(EVENT_KEY, channel, thread_ts)
+    def event_identity(channel: str, thread_ts: str) -> MetadataIdentity:
+        return MetadataIdentity.from_parts(EVENT_KEY, channel, thread_ts)
 
     def find(self, channel, thread_ts) -> int | None:
         metadata = self._metadata(self.event_identity(channel, thread_ts))
         return None if metadata is None else self._sheet_id(metadata)
 
-    def _bound_event(self, worksheet_id, channel, thread_ts):
+    def _bound_event(self, worksheet_id, channel, thread_ts) -> MetadataIdentity:
         event = self.event_identity(channel, thread_ts)
         metadata = self._metadata(event)
         if metadata is None or self._sheet_id(metadata) != worksheet_id:
             raise BigchatIntegrityError("Worksheet is not bound to this Slack thread")
         return event
 
-    def _create_once(self, requests, identity):
+    def _create_once(self, requests, identity: MetadataIdentity):
         """The unique metadata ID guards the entire atomic batch against replay."""
         for attempt in range(3):
             try:
@@ -112,18 +107,6 @@ class BigchatStore:
                     raise
                 time.sleep(2**attempt)
 
-    @staticmethod
-    def _create_metadata(identity, location):
-        return {
-            "createDeveloperMetadata": {
-                "developerMetadata": {
-                    **identity,
-                    "visibility": "DOCUMENT",
-                    "location": location,
-                }
-            }
-        }
-
     def get_sheet(self, worksheet_id: int) -> BigchatSheet:
         return BigchatSheet(
             worksheet_id=worksheet_id,
@@ -136,42 +119,15 @@ class BigchatStore:
             identity = self.event_identity(channel, thread_ts)
             existing = self._metadata(identity)
             if existing is None:
-                worksheet_id = _identity("anna.sheet.v1", channel, thread_ts)[
-                    "metadataId"
-                ]
+                worksheet_id = MetadataIdentity.from_parts(
+                    SHEET_KEY, channel, thread_ts
+                ).metadata_id
                 if worksheet_id == self._client.members_worksheet_id:
                     raise BigchatIntegrityError(
                         "Worksheet identity conflicts with member directory"
                     )
                 self._create_once(
-                    [
-                        {
-                            "addSheet": {
-                                "properties": {
-                                    "sheetId": worksheet_id,
-                                    "title": title,
-                                    "gridProperties": {
-                                        "rowCount": 100,
-                                        "columnCount": 4,
-                                    },
-                                }
-                            }
-                        },
-                        self._create_metadata(identity, {"sheetId": worksheet_id}),
-                        {
-                            "updateDimensionProperties": {
-                                "range": {
-                                    "sheetId": worksheet_id,
-                                    "dimension": "COLUMNS",
-                                    "startIndex": 0,
-                                    "endIndex": 4,
-                                },
-                                "properties": {"pixelSize": 220},
-                                "fields": "pixelSize",
-                            }
-                        },
-                    ],
-                    identity,
+                    create_sheet_requests(worksheet_id, title, identity), identity
                 )
                 self._bound_event(worksheet_id, channel, thread_ts)
             else:
@@ -184,10 +140,12 @@ class BigchatStore:
             return created
 
     @staticmethod
-    def _participant(event, user_id):
-        return _identity(PARTICIPANT_KEY, str(event["metadataId"]), user_id)
+    def _participant(event: MetadataIdentity, user_id: str) -> MetadataIdentity:
+        return MetadataIdentity.from_parts(
+            PARTICIPANT_KEY, str(event.metadata_id), user_id
+        )
 
-    def _participant_metadata(self, identity, worksheet_id):
+    def _participant_metadata(self, identity: MetadataIdentity, worksheet_id):
         metadata = self._metadata(identity)
         if metadata is not None:
             location = metadata.get("location", {}).get("dimensionRange", {})
@@ -203,26 +161,11 @@ class BigchatStore:
                 )
         return metadata
 
-    @staticmethod
-    def _filter(identity, worksheet_id):
-        return {
-            "developerMetadataLookup": {
-                **identity,
-                "visibility": "DOCUMENT",
-                "locationType": "ROW",
-                "metadataLocation": {"sheetId": worksheet_id},
-                "locationMatchingStrategy": "INTERSECTING_LOCATION",
-            }
-        }
-
-    def _values(self, identity, worksheet_id):
+    def _values(self, identity: MetadataIdentity, worksheet_id):
         response = self._client.sheets_request(
             "post",
             "/values:batchGetByDataFilter",
-            {
-                "dataFilters": [self._filter(identity, worksheet_id)],
-                "valueRenderOption": "UNFORMATTED_VALUE",
-            },
+            read_values_request(identity, worksheet_id),
         )
         ranges = response.get("valueRanges", [])
         if len(ranges) != 1:
@@ -235,19 +178,10 @@ class BigchatStore:
         row = rows[0] if rows else []
         return (row + [""] * 4)[:4]
 
-    def _write_values(self, identity, worksheet_id, values):
+    def _write_values(self, identity: MetadataIdentity, worksheet_id, values):
         # No row index is sent. Sheets resolves the metadata at write time, even
         # if another participant or a sheet editor inserted/moved a row meanwhile.
-        body = {
-            "valueInputOption": "RAW",
-            "data": [
-                {
-                    "dataFilter": self._filter(identity, worksheet_id),
-                    "majorDimension": "ROWS",
-                    "values": [values],
-                }
-            ],
-        }
+        body = write_values_request(identity, worksheet_id, values)
         for attempt in range(3):
             try:
                 response = self._client.sheets_request(
@@ -274,44 +208,8 @@ class BigchatStore:
                 if previous != values:
                     self._write_values(identity, worksheet_id, values)
                 return not any(previous)
-            row_range = {
-                "sheetId": worksheet_id,
-                "dimension": "ROWS",
-                "startIndex": 0,
-                "endIndex": 1,
-            }
             self._create_once(
-                [
-                    {
-                        "insertDimension": {
-                            "range": row_range,
-                            "inheritFromBefore": False,
-                        }
-                    },
-                    {
-                        "updateCells": {
-                            "start": {
-                                "sheetId": worksheet_id,
-                                "rowIndex": 0,
-                                "columnIndex": 0,
-                            },
-                            "rows": [
-                                {
-                                    "values": [
-                                        {"userEnteredValue": {"stringValue": value}}
-                                        for value in values
-                                    ]
-                                }
-                            ],
-                            "fields": "userEnteredValue",
-                        }
-                    },
-                    self._create_metadata(
-                        identity,
-                        {"dimensionRange": row_range},
-                    ),
-                ],
-                identity,
+                create_participant_requests(worksheet_id, identity, values), identity
             )
             self._participant_metadata(identity, worksheet_id)
             return True

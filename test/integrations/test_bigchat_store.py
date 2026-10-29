@@ -6,12 +6,8 @@ from threading import Barrier
 import pytest
 from gspread.exceptions import APIError
 
-from integrations.bigchat_store import (
-    EVENT_KEY,
-    PARTICIPANT_KEY,
-    BigchatIntegrityError,
-    BigchatStore,
-)
+from integrations.bigchat_schema import EVENT_KEY, PARTICIPANT_KEY
+from integrations.bigchat_store import BigchatIntegrityError, BigchatStore
 from test.fixtures.sheets import SheetsAPI, api_error
 
 CHANNEL, THREAD = "C_TEST", "123.456"
