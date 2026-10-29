@@ -5,6 +5,7 @@ from threading import Barrier
 
 import pytest
 from gspread.exceptions import APIError
+from requests.exceptions import ConnectionError, RequestException
 
 from integrations.bigchat_schema import EVENT_KEY, PARTICIPANT_KEY
 from integrations.bigchat_store import BigchatIntegrityError, BigchatStore
@@ -260,3 +261,143 @@ def test_another_creator_with_a_different_title_cannot_be_reported_as_our_event(
         store.create(TITLE, channel=CHANNEL, thread_ts=THREAD)
     assert len(api.sheets) == 1
     assert next(iter(api.sheets.values()))["title"] == "Another event"
+
+
+@pytest.mark.parametrize("read_kind", ["metadata", "values"])
+@pytest.mark.parametrize("status", [429, 503, None])
+def test_transient_reads_recover_before_proceeding(
+    runtime, monkeypatch, read_kind, status
+):
+    api, store, sheet = runtime
+    register(store, sheet)
+    original = api.sheets_request
+    attempts, delays = [], []
+    monkeypatch.setattr("integrations.bigchat_store.time.sleep", delays.append)
+
+    def flaky_read(method, suffix, body=None):
+        is_read = (
+            method == "get"
+            if read_kind == "metadata"
+            else suffix == "/values:batchGetByDataFilter"
+        )
+        if is_read:
+            attempts.append(suffix)
+            if len(attempts) < 3:
+                raise (
+                    api_error(status)
+                    if status is not None
+                    else ConnectionError("unavailable")
+                )
+        return original(method, suffix, body)
+
+    monkeypatch.setattr(api, "sheets_request", flaky_read)
+    if read_kind == "metadata":
+        assert store.find(CHANNEL, THREAD) == sheet
+        assert active_rows(api, sheet) == [ALICE]
+    else:
+        assert cancel(store, sheet)
+        assert active_rows(api, sheet) == []
+    assert len(attempts) == 3
+    assert delays == [1, 2]
+
+
+@pytest.mark.parametrize("read_kind", ["metadata", "values"])
+@pytest.mark.parametrize("status, limit", [(403, 1), (429, 3), (503, 3)])
+def test_read_failures_are_bounded_and_never_write(
+    runtime, monkeypatch, read_kind, status, limit
+):
+    api, store, sheet = runtime
+    register(store, sheet)
+    original = api.sheets_request
+    attempts, delays, writes = [], [], []
+    before = copy.deepcopy((api.sheets, api.metadata))
+    monkeypatch.setattr("integrations.bigchat_store.time.sleep", delays.append)
+
+    def failed_read(method, suffix, body=None):
+        is_read = (
+            method == "get"
+            if read_kind == "metadata"
+            else suffix == "/values:batchGetByDataFilter"
+        )
+        if is_read:
+            attempts.append(suffix)
+            raise api_error(status)
+        if suffix in (":batchUpdate", "/values:batchUpdateByDataFilter"):
+            writes.append(suffix)
+        return original(method, suffix, body)
+
+    monkeypatch.setattr(api, "sheets_request", failed_read)
+    with pytest.raises(APIError) as error:
+        cancel(store, sheet)
+    assert error.value.response.status_code == status
+    assert len(attempts) == limit
+    assert delays == ([] if limit == 1 else [1, 2])
+    assert writes == []
+    assert (api.sheets, api.metadata) == before
+
+
+def test_missing_metadata_returns_without_retry(runtime, monkeypatch):
+    api, store, _ = runtime
+    delays = []
+    monkeypatch.setattr("integrations.bigchat_store.time.sleep", delays.append)
+    before = len(api.calls)
+    assert store.find("C_OTHER", THREAD) is None
+    assert len(api.calls) == before + 1
+    assert delays == []
+
+
+@pytest.mark.parametrize("operation", ["create", "register", "cancel"])
+@pytest.mark.parametrize("recovers", [True, False])
+def test_uncertain_writes_only_retry_confirmation_reads(
+    runtime, monkeypatch, operation, recovers
+):
+    api, store, sheet = runtime
+    if operation == "cancel":
+        register(store, sheet)
+    write_suffix = (
+        "/values:batchUpdateByDataFilter" if operation == "cancel" else ":batchUpdate"
+    )
+    api.fail_after = write_suffix
+    original = api.sheets_request
+    recovering = False
+    reads, writes, delays = [], [], []
+    monkeypatch.setattr("integrations.bigchat_store.time.sleep", delays.append)
+
+    def interrupted(method, suffix, body=None):
+        nonlocal recovering
+        if recovering:
+            reads.append(suffix)
+            assert method == "get" or suffix == "/values:batchGetByDataFilter"
+            if not recovers or len(reads) < 3:
+                raise api_error(503)
+            recovering = False
+        if suffix == write_suffix:
+            writes.append(suffix)
+        try:
+            return original(method, suffix, body)
+        except RequestException:
+            assert suffix == write_suffix
+            recovering = True
+            raise
+
+    def perform():
+        if operation == "create":
+            return store.create(TITLE, channel="C_OTHER", thread_ts=THREAD)
+        if operation == "register":
+            return register(store, sheet)
+        return cancel(store, sheet)
+
+    monkeypatch.setattr(api, "sheets_request", interrupted)
+    if recovers:
+        assert perform()
+    else:
+        with pytest.raises(APIError) as error:
+            perform()
+        assert error.value.response.status_code == 503
+    assert len(reads) == 3
+    assert len(writes) == 1
+    assert delays == [1, 2]
+    if operation == "create":
+        assert len(api.sheets) == 2
+    else:
+        assert active_rows(api, sheet) == ([ALICE] if operation == "register" else [])

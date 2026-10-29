@@ -48,11 +48,20 @@ class BigchatStore:
     def __init__(self, client):
         self._client = client
 
+    def _read(self, method, suffix, body=None):
+        """Make at most three read attempts; writes require result reconciliation."""
+        for delay in (1, 2):
+            try:
+                return self._client.sheets_request(method, suffix, body)
+            except (APIError, RequestException) as error:
+                if not _transient(error):
+                    raise
+                time.sleep(delay)
+        return self._client.sheets_request(method, suffix, body)
+
     def _metadata(self, identity: MetadataIdentity):
         try:
-            metadata = self._client.sheets_request(
-                "get", f"/developerMetadata/{identity.metadata_id}"
-            )
+            metadata = self._read("get", f"/developerMetadata/{identity.metadata_id}")
         except APIError as error:
             if _status(error) == 404:
                 return None
@@ -162,7 +171,7 @@ class BigchatStore:
         return metadata
 
     def _values(self, identity: MetadataIdentity, worksheet_id):
-        response = self._client.sheets_request(
+        response = self._read(
             "post",
             "/values:batchGetByDataFilter",
             read_values_request(identity, worksheet_id),

@@ -9,7 +9,7 @@ from features.bigchat.services.creation import register_early_reacted_users
 from features.members.services.directory import Member
 from integrations.bigchat_store import BigchatStore
 from integrations.slack import Message, Reaction
-from test.fixtures.sheets import SheetsAPI
+from test.fixtures.sheets import SheetsAPI, api_error
 
 CHANNEL, THREAD = "C_TEST", "123.456"
 TITLE = "AI 밋업 26-08-20 19:00~21:00"
@@ -99,3 +99,26 @@ def test_backfill_and_event_share_identity_with_cancellation():
     event["type"] = "reaction_removed"
     assert AbandonBigchat(event, "gogo", slack, store).run()
     assert api.get_values(sheet) == [["", "", "", ""]]
+
+
+def test_backfill_continues_after_a_transient_metadata_read_failure(monkeypatch):
+    api, store, slack, members, _ = setup()
+    sheet = store.create(TITLE, channel=CHANNEL, thread_ts=THREAD).worksheet_id
+    users = ["U_A", "U_B", "U_C"]
+    slack.get_emoji.return_value = Reaction(name="gogo", users=users, count=3)
+    members.find.side_effect = lambda user: MEMBER.model_copy(update={"kor_name": user})
+    original = api.sheets_request
+    delays = []
+    monkeypatch.setattr("integrations.bigchat_store.time.sleep", delays.append)
+
+    def fail_once(method, suffix, body=None):
+        assert method == "get"
+        monkeypatch.setattr(api, "sheets_request", original)
+        raise api_error(503)
+
+    monkeypatch.setattr(api, "sheets_request", fail_once)
+    register_early_reacted_users(slack, store, members, "gogo", sheet, CHANNEL, THREAD)
+    assert sorted(row[0] for row in api.get_values(sheet)) == users
+    assert slack.send_message_only_visible_to_user.call_count == 3
+    assert "등록 완료" in slack.send_thread_message.call_args.kwargs["msg"]
+    assert delays == [1]
