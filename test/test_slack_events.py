@@ -19,7 +19,7 @@ from test.fixtures.slack_events import (
     create_sample_view_submission_body,
 )
 
-EXTERNAL_FACTORIES = ("sheets", "members", "github", "qa")
+EXTERNAL_FACTORIES = ("sheets", "bigchats", "members", "github", "qa")
 HANDLERS = (
     "HelpResponse",
     "ShuffleResponse",
@@ -110,7 +110,7 @@ def test_explicit_question_with_command_keywords_reaches_qa(
         answer="질문에 대한 답변이야!", sources=[], ts=event["ts"]
     )
     slack_client.send_message.assert_not_called()
-    for name in ("sheets", "members", "github"):
+    for name in ("sheets", "bigchats", "members", "github"):
         external_factories[name].assert_not_called()
     say.assert_not_called()
 
@@ -126,7 +126,7 @@ def test_explicit_question_with_command_keywords_reaches_qa(
         (
             "새로운 빅챗 AI 밋업 26-08-20 19:00~21:00",
             "CreateBigchatSheet",
-            ("sheets", "members"),
+            ("bigchats", "members"),
             None,
         ),
         (

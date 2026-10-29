@@ -15,8 +15,8 @@ from features.bigchat.handlers.create_bigchat_modal import (
     normalize_shortcut_body,
     normalize_view_body,
 )
-from features.bigchat.models import InvalidBigchatName
-from features.bigchat.services.sheet_link import extract_worksheet_id
+from features.bigchat.models import BigchatSheet, InvalidBigchatName
+from integrations.bigchat_store import BigchatStore
 from test.fixtures.slack_events import (
     create_sample_message_shortcut_body,
     create_sample_view_submission_body,
@@ -96,39 +96,45 @@ class TestSubmitCreateBigchatModal(unittest.TestCase):
         mock_ack = MagicMock()
         mock_slack_client = MagicMock()
         mock_slack_client.get_emoji.return_value = None  # 미리 눌린 이모지 없음
-        mock_gs_client = MagicMock()
-        mock_gs_client.create_bigchat_sheet.return_value = 987654321
-        mock_gs_client.get_url.return_value = self.SHEET_URL
+        mock_bigchats = MagicMock(spec=BigchatStore)
+        mock_bigchats.create.return_value = BigchatSheet(
+            worksheet_id=987654321,
+            sheet_name=f"{name} {date[2:]} {start}~{end}",
+            sheet_url=self.SHEET_URL,
+        )
         self.mock_member_manager = MagicMock()
         sut = SubmitCreateBigchatModal(
             event,
             mock_ack,
             mock_slack_client,
-            mock_gs_client,
+            mock_bigchats,
             self.mock_member_manager,
             "gogo",
         )
-        return sut, mock_ack, mock_slack_client, mock_gs_client
+        return sut, mock_ack, mock_slack_client, mock_bigchats
 
     def test_run(self):
-        sut, mock_ack, mock_slack_client, mock_gs_client = self._build_sut()
+        sut, mock_ack, mock_slack_client, mock_bigchats = self._build_sut()
         trace = MagicMock()
         trace.attach_mock(mock_ack, "ack")
-        trace.attach_mock(mock_gs_client, "sheets")
+        trace.attach_mock(mock_bigchats, "bigchats")
         trace.attach_mock(mock_slack_client, "slack")
 
         result = sut.run()
 
         assert result is True
         # ACK는 시트 생성과 Slack 안내보다 먼저 보내야 한다.
-        assert trace.mock_calls[:3] == [
+        assert trace.mock_calls[:2] == [
             call.ack(),
-            call.sheets.create_bigchat_sheet("AI 밋업 26-08-20 19:00~21:00"),
-            call.sheets.get_url(987654321),
+            call.bigchats.create(
+                "AI 밋업 26-08-20 19:00~21:00",
+                channel=sut.channel,
+                thread_ts=sut.thread_ts,
+            ),
         ]
         mock_ack.assert_called_once_with()
-        mock_gs_client.create_bigchat_sheet.assert_called_once_with(
-            "AI 밋업 26-08-20 19:00~21:00"
+        mock_bigchats.create.assert_called_once_with(
+            "AI 밋업 26-08-20 19:00~21:00", channel=sut.channel, thread_ts=sut.thread_ts
         )
         mock_slack_client.send_thread_message.assert_called_once_with(
             msg=(
@@ -138,9 +144,6 @@ class TestSubmitCreateBigchatModal(unittest.TestCase):
             channel="C03SZTDEDK3",
             ts="1688801145.307229",
         )
-        # :gogo: 참여 흐름(JoinBigchat)이 이 답글에서 시트 gid를 찾아낼 수 있어야 한다
-        msg = mock_slack_client.send_thread_message.call_args.kwargs["msg"]
-        assert extract_worksheet_id([msg]) == 987654321
         # 링크를 올린 뒤, 모달을 띄운 메시지가 속한 스레드의 첫 글(모집글)에서 reaction 을 읽는다 (#89)
         call_names = [name for name, _, _ in mock_slack_client.mock_calls]
         assert call_names.index("send_thread_message") < call_names.index("get_emoji")
@@ -175,7 +178,7 @@ class TestSubmitCreateBigchatModal(unittest.TestCase):
         ]
         for overrides, expected in cases:
             with self.subTest(**overrides):
-                sut, mock_ack, mock_slack_client, mock_gs_client = self._build_sut(
+                sut, mock_ack, mock_slack_client, mock_bigchats = self._build_sut(
                     **overrides
                 )
 
@@ -184,13 +187,13 @@ class TestSubmitCreateBigchatModal(unittest.TestCase):
                 mock_ack.assert_called_once_with(
                     response_action="errors", errors=expected
                 )
-                assert mock_gs_client.mock_calls == []
+                assert mock_bigchats.mock_calls == []
                 assert mock_slack_client.mock_calls == []
 
     def test_ack_failure_does_not_create_a_sheet(self):
         for overrides in ({}, {"date": "2026-02-30"}, {"name": "   "}):
             with self.subTest(**overrides):
-                sut, ack, slack, sheets = self._build_sut(**overrides)
+                sut, ack, slack, bigchats = self._build_sut(**overrides)
                 failure = RuntimeError("ACK 실패")
                 ack.side_effect = failure
 
@@ -199,7 +202,7 @@ class TestSubmitCreateBigchatModal(unittest.TestCase):
 
                 assert error.exception is failure
                 ack.assert_called_once()
-                assert sheets.mock_calls == []
+                assert bigchats.mock_calls == []
                 assert slack.mock_calls == []
                 assert self.mock_member_manager.mock_calls == []
 
@@ -209,18 +212,19 @@ class TestSubmitCreateBigchatModal(unittest.TestCase):
             InvalidBigchatName("생성 중 오류"),
         ):
             with self.subTest(failure=type(failure).__name__):
-                sut, ack, slack, sheets = self._build_sut()
-                sheets.create_bigchat_sheet.side_effect = failure
+                sut, ack, slack, bigchats = self._build_sut()
+                bigchats.create.side_effect = failure
 
                 with self.assertRaises(type(failure)) as error:
                     sut.run()
 
                 assert error.exception is failure
                 ack.assert_called_once_with()
-                sheets.create_bigchat_sheet.assert_called_once_with(
-                    "AI 밋업 26-08-20 19:00~21:00"
+                bigchats.create.assert_called_once_with(
+                    "AI 밋업 26-08-20 19:00~21:00",
+                    channel=sut.channel,
+                    thread_ts=sut.thread_ts,
                 )
-                sheets.get_url.assert_not_called()
                 assert slack.mock_calls == []
                 assert self.mock_member_manager.mock_calls == []
 
@@ -241,14 +245,13 @@ class TestSubmitCreateBigchatModal(unittest.TestCase):
                     msg=(
                         f"시트(<{self.SHEET_URL}|AI 밋업 26-08-20 19:00~21:00>)는 만들었는데, "
                         "내가 이 채널에 없어서 스레드에 답글을 못 달았어.\n"
-                        "나를 채널에 초대한 뒤 위 시트 링크를 스레드에 공유해줘. "
-                        "그래야 이모지로 참여 신청을 받을 수 있어!"
+                        "나를 채널에 초대하면 모집글에서 이모지로 참여 신청을 받을 수 있어!"
                     ),
                 )
                 mock_slack_client.get_emoji.assert_not_called()
 
     def test_unexpected_slack_error_is_raised(self):
-        sut, mock_ack, mock_slack_client, mock_gs_client = self._build_sut()
+        sut, mock_ack, mock_slack_client, mock_bigchats = self._build_sut()
         mock_slack_client.send_thread_message.side_effect = SlackApiError(
             "boom", {"error": "ratelimited"}
         )
@@ -257,8 +260,8 @@ class TestSubmitCreateBigchatModal(unittest.TestCase):
             sut.run()
 
         mock_ack.assert_called_once_with()
-        mock_gs_client.create_bigchat_sheet.assert_called_once_with(
-            "AI 밋업 26-08-20 19:00~21:00"
+        mock_bigchats.create.assert_called_once_with(
+            "AI 밋업 26-08-20 19:00~21:00", channel=sut.channel, thread_ts=sut.thread_ts
         )
         mock_slack_client.send_thread_message.assert_called_once()
         mock_slack_client.get_emoji.assert_not_called()

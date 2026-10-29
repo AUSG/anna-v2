@@ -42,15 +42,15 @@ def _registration_info_call(user, member):
 class TestRegisterEarlyReactedUsers(unittest.TestCase):
     def setUp(self):
         self.slack = MagicMock()
-        self.sheets = MagicMock()
-        self.sheets.append_row_if_absent.return_value = True
+        self.bigchats = MagicMock()
+        self.bigchats.register.return_value = True
         self.members = MagicMock()
         self.members.find.return_value = SAMPLE_MEMBER
 
     def run_backfill(self, slack=None):
         register_early_reacted_users(
             slack or self.slack,
-            self.sheets,
+            self.bigchats,
             self.members,
             "gogo",
             WORKSHEET_ID,
@@ -70,7 +70,7 @@ class TestRegisterEarlyReactedUsers(unittest.TestCase):
                     call.get_emoji(channel=CHANNEL, ts=THREAD_TS, emoji_name="gogo")
                 ]
                 assert self.members.mock_calls == []
-                assert self.sheets.mock_calls == []
+                assert self.bigchats.mock_calls == []
 
     def test_registers_each_user_and_reports_each_outcome(self):
         self.slack.get_emoji.return_value = Reaction(
@@ -82,7 +82,7 @@ class TestRegisterEarlyReactedUsers(unittest.TestCase):
             MemberNotFound(),
             SAMPLE_MEMBER,
         ]
-        self.sheets.append_row_if_absent.side_effect = [True, False]
+        self.bigchats.register.side_effect = [True, False]
 
         self.run_backfill()
 
@@ -92,9 +92,13 @@ class TestRegisterEarlyReactedUsers(unittest.TestCase):
             call("U_NONE"),
             call("U_DUP"),
         ]
-        assert self.sheets.append_row_if_absent.call_args_list == [
-            call(WORKSHEET_ID, SAMPLE_ROW),
-            call(WORKSHEET_ID, SAMPLE_ROW),
+        assert self.bigchats.register.call_args_list == [
+            call(
+                WORKSHEET_ID, "U_OK", SAMPLE_ROW, channel=CHANNEL, thread_ts=THREAD_TS
+            ),
+            call(
+                WORKSHEET_ID, "U_DUP", SAMPLE_ROW, channel=CHANNEL, thread_ts=THREAD_TS
+            ),
         ]
         assert self.slack.send_thread_message.call_args_list == [
             call(
@@ -145,11 +149,16 @@ class TestRegisterEarlyReactedUsers(unittest.TestCase):
         self.run_backfill()
 
         assert self.members.find.call_args_list == [call("U_LEFT"), call("U_OK")]
-        assert self.sheets.append_row_if_absent.call_args_list == [
-            call(WORKSHEET_ID, SAMPLE_ROW),
+        assert self.bigchats.register.call_args_list == [
+            call(
+                WORKSHEET_ID, "U_LEFT", SAMPLE_ROW, channel=CHANNEL, thread_ts=THREAD_TS
+            ),
             call(
                 WORKSHEET_ID,
+                "U_OK",
                 ["김철수", "AUSG대", "Chulsoo@Example.com", "010-1234-5678"],
+                channel=CHANNEL,
+                thread_ts=THREAD_TS,
             ),
         ]
         assert (
@@ -164,7 +173,7 @@ class TestRegisterEarlyReactedUsers(unittest.TestCase):
         self.slack.get_emoji.return_value = Reaction(
             name="gogo", users=["U01BN035Y6L"], count=1
         )
-        self.sheets.append_row_if_absent.side_effect = Exception("quota")
+        self.bigchats.register.side_effect = Exception("quota")
 
         self.run_backfill()
 
@@ -192,6 +201,6 @@ class TestRegisterEarlyReactedUsers(unittest.TestCase):
         mock_web_client.reactions_get.assert_called_once_with(
             channel=CHANNEL, timestamp=THREAD_TS, full=True
         )
-        self.sheets.append_row_if_absent.assert_called_once()
+        self.bigchats.register.assert_called_once()
         mock_web_client.chat_postMessage.assert_called_once()  # 일괄 등록 안내
         mock_web_client.chat_postEphemeral.assert_called_once()

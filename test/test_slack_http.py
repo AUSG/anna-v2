@@ -180,6 +180,9 @@ def test_real_bolt_url_verification(monkeypatch, valid_signature):
 
 @pytest.mark.parametrize("ics_enabled", [True, False])
 def test_real_bolt_registration_calendar_roundtrip(monkeypatch, ics_enabled):
+    from integrations.bigchat_store import BigchatStore
+    from test.fixtures.sheets import SheetsAPI
+
     secret = "test-signing-secret"
     event = create_sample_reaction_added_event("gogo")
     responses = {
@@ -230,7 +233,7 @@ def test_real_bolt_registration_calendar_roundtrip(monkeypatch, ics_enabled):
         monkeypatch.setattr(
             module.settings, "ICS_TOKEN_SECRET", "testsecret" if ics_enabled else ""
         )
-        members, sheets = MagicMock(), MagicMock()
+        members, sheets = MagicMock(), SheetsAPI()
         members.find.return_value = Member(
             kor_name="김철수",
             eng_name="Kim",
@@ -238,8 +241,16 @@ def test_real_bolt_registration_calendar_roundtrip(monkeypatch, ics_enabled):
             phone="010-1234-5678",
             school_name_or_company_name="AUSG",
         )
-        sheets.append_row_if_absent.return_value = True
-        sheets.get_worksheet_title.return_value = SHEET_NAME
+        created = BigchatStore(sheets).create(
+            SHEET_NAME,
+            channel=event["item"]["channel"],
+            thread_ts=event["item"]["ts"],
+        )
+        worksheet_id = created.worksheet_id
+        responses["conversations.replies"]["messages"][0]["text"] = (
+            f"행사 소개글\n<{created.sheet_url}|신청 시트>"
+        )
+        sheets.fail_after = ":batchUpdate"
         monkeypatch.setattr(module.services, "members", lambda: members)
         monkeypatch.setattr(module.services, "sheets", lambda: sheets)
         client = module.flask_app.test_client()
@@ -254,9 +265,9 @@ def test_real_bolt_registration_calendar_roundtrip(monkeypatch, ics_enabled):
             secret,
         )
         assert response.status_code == 200
-        sheets.append_row_if_absent.assert_called_once_with(
-            WORKSHEET_ID, ["김철수", "AUSG", "me@example.com", "010-1234-5678"]
-        )
+        assert sheets.get_values(worksheet_id) == [
+            ["김철수", "AUSG", "me@example.com", "010-1234-5678"]
+        ]
         ephemeral = [
             call.kwargs["json"]
             for call in api.call_args_list
@@ -273,19 +284,42 @@ def test_real_bolt_registration_calendar_roundtrip(monkeypatch, ics_enabled):
         assert "calendar_gcal" in buttons
         if not ics_enabled:
             assert "calendar_ics" not in buttons
-            assert client.get(f"/bigchat/{WORKSHEET_ID}/event.ics").status_code == 404
-            return
-        url = urlsplit(buttons["calendar_ics"]["url"])
-        assert url.netloc == "anna.test"
-        parameters = {key: values[0] for key, values in parse_qs(url.query).items()}
-        download = client.get(url.path, query_string=parameters)
-        assert download.status_code == 200
-        assert "SUMMARY:AI 밋업" in download.text
-        before = api.call_count
-        assert (
-            client.get(
-                url.path, query_string={**parameters, "token": "wrong"}
-            ).status_code
-            == 403
+            assert client.get(f"/bigchat/{worksheet_id}/event.ics").status_code == 404
+        else:
+            url = urlsplit(buttons["calendar_ics"]["url"])
+            assert url.netloc == "anna.test"
+            parameters = {key: values[0] for key, values in parse_qs(url.query).items()}
+            download = client.get(url.path, query_string=parameters)
+            assert download.status_code == 200
+            assert "SUMMARY:AI 밋업" in download.text
+            before = api.call_count
+            assert (
+                client.get(
+                    url.path, query_string={**parameters, "token": "wrong"}
+                ).status_code
+                == 403
+            )
+            assert api.call_count == before
+
+        member_factory = MagicMock(
+            side_effect=AssertionError("Unexpected member lookup")
         )
-        assert api.call_count == before
+        monkeypatch.setattr(module.services, "members", member_factory)
+        response = post_signed_request(
+            client,
+            {
+                "type": "event_callback",
+                "team_id": "T_TEST",
+                "event_id": "Ev_CANCEL",
+                "event": {**event, "type": "reaction_removed"},
+            },
+            secret,
+        )
+        assert response.status_code == 200
+        member_factory.assert_not_called()
+        assert sheets.get_values(worksheet_id) == [["", "", "", ""]]
+        assert any(
+            call.args[1] == "chat.postEphemeral"
+            and "등록을 취소했어" in call.kwargs["json"]["text"]
+            for call in api.call_args_list
+        )
