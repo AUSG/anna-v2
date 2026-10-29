@@ -10,7 +10,7 @@ logger = logging.getLogger(__name__)
 
 def register_early_reacted_users(
     slack_client,
-    gs_client,
+    bigchats,
     member_manager,
     target_emoji,
     worksheet_id,
@@ -45,7 +45,7 @@ def register_early_reacted_users(
                     ts=thread_ts,
                 )
             else:
-                if gs_client.register_bigchat(
+                if bigchats.register(
                     worksheet_id,
                     user,
                     member.transform_for_spreadsheet(),

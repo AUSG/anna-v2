@@ -9,7 +9,6 @@ source = { virtual = "." }
 dependencies = [
     { name = "flask" },
     { name = "gspread" },
-    { name = "gspread-formatting" },
     { name = "gunicorn" },
     { name = "pydantic" },
     { name = "pydantic-settings" },
@@ -31,7 +30,6 @@ dev = [
 requires-dist = [
     { name = "flask", specifier = "~=3.1.3" },
     { name = "gspread", specifier = "~=6.2.1" },
-    { name = "gspread-formatting", specifier = "~=1.2.1" },
     { name = "gunicorn", specifier = "~=26.2.0" },
     { name = "pydantic", specifier = "~=2.14.1" },
     { name = "pydantic-settings", specifier = "~=2.16.1" },
@@ -333,17 +331,6 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/91/83/42d1d813822ed016d77aabadc99b09de3b5bd68532fd6bae23fd62347c41/gspread-6.2.1.tar.gz", hash = "sha256:2c7c99f7c32ebea6ec0d36f2d5cbe8a2be5e8f2a48bde87ad1ea203eff32bd03", size = 82590, upload-time = "2025-05-14T15:56:25.254Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/27/76/563fb20dedd0e12794d9a12cfe0198458cc0501fdc7b034eee2166d035d5/gspread-6.2.1-py3-none-any.whl", hash = "sha256:6d4ec9f1c23ae3c704a9219026dac01f2b328ac70b96f1495055d453c4c184db", size = 59977, upload-time = "2025-05-14T15:56:24.014Z" },
-]
-
-[[package]]
-name = "gspread-formatting"
-version = "1.2.1"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "gspread" },
-]
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/26/71/b32df64c1bb97c2289f0916c6192d2d37cfc4a78b863b545b4b27142f3bc/gspread_formatting-1.2.1-py2.py3-none-any.whl", hash = "sha256:76bef0e751dc276bab666351035f15a818866dea5ca20603a34ae6c847333662", size = 22391, upload-time = "2025-03-07T20:24:53.474Z" },
 ]
 
 [[package]]

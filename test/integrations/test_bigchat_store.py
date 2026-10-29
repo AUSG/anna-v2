@@ -25,7 +25,7 @@ CAROL = ["Carol", "Company", "c@example.test", "010-3333-3333"]
 def runtime():
     api = SheetsAPI()
     store = BigchatStore(api)
-    sheet = store.create(TITLE, CHANNEL, THREAD)
+    sheet = store.create(TITLE, channel=CHANNEL, thread_ts=THREAD).worksheet_id
     return api, store, sheet
 
 
@@ -47,12 +47,35 @@ def test_creation_and_binding_are_atomic_and_survive_lost_response():
     api = SheetsAPI()
     api.fail_after = ":batchUpdate"
     store = BigchatStore(api)
-    sheet = store.create(TITLE, CHANNEL, THREAD)
+    created = store.create(TITLE, channel=CHANNEL, thread_ts=THREAD)
+    sheet = created.worksheet_id
+    assert created.sheet_name == TITLE
+    assert created.sheet_url == api.get_url(sheet)
+    assert store.get_sheet(sheet) == created
     assert BigchatStore(api).find(CHANNEL, THREAD) == sheet
-    assert store.create(TITLE, CHANNEL, THREAD) == sheet
+    assert store.create(TITLE, channel=CHANNEL, thread_ts=THREAD).worksheet_id == sheet
     assert len(api.sheets) == 1
     with pytest.raises(BigchatIntegrityError):
-        store.create("Another event", CHANNEL, THREAD)
+        store.create("Another event", channel=CHANNEL, thread_ts=THREAD)
+
+
+def test_sheet_result_failure_does_not_recreate_the_committed_sheet(monkeypatch):
+    api = SheetsAPI()
+    store = BigchatStore(api)
+    get_url = api.get_url
+
+    def fail_url(_):
+        raise RuntimeError("URL unavailable")
+
+    with monkeypatch.context() as patch:
+        patch.setattr(api, "get_url", fail_url)
+        with pytest.raises(RuntimeError, match="URL unavailable"):
+            store.create(TITLE, channel=CHANNEL, thread_ts=THREAD)
+    before = len([call for call in api.calls if call[1] == ":batchUpdate"])
+    created = store.create(TITLE, channel=CHANNEL, thread_ts=THREAD)
+    assert created.sheet_url == get_url(created.worksheet_id)
+    assert len(api.sheets) == 1
+    assert len([call for call in api.calls if call[1] == ":batchUpdate"]) == before
 
 
 def test_lost_append_response_does_not_duplicate_registration(runtime):
@@ -233,11 +256,11 @@ def test_another_creator_with_a_different_title_cannot_be_reported_as_our_event(
     def compete(method, suffix, body=None):
         if suffix == ":batchUpdate":
             monkeypatch.setattr(api, "sheets_request", original)
-            BigchatStore(api).create("Another event", CHANNEL, THREAD)
+            BigchatStore(api).create("Another event", channel=CHANNEL, thread_ts=THREAD)
         return original(method, suffix, body)
 
     monkeypatch.setattr(api, "sheets_request", compete)
     with pytest.raises(BigchatIntegrityError, match="different bigchat"):
-        store.create(TITLE, CHANNEL, THREAD)
+        store.create(TITLE, channel=CHANNEL, thread_ts=THREAD)
     assert len(api.sheets) == 1
     assert next(iter(api.sheets.values()))["title"] == "Another event"

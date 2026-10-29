@@ -7,7 +7,7 @@ from features.bigchat.handlers.abandon_bigchat import AbandonBigchat
 from features.bigchat.handlers.join_bigchat import JoinBigchat
 from features.bigchat.services.creation import register_early_reacted_users
 from features.members.services.directory import Member
-from integrations.google_sheets import GoogleSpreadsheetClient
+from integrations.bigchat_store import BigchatStore
 from integrations.slack import Message, Reaction
 from test.fixtures.sheets import SheetsAPI
 
@@ -22,13 +22,9 @@ MEMBER = Member(
 )
 
 
-def setup(monkeypatch):
+def setup():
     api = SheetsAPI()
-    client = GoogleSpreadsheetClient.__new__(GoogleSpreadsheetClient)
-    client.spreadsheet_id = api.spreadsheet_id
-    client.members_worksheet_id = api.members_worksheet_id
-    monkeypatch.setattr(client, "sheets_request", api.sheets_request)
-    monkeypatch.setattr(client, "get_worksheet_title", api.get_worksheet_title)
+    store = BigchatStore(api)
     slack, members = MagicMock(), MagicMock()
     members.find.return_value = MEMBER
     slack.get_permalink.return_value = None
@@ -38,7 +34,7 @@ def setup(monkeypatch):
         "user": "U_A",
         "item": {"channel": CHANNEL, "ts": THREAD},
     }
-    return api, client, slack, members, event
+    return api, store, slack, members, event
 
 
 def messages(text):
@@ -57,32 +53,31 @@ def messages(text):
     ],
 )
 @pytest.mark.parametrize("cancel", [False, True])
-def test_message_links_never_establish_write_authority(text, cancel, monkeypatch):
-    api, client, slack, members, event = setup(monkeypatch)
+def test_message_links_never_establish_write_authority(text, cancel):
+    api, store, slack, members, event = setup()
     api.add_legacy_sheet(42, [["protected member directory"]])
     api.add_legacy_sheet(123, [["unbound worksheet"]])
     slack.get_replies.return_value = messages(text)
     if cancel:
         event["type"] = "reaction_removed"
-        handler = AbandonBigchat(event, "gogo", slack, client)
+        handler = AbandonBigchat(event, "gogo", slack, store)
     else:
-        handler = JoinBigchat(event, "gogo", slack, client, members)
+        handler = JoinBigchat(event, "gogo", slack, store, members)
     assert handler.run() is False
     assert all(method == "get" for method, _, _ in api.calls)
-    assert members.mock_calls == []
+    if not cancel:
+        assert members.mock_calls == []
     assert slack.mock_calls == []
     assert api.metadata == {}
     assert api.get_values(42) == [["protected member directory"]]
     assert api.get_values(123) == [["unbound worksheet"]]
 
 
-def test_backfill_and_event_share_identity_and_cancellation_survives_profile_removal(
-    monkeypatch,
-):
-    api, client, slack, members, event = setup(monkeypatch)
-    sheet = client.create_bigchat_sheet(TITLE, channel=CHANNEL, thread_ts=THREAD)
+def test_backfill_and_event_share_identity_with_cancellation():
+    api, store, slack, members, event = setup()
+    sheet = store.create(TITLE, channel=CHANNEL, thread_ts=THREAD).worksheet_id
     slack.get_emoji.return_value = Reaction(name="gogo", users=["U_A"], count=1)
-    register_early_reacted_users(slack, client, members, "gogo", sheet, CHANNEL, THREAD)
+    register_early_reacted_users(slack, store, members, "gogo", sheet, CHANNEL, THREAD)
     # Even a conflicting link cannot redirect a legitimately bound thread.
     slack.get_replies.return_value = messages(
         "https://docs.google.com/spreadsheets/d/foreign/edit#gid=42"
@@ -94,16 +89,13 @@ def test_backfill_and_event_share_identity_and_cancellation_survives_profile_rem
         event,
         "gogo",
         slack,
-        client,
+        store,
         members,
         settings=SimpleNamespace(ICS_TOKEN_SECRET="", PUBLIC_BASE_URL=""),
     ).run()
     rows = [row for row in api.get_values(sheet) if any(row)]
     assert rows == [["Alice", "New company", "a@example.test", "010-1111-1111"]]
     assert "이미 등록되어 있어" in slack.send_message.call_args.kwargs["msg"]
-    members.find.side_effect = AssertionError(
-        "Cancellation must not read current member profile"
-    )
     event["type"] = "reaction_removed"
-    assert AbandonBigchat(event, "gogo", slack, client).run()
+    assert AbandonBigchat(event, "gogo", slack, store).run()
     assert api.get_values(sheet) == [["", "", "", ""]]

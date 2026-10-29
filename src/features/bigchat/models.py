@@ -20,7 +20,7 @@ class CreateBigchatCommand:
 
 
 @dataclass(frozen=True)
-class BigchatCreated:
+class BigchatSheet:
     worksheet_id: int
     sheet_name: str
     sheet_url: str

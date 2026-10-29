@@ -34,8 +34,8 @@ class TestJoinBigchat(unittest.TestCase):
                 ),
             ),
         ]
-        mock_gs_client = MagicMock()
-        mock_gs_client.find_bigchat.return_value = 161837744
+        mock_bigchats = MagicMock()
+        mock_bigchats.find.return_value = 161837744
         mock_member_manager = MagicMock()
         mock_member_manager.find.return_value = Member(
             kor_name="문성혁",
@@ -45,14 +45,14 @@ class TestJoinBigchat(unittest.TestCase):
             school_name_or_company_name="school_name_or_company_name",
         )
         sut = JoinBigchat(
-            event, "gogo", mock_slack_client, mock_gs_client, mock_member_manager
+            event, "gogo", mock_slack_client, mock_bigchats, mock_member_manager
         )
 
         result = sut.run()
 
         mock_member_manager.find.assert_called_once()
         mock_slack_client.get_replies.assert_called_once()
-        mock_gs_client.register_bigchat.assert_called_once_with(
+        mock_bigchats.register.assert_called_once_with(
             161837744,
             event["user"],
             ["문성혁", "school_name_or_company_name", "email", "phone"],
@@ -70,8 +70,8 @@ class TestJoinBigchat(unittest.TestCase):
         )
         assert result is True
 
-    def test_run_with_old_format_sheet_registers_without_buttons(self):
-        """구형식 시트여도 참가 신청은 그대로 성공하고, 캘린더 버튼만 생략된다."""
+    def test_renamed_bound_sheet_registers_without_calendar_buttons(self):
+        """연결된 시트의 이름이 일정 형식에서 벗어나면 캘린더 버튼만 생략한다."""
         event = create_sample_reaction_added_event("gogo")
         mock_slack_client = MagicMock()
         mock_slack_client.get_replies.return_value = [
@@ -87,9 +87,9 @@ class TestJoinBigchat(unittest.TestCase):
                 ),
             ),
         ]
-        mock_gs_client = MagicMock()
-        mock_gs_client.find_bigchat.return_value = 161837744
-        mock_gs_client.get_worksheet_title.return_value = "빅챗 23-07-31"  # 구형식
+        mock_bigchats = MagicMock()
+        mock_bigchats.find.return_value = 161837744
+        mock_bigchats.get_sheet.return_value.sheet_name = "빅챗 23-07-31"  # 구형식
         mock_member_manager = MagicMock()
         mock_member_manager.find.return_value = Member(
             kor_name="문성혁",
@@ -99,12 +99,12 @@ class TestJoinBigchat(unittest.TestCase):
             school_name_or_company_name="school_name_or_company_name",
         )
         sut = JoinBigchat(
-            event, "gogo", mock_slack_client, mock_gs_client, mock_member_manager
+            event, "gogo", mock_slack_client, mock_bigchats, mock_member_manager
         )
 
         result = sut.run()
 
-        mock_gs_client.register_bigchat.assert_called_once()
+        mock_bigchats.register.assert_called_once()
         assert result is True
         assert (
             mock_slack_client.send_message_only_visible_to_user.call_args.kwargs[
@@ -131,9 +131,9 @@ class TestJoinBigchat(unittest.TestCase):
                 ),
             ),
         ]
-        mock_gs_client = MagicMock()
-        mock_gs_client.find_bigchat.return_value = 161837744
-        mock_gs_client.register_bigchat.return_value = False
+        mock_bigchats = MagicMock()
+        mock_bigchats.find.return_value = 161837744
+        mock_bigchats.register.return_value = False
         mock_member_manager = MagicMock()
         mock_member_manager.find.return_value = Member(
             kor_name="문성혁",
@@ -143,7 +143,7 @@ class TestJoinBigchat(unittest.TestCase):
             school_name_or_company_name="school_name_or_company_name",
         )
         sut = JoinBigchat(
-            event, "gogo", mock_slack_client, mock_gs_client, mock_member_manager
+            event, "gogo", mock_slack_client, mock_bigchats, mock_member_manager
         )
 
         result = sut.run()
@@ -172,9 +172,9 @@ class TestJoinBigchat(unittest.TestCase):
                 ),
             ),
         ]
-        mock_gs_client = MagicMock()
-        mock_gs_client.find_bigchat.return_value = 161837744
-        mock_gs_client.register_bigchat.side_effect = WorksheetNotFound("161837744")
+        mock_bigchats = MagicMock()
+        mock_bigchats.find.return_value = 161837744
+        mock_bigchats.register.side_effect = WorksheetNotFound("161837744")
         mock_member_manager = MagicMock()
         mock_member_manager.find.return_value = Member(
             kor_name="문성혁",
@@ -184,7 +184,7 @@ class TestJoinBigchat(unittest.TestCase):
             school_name_or_company_name="school_name_or_company_name",
         )
         sut = JoinBigchat(
-            event, "gogo", mock_slack_client, mock_gs_client, mock_member_manager
+            event, "gogo", mock_slack_client, mock_bigchats, mock_member_manager
         )
 
         result = sut.run()
@@ -203,10 +203,10 @@ class TestJoinBigchat(unittest.TestCase):
         mock_slack_client.get_permalink.return_value = (
             "https://ausg.slack.com/archives/C03SZTDEDK3/p1688801145307229"
         )
-        mock_gs_client = MagicMock()
-        mock_gs_client.find_bigchat.return_value = 161837744
-        mock_gs_client.get_worksheet_title.return_value = "AI 밋업 26-08-20 19:00~21:00"
-        sut = JoinBigchat(event, "gogo", mock_slack_client, mock_gs_client, MagicMock())
+        mock_bigchats = MagicMock()
+        mock_bigchats.find.return_value = 161837744
+        mock_bigchats.get_sheet.return_value.sheet_name = "AI 밋업 26-08-20 19:00~21:00"
+        sut = JoinBigchat(event, "gogo", mock_slack_client, mock_bigchats, MagicMock())
 
         with patch.object(envs, "ICS_TOKEN_SECRET", "testsecret"):
             blocks = sut._build_calendar_blocks(
@@ -232,10 +232,10 @@ class TestJoinBigchat(unittest.TestCase):
         mock_slack_client.get_permalink.return_value = (
             "https://ausg.slack.com/archives/C03SZTDEDK3/p1688801145307229"
         )
-        mock_gs_client = MagicMock()
-        mock_gs_client.find_bigchat.return_value = 161837744
-        mock_gs_client.get_worksheet_title.return_value = "AI 밋업 26-08-20 19:00~21:00"
-        sut = JoinBigchat(event, "gogo", mock_slack_client, mock_gs_client, MagicMock())
+        mock_bigchats = MagicMock()
+        mock_bigchats.find.return_value = 161837744
+        mock_bigchats.get_sheet.return_value.sheet_name = "AI 밋업 26-08-20 19:00~21:00"
+        sut = JoinBigchat(event, "gogo", mock_slack_client, mock_bigchats, MagicMock())
 
         blocks = sut._build_calendar_blocks("등록했어", 161837744, "긴 소개글 " * 2000)
 
@@ -249,10 +249,10 @@ class TestJoinBigchat(unittest.TestCase):
         event = create_sample_reaction_added_event("gogo")
         mock_slack_client = MagicMock()
         mock_slack_client.get_permalink.return_value = None
-        mock_gs_client = MagicMock()
-        mock_gs_client.find_bigchat.return_value = 161837744
-        mock_gs_client.get_worksheet_title.return_value = "AI 밋업 26-08-20 19:00~21:00"
-        sut = JoinBigchat(event, "gogo", mock_slack_client, mock_gs_client, MagicMock())
+        mock_bigchats = MagicMock()
+        mock_bigchats.find.return_value = 161837744
+        mock_bigchats.get_sheet.return_value.sheet_name = "AI 밋업 26-08-20 19:00~21:00"
+        sut = JoinBigchat(event, "gogo", mock_slack_client, mock_bigchats, MagicMock())
 
         blocks = sut._build_calendar_blocks(
             "등록했어", 161837744, "이번 빅챗 소개글입니다"
@@ -264,10 +264,10 @@ class TestJoinBigchat(unittest.TestCase):
 
     def test_build_calendar_blocks_without_secret_has_gcal_only(self):
         event = create_sample_reaction_added_event("gogo")
-        mock_gs_client = MagicMock()
-        mock_gs_client.find_bigchat.return_value = 161837744
-        mock_gs_client.get_worksheet_title.return_value = "AI 밋업 26-08-20 19:00~21:00"
-        sut = JoinBigchat(event, "gogo", MagicMock(), mock_gs_client, MagicMock())
+        mock_bigchats = MagicMock()
+        mock_bigchats.find.return_value = 161837744
+        mock_bigchats.get_sheet.return_value.sheet_name = "AI 밋업 26-08-20 19:00~21:00"
+        sut = JoinBigchat(event, "gogo", MagicMock(), mock_bigchats, MagicMock())
 
         blocks = sut._build_calendar_blocks("등록했어", 161837744, "소개글")
 
@@ -277,10 +277,10 @@ class TestJoinBigchat(unittest.TestCase):
 
     def test_build_calendar_blocks_with_old_format_sheet(self):
         event = create_sample_reaction_added_event("gogo")
-        mock_gs_client = MagicMock()
-        mock_gs_client.find_bigchat.return_value = 161837744
-        mock_gs_client.get_worksheet_title.return_value = "빅챗 23-07-31"
-        sut = JoinBigchat(event, "gogo", MagicMock(), mock_gs_client, MagicMock())
+        mock_bigchats = MagicMock()
+        mock_bigchats.find.return_value = 161837744
+        mock_bigchats.get_sheet.return_value.sheet_name = "빅챗 23-07-31"
+        sut = JoinBigchat(event, "gogo", MagicMock(), mock_bigchats, MagicMock())
 
         with patch.object(envs, "ICS_TOKEN_SECRET", "testsecret"):
             blocks = sut._build_calendar_blocks("등록했어", 161837744, "소개글")
@@ -301,12 +301,12 @@ class TestJoinBigchatLoadingEmoji(unittest.TestCase):
             text=text,
         )
 
-    def _sut(self, event, mock_slack_client, mock_gs_client, mock_member_manager):
+    def _sut(self, event, mock_slack_client, mock_bigchats, mock_member_manager):
         return JoinBigchat(
             event,
             "gogo",
             mock_slack_client,
-            mock_gs_client,
+            mock_bigchats,
             mock_member_manager,
             loading_emoji=LoadingEmoji(
                 mock_slack_client, event["item"]["channel"], event["item"]["ts"]
@@ -326,13 +326,13 @@ class TestJoinBigchatLoadingEmoji(unittest.TestCase):
 
     def test_unbound_thread_stops_before_slack_loading_or_registration(self):
         event = create_sample_reaction_added_event("gogo")
-        slack, sheets, members = MagicMock(), MagicMock(), MagicMock()
-        sheets.find_bigchat.return_value = None
-        assert self._sut(event, slack, sheets, members).run() is False
-        sheets.find_bigchat.assert_called_once_with(
+        slack, bigchats, members = MagicMock(), MagicMock(), MagicMock()
+        bigchats.find.return_value = None
+        assert self._sut(event, slack, bigchats, members).run() is False
+        bigchats.find.assert_called_once_with(
             channel=event["item"]["channel"], thread_ts=event["item"]["ts"]
         )
-        sheets.register_bigchat.assert_not_called()
+        bigchats.register.assert_not_called()
         assert slack.mock_calls == []
         assert members.mock_calls == []
 
@@ -360,8 +360,8 @@ class TestJoinBigchatLoadingEmoji(unittest.TestCase):
                 "edit#gid=161837744|구글스프레드 시트>",
             )
         ]
-        mock_gs_client = MagicMock()
-        mock_gs_client.find_bigchat.return_value = 161837744
+        mock_bigchats = MagicMock()
+        mock_bigchats.find.return_value = 161837744
         mock_member_manager = MagicMock()
         mock_member_manager.find.return_value = Member(
             kor_name="문성혁",
@@ -372,7 +372,7 @@ class TestJoinBigchatLoadingEmoji(unittest.TestCase):
         )
 
         result = self._sut(
-            event, mock_slack_client, mock_gs_client, mock_member_manager
+            event, mock_slack_client, mock_bigchats, mock_member_manager
         ).run()
 
         assert result is True

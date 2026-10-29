@@ -4,6 +4,8 @@ from unittest.mock import MagicMock, call
 from slack_sdk.errors import SlackApiError
 
 from features.bigchat.handlers.create_bigchat_sheet import CreateBigchatSheet
+from features.bigchat.models import BigchatSheet
+from integrations.bigchat_store import BigchatStore
 from test.fixtures.slack_events import create_sample_app_mention_event
 
 MENTION = "<@U01BN035Y6L> 새로운 빅챗 AI 밋업 26-08-20 19:00~21:00"
@@ -13,10 +15,11 @@ class TestCreateBigchatSheet(unittest.TestCase):
     def setUp(self):
         self.mock_slack_client = MagicMock()
         self.mock_slack_client.get_emoji.return_value = None  # 미리 눌린 이모지 없음
-        self.mock_gs_client = MagicMock()
-        self.mock_gs_client.create_bigchat_sheet.return_value = 161837744
-        self.mock_gs_client.get_url.return_value = (
-            "https://docs.google.com/spreadsheets/d/1FtKRO4/edit#gid=161837744"
+        self.mock_bigchats = MagicMock(spec=BigchatStore)
+        self.mock_bigchats.create.return_value = BigchatSheet(
+            worksheet_id=161837744,
+            sheet_name="AI 밋업 26-08-20 19:00~21:00",
+            sheet_url="https://docs.google.com/spreadsheets/d/1FtKRO4/edit#gid=161837744",
         )
         self.mock_member_manager = MagicMock()
 
@@ -24,7 +27,7 @@ class TestCreateBigchatSheet(unittest.TestCase):
         return CreateBigchatSheet(
             event,
             self.mock_slack_client,
-            self.mock_gs_client,
+            self.mock_bigchats,
             self.mock_member_manager,
             "gogo",
         )
@@ -35,13 +38,12 @@ class TestCreateBigchatSheet(unittest.TestCase):
         result = self.create_sut(event).handle_mention()
 
         assert result is True
-        assert self.mock_gs_client.mock_calls == [
-            call.create_bigchat_sheet(
+        assert self.mock_bigchats.mock_calls == [
+            call.create(
                 "AI 밋업 26-08-20 19:00~21:00",
                 channel=event["channel"],
                 thread_ts=event.get("thread_ts") or event["ts"],
             ),
-            call.get_url(161837744),
         ]
         self.mock_slack_client.send_message.assert_called_once_with(
             msg=(
@@ -76,7 +78,7 @@ class TestCreateBigchatSheet(unittest.TestCase):
         result = self.create_sut(event).handle_mention()
 
         assert result is False
-        assert self.mock_gs_client.mock_calls == []
+        assert self.mock_bigchats.mock_calls == []
         assert self.mock_slack_client.mock_calls == []
 
     def test_rejected_by_invalid_format(self):
@@ -94,7 +96,7 @@ class TestCreateBigchatSheet(unittest.TestCase):
                 result = self.create_sut(event).handle_mention()
 
                 assert result is False
-                assert self.mock_gs_client.mock_calls == []
+                assert self.mock_bigchats.mock_calls == []
                 assert self.mock_slack_client.mock_calls == [
                     call.send_message_only_visible_to_user(
                         msg=(
@@ -131,25 +133,24 @@ class TestCreateBigchatSheet(unittest.TestCase):
                 self.mock_slack_client.send_message_only_visible_to_user.assert_called_once()
                 self.mock_slack_client.send_message.assert_not_called()
                 self.mock_slack_client.get_emoji.assert_not_called()
-                assert self.mock_gs_client.mock_calls == []
+                assert self.mock_bigchats.mock_calls == []
                 assert self.mock_member_manager.mock_calls == []
 
-    def test_url_failure_is_propagated_without_publishing_or_backfilling(self):
+    def test_creation_failure_is_propagated_without_publishing_or_backfilling(self):
         event = create_sample_app_mention_event(MENTION)
-        failure = RuntimeError("URL 조회 실패")
-        self.mock_gs_client.get_url.side_effect = failure
+        failure = RuntimeError("시트 생성 실패")
+        self.mock_bigchats.create.side_effect = failure
 
         with self.assertRaises(RuntimeError) as error:
             self.create_sut(event).handle_mention()
 
         assert error.exception is failure
-        assert self.mock_gs_client.mock_calls == [
-            call.create_bigchat_sheet(
+        assert self.mock_bigchats.mock_calls == [
+            call.create(
                 "AI 밋업 26-08-20 19:00~21:00",
                 channel=event["channel"],
                 thread_ts=event.get("thread_ts") or event["ts"],
             ),
-            call.get_url(161837744),
         ]
         assert self.mock_slack_client.mock_calls == []
         assert self.mock_member_manager.mock_calls == []
@@ -163,7 +164,7 @@ class TestCreateBigchatSheet(unittest.TestCase):
             self.create_sut(event).handle_mention()
 
         assert error.exception is failure
-        self.mock_gs_client.create_bigchat_sheet.assert_called_once_with(
+        self.mock_bigchats.create.assert_called_once_with(
             "AI 밋업 26-08-20 19:00~21:00",
             channel=event["channel"],
             thread_ts=event.get("thread_ts") or event["ts"],
@@ -178,7 +179,7 @@ class TestCreateBigchatSheet(unittest.TestCase):
 
         assert self.create_sut(event).handle_mention() is True
 
-        self.mock_gs_client.create_bigchat_sheet.assert_called_once_with(
+        self.mock_bigchats.create.assert_called_once_with(
             "AI 밋업 26-08-20 19:00~21:00",
             channel=event["channel"],
             thread_ts=event.get("thread_ts") or event["ts"],

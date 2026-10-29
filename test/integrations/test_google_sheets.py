@@ -1,4 +1,3 @@
-from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 import gspread
@@ -8,25 +7,6 @@ from gspread.exceptions import APIError
 from requests import Response
 
 from integrations.google_sheets import GoogleSpreadsheetClient
-
-
-@pytest.mark.parametrize("gspread6", [False, True])
-def test_raw_sheets_transport_uses_the_authenticated_sdk_client(gspread6):
-    client = GoogleSpreadsheetClient.__new__(GoogleSpreadsheetClient)
-    client.spreadsheet_id = "configured-sheet"
-    request = MagicMock()
-    request.return_value.json.return_value = {"ok": True}
-    transport = SimpleNamespace(request=request)
-    client.gs_client = SimpleNamespace(http_client=transport) if gspread6 else transport
-    payload = {"data": []}
-    assert client.sheets_request(
-        "post", "/values:batchUpdateByDataFilter", payload
-    ) == {"ok": True}
-    request.assert_called_once_with(
-        "post",
-        "https://sheets.googleapis.com/v4/spreadsheets/configured-sheet/values:batchUpdateByDataFilter",
-        json=payload,
-    )
 
 
 @pytest.mark.parametrize("status", [200, 403])
@@ -40,9 +20,6 @@ def test_raw_transport_through_the_real_installed_gspread_sdk(status):
     )
     session = MagicMock()
     session.request.return_value = response
-    session.post.side_effect = lambda url, **kwargs: session.request(
-        "post", url, **kwargs
-    )
     client = GoogleSpreadsheetClient.__new__(GoogleSpreadsheetClient)
     client.spreadsheet_id = "configured-document"
     client.gs_client = gspread.Client(auth=AnonymousCredentials(), session=session)
@@ -56,6 +33,11 @@ def test_raw_transport_through_the_real_installed_gspread_sdk(status):
         assert client.sheets_request(
             "post", "/values:batchUpdateByDataFilter", {"data": []}
         ) == {"totalUpdatedRows": 1}
+    assert session.request.call_count == 1
+    assert session.request.call_args.kwargs["method"] == "post"
+    assert session.request.call_args.kwargs["url"] == (
+        "https://sheets.googleapis.com/v4/spreadsheets/configured-document/values:batchUpdateByDataFilter"
+    )
     assert session.request.call_args.kwargs["timeout"] == (5, 20)
     assert session.request.call_args.kwargs["json"] == {"data": []}
 

@@ -9,7 +9,7 @@ class AbandonBigchat:
         event,
         target_emoji,
         slack_client,
-        gs_client,
+        bigchats,
         loading_emoji=None,
     ):
         """loading_emoji: 실제 취소 작업만 감쌀 컨텍스트 매니저. 넘기지 않으면 이모지를 붙이지 않는다."""
@@ -20,16 +20,14 @@ class AbandonBigchat:
         self.user = event["user"]
         self.target_emoji = target_emoji
         self.slack_client = slack_client
-        self.gs_client = gs_client
+        self.bigchats = bigchats
         self.loading_emoji = loading_emoji or nullcontext()
 
     def run(self):
         if self.type != "reaction_removed" or self.reaction != self.target_emoji:
             return False
 
-        worksheet_id = self.gs_client.find_bigchat(
-            channel=self.channel, thread_ts=self.ts
-        )
+        worksheet_id = self.bigchats.find(channel=self.channel, thread_ts=self.ts)
         if worksheet_id is None:
             return False
 
@@ -40,7 +38,7 @@ class AbandonBigchat:
 
     def _abandon(self, worksheet_id: int) -> bool:
         try:
-            self.gs_client.cancel_bigchat(
+            self.bigchats.cancel(
                 worksheet_id, self.user, channel=self.channel, thread_ts=self.ts
             )
         except WorksheetNotFound:

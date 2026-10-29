@@ -33,6 +33,7 @@ from features.issues.handlers.create_issue import CreateIssue
 from features.members.services.directory import MemberManager
 from features.questions.handlers.question_response import QuestionResponse
 from http_routes import register_http_routes
+from integrations.bigchat_store import BigchatStore
 from integrations.github import GithubClient
 from integrations.google_sheets import GoogleSpreadsheetClient
 from integrations.qa import QAClient
@@ -56,6 +57,9 @@ class Services:
     def sheets(self) -> GoogleSpreadsheetClient:
         # 기존처럼 사용 시 생성한다. 도움말과 잘못된 캘린더 토큰에는 인증이 필요 없다.
         return GoogleSpreadsheetClient(settings=self.settings)
+
+    def bigchats(self) -> BigchatStore:
+        return BigchatStore(self.sheets())
 
     def members(self) -> MemberManager:
         with self._members_lock:
@@ -120,7 +124,7 @@ def build_slack_handlers(services: Services) -> SlackHandlers:
             "create_bigchat": lambda ctx: CreateBigchatSheet(
                 ctx.event,
                 ctx.slack_client,
-                services.sheets(),
+                services.bigchats(),
                 services.members(),
                 settings.JOIN_BIGCHAT_EMOJI,
             ),
@@ -137,7 +141,7 @@ def build_slack_handlers(services: Services) -> SlackHandlers:
             ctx.event,
             settings.JOIN_BIGCHAT_EMOJI,
             ctx.slack_client,
-            services.sheets(),
+            services.bigchats(),
             services.members(),
             loading_emoji=ctx.loading_emoji,
             settings=settings,
@@ -146,7 +150,7 @@ def build_slack_handlers(services: Services) -> SlackHandlers:
             ctx.event,
             settings.JOIN_BIGCHAT_EMOJI,
             ctx.slack_client,
-            services.sheets(),
+            services.bigchats(),
             loading_emoji=ctx.loading_emoji,
         ),
         announce_new_channel_created=lambda ctx: AnnounceNewChannelCreated(
@@ -162,7 +166,7 @@ def build_slack_handlers(services: Services) -> SlackHandlers:
             ctx.event,
             ctx.ack,
             ctx.slack_client,
-            services.sheets(),
+            services.bigchats(),
             services.members(),
             settings.JOIN_BIGCHAT_EMOJI,
         ),

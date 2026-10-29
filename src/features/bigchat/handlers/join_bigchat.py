@@ -23,7 +23,7 @@ class JoinBigchat:
         event,
         target_emoji,
         slack_client,
-        gs_client,
+        bigchats,
         member_manager,
         loading_emoji=None,
         *,
@@ -38,7 +38,7 @@ class JoinBigchat:
         self.target_emoji = target_emoji
         self.settings = settings
         self.slack_client = slack_client
-        self.gs_client = gs_client
+        self.bigchats = bigchats
         self.member_manager = member_manager
         self.loading_emoji = loading_emoji or nullcontext()
 
@@ -55,7 +55,7 @@ class JoinBigchat:
         ics에는 서버가 클릭 시점에 읽은 소개글 전문을 넣는다.
         """
         try:
-            sheet_name = self.gs_client.get_worksheet_title(worksheet_id)
+            sheet_name = self.bigchats.get_sheet(worksheet_id).sheet_name
             event = parse_sheet_name(sheet_name)
         except Exception as ex:  # noqa: BLE001
             logger.warning("Failed to build calendar buttons: %s", ex)
@@ -109,9 +109,7 @@ class JoinBigchat:
         if self.type != "reaction_added" or self.reaction != self.target_emoji:
             return False
 
-        worksheet_id = self.gs_client.find_bigchat(
-            channel=self.channel, thread_ts=self.ts
-        )
+        worksheet_id = self.bigchats.find(channel=self.channel, thread_ts=self.ts)
         if worksheet_id is None:
             return False
         messages = self.slack_client.get_replies(channel=self.channel, ts=self.ts)
@@ -140,7 +138,7 @@ class JoinBigchat:
             return False
 
         try:
-            added = self.gs_client.register_bigchat(
+            added = self.bigchats.register(
                 worksheet_id,
                 self.user,
                 member.transform_for_spreadsheet(),

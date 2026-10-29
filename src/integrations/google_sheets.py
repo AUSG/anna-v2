@@ -1,17 +1,14 @@
-import logging
 from urllib.parse import quote
 
 from gspread import Spreadsheet, Worksheet, service_account_from_dict
 from gspread.exceptions import WorksheetNotFound
 
 from config.env_config import envs
-from integrations.bigchat_store import BigchatStore
 from shared.utils import with_retry
 
 
 class GoogleSpreadsheetClient:
     def __init__(self, settings=envs):
-        self.logger = logging.getLogger(__name__)
         self.gs_client = self._build_gs_client(settings)
         self.gs_client.set_timeout((5, 20))
         self.spreadsheet_id = settings.FORM_SPREADSHEET_ID
@@ -35,27 +32,8 @@ class GoogleSpreadsheetClient:
         )
 
     def sheets_request(self, method, suffix, body=None):
-        # gspread 5 exposes request on Client; gspread 6 uses HTTPClient. Both
-        # reuse the service-account session and handle API errors identically.
-        transport = getattr(self.gs_client, "http_client", self.gs_client)
         url = f"https://sheets.googleapis.com/v4/spreadsheets/{quote(self.spreadsheet_id, safe='')}{suffix}"
-        return transport.request(method, url, json=body).json()
-
-    def find_bigchat(self, *, channel, thread_ts):
-        return BigchatStore(self).find(channel, thread_ts)
-
-    def create_bigchat_sheet(self, title, *, channel, thread_ts):
-        return BigchatStore(self).create(title, channel, thread_ts)
-
-    def register_bigchat(self, worksheet_id, user_id, values, *, channel, thread_ts):
-        return BigchatStore(self).register(
-            worksheet_id, user_id, values, channel=channel, thread_ts=thread_ts
-        )
-
-    def cancel_bigchat(self, worksheet_id, user_id, *, channel, thread_ts):
-        return BigchatStore(self).cancel(
-            worksheet_id, user_id, channel=channel, thread_ts=thread_ts
-        )
+        return self.gs_client.http_client.request(method, url, json=body).json()
 
     @with_retry(non_retryable_exceptions=(WorksheetNotFound,))
     def get_values(self, worksheet_id: int, cell_range=None) -> list[list[str]]:

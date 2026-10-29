@@ -12,6 +12,8 @@ import time
 from gspread.exceptions import APIError
 from requests.exceptions import RequestException
 
+from features.bigchat.models import BigchatSheet
+
 EVENT_KEY = "anna.bigchat.v1"
 PARTICIPANT_KEY = "anna.participant.v1"
 _WRITES = threading.RLock()
@@ -49,14 +51,11 @@ def _transient(error):
 
 class BigchatStore:
     def __init__(self, client):
-        self.client = client
-
-    def _request(self, method, suffix, body=None):
-        return self.client.sheets_request(method, suffix, body)
+        self._client = client
 
     def _metadata(self, identity):
         try:
-            metadata = self._request(
+            metadata = self._client.sheets_request(
                 "get", f"/developerMetadata/{identity['metadataId']}"
             )
         except APIError as error:
@@ -76,7 +75,7 @@ class BigchatStore:
         if (
             not isinstance(sheet_id, int)
             or sheet_id < 0
-            or sheet_id == self.client.members_worksheet_id
+            or sheet_id == self._client.members_worksheet_id
         ):
             raise BigchatIntegrityError("Invalid or protected bigchat worksheet")
         return sheet_id
@@ -85,7 +84,7 @@ class BigchatStore:
     def event_identity(channel, thread_ts):
         return _identity(EVENT_KEY, channel, thread_ts)
 
-    def find(self, channel, thread_ts):
+    def find(self, channel, thread_ts) -> int | None:
         metadata = self._metadata(self.event_identity(channel, thread_ts))
         return None if metadata is None else self._sheet_id(metadata)
 
@@ -100,7 +99,9 @@ class BigchatStore:
         """The unique metadata ID guards the entire atomic batch against replay."""
         for attempt in range(3):
             try:
-                self._request("post", ":batchUpdate", {"requests": requests})
+                self._client.sheets_request(
+                    "post", ":batchUpdate", {"requests": requests}
+                )
                 return
             except (APIError, RequestException) as error:
                 # A lost response or another creator may have committed the same
@@ -123,55 +124,64 @@ class BigchatStore:
             }
         }
 
-    def create(self, title, channel, thread_ts):
+    def get_sheet(self, worksheet_id: int) -> BigchatSheet:
+        return BigchatSheet(
+            worksheet_id=worksheet_id,
+            sheet_name=self._client.get_worksheet_title(worksheet_id),
+            sheet_url=self._client.get_url(worksheet_id),
+        )
+
+    def create(self, title: str, *, channel: str, thread_ts: str) -> BigchatSheet:
         with _WRITES:
             identity = self.event_identity(channel, thread_ts)
             existing = self._metadata(identity)
-            if existing is not None:
-                worksheet_id = self._sheet_id(existing)
-                if self.client.get_worksheet_title(worksheet_id) != title:
+            if existing is None:
+                worksheet_id = _identity("anna.sheet.v1", channel, thread_ts)[
+                    "metadataId"
+                ]
+                if worksheet_id == self._client.members_worksheet_id:
                     raise BigchatIntegrityError(
-                        "This Slack thread already has a different bigchat"
+                        "Worksheet identity conflicts with member directory"
                     )
-                return worksheet_id
-            worksheet_id = _identity("anna.sheet.v1", channel, thread_ts)["metadataId"]
-            if worksheet_id == self.client.members_worksheet_id:
-                raise BigchatIntegrityError(
-                    "Worksheet identity conflicts with member directory"
-                )
-            self._create_once(
-                [
-                    {
-                        "addSheet": {
-                            "properties": {
-                                "sheetId": worksheet_id,
-                                "title": title,
-                                "gridProperties": {"rowCount": 100, "columnCount": 4},
+                self._create_once(
+                    [
+                        {
+                            "addSheet": {
+                                "properties": {
+                                    "sheetId": worksheet_id,
+                                    "title": title,
+                                    "gridProperties": {
+                                        "rowCount": 100,
+                                        "columnCount": 4,
+                                    },
+                                }
                             }
-                        }
-                    },
-                    self._create_metadata(identity, {"sheetId": worksheet_id}),
-                    {
-                        "updateDimensionProperties": {
-                            "range": {
-                                "sheetId": worksheet_id,
-                                "dimension": "COLUMNS",
-                                "startIndex": 0,
-                                "endIndex": 4,
-                            },
-                            "properties": {"pixelSize": 220},
-                            "fields": "pixelSize",
-                        }
-                    },
-                ],
-                identity,
-            )
-            self._bound_event(worksheet_id, channel, thread_ts)
-            if self.client.get_worksheet_title(worksheet_id) != title:
+                        },
+                        self._create_metadata(identity, {"sheetId": worksheet_id}),
+                        {
+                            "updateDimensionProperties": {
+                                "range": {
+                                    "sheetId": worksheet_id,
+                                    "dimension": "COLUMNS",
+                                    "startIndex": 0,
+                                    "endIndex": 4,
+                                },
+                                "properties": {"pixelSize": 220},
+                                "fields": "pixelSize",
+                            }
+                        },
+                    ],
+                    identity,
+                )
+                self._bound_event(worksheet_id, channel, thread_ts)
+            else:
+                worksheet_id = self._sheet_id(existing)
+            created = self.get_sheet(worksheet_id)
+            if created.sheet_name != title:
                 raise BigchatIntegrityError(
                     "This Slack thread already has a different bigchat"
                 )
-            return worksheet_id
+            return created
 
     @staticmethod
     def _participant(event, user_id):
@@ -206,7 +216,7 @@ class BigchatStore:
         }
 
     def _values(self, identity, worksheet_id):
-        response = self._request(
+        response = self._client.sheets_request(
             "post",
             "/values:batchGetByDataFilter",
             {
@@ -240,7 +250,7 @@ class BigchatStore:
         }
         for attempt in range(3):
             try:
-                response = self._request(
+                response = self._client.sheets_request(
                     "post", "/values:batchUpdateByDataFilter", body
                 )
                 if response.get("totalUpdatedRows") != 1:
@@ -253,7 +263,7 @@ class BigchatStore:
                     raise
                 time.sleep(2**attempt)
 
-    def register(self, worksheet_id, user_id, values, *, channel, thread_ts):
+    def register(self, worksheet_id, user_id, values, *, channel, thread_ts) -> bool:
         if len(values) != 4 or any(not isinstance(value, str) for value in values):
             raise ValueError("Registration must contain four text values")
         with _WRITES:
@@ -264,16 +274,17 @@ class BigchatStore:
                 if previous != values:
                     self._write_values(identity, worksheet_id, values)
                 return not any(previous)
+            row_range = {
+                "sheetId": worksheet_id,
+                "dimension": "ROWS",
+                "startIndex": 0,
+                "endIndex": 1,
+            }
             self._create_once(
                 [
                     {
                         "insertDimension": {
-                            "range": {
-                                "sheetId": worksheet_id,
-                                "dimension": "ROWS",
-                                "startIndex": 0,
-                                "endIndex": 1,
-                            },
+                            "range": row_range,
                             "inheritFromBefore": False,
                         }
                     },
@@ -297,14 +308,7 @@ class BigchatStore:
                     },
                     self._create_metadata(
                         identity,
-                        {
-                            "dimensionRange": {
-                                "sheetId": worksheet_id,
-                                "dimension": "ROWS",
-                                "startIndex": 0,
-                                "endIndex": 1,
-                            }
-                        },
+                        {"dimensionRange": row_range},
                     ),
                 ],
                 identity,
@@ -312,7 +316,7 @@ class BigchatStore:
             self._participant_metadata(identity, worksheet_id)
             return True
 
-    def cancel(self, worksheet_id, user_id, *, channel, thread_ts):
+    def cancel(self, worksheet_id, user_id, *, channel, thread_ts) -> bool:
         with _WRITES:
             event = self._bound_event(worksheet_id, channel, thread_ts)
             identity = self._participant(event, user_id)

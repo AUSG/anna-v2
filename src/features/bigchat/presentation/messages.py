@@ -20,7 +20,7 @@ def bot_not_in_channel_message(sheet_url: str, sheet_name: str) -> str:
     return strip_multiline(
         f"""
                 시트(<{sheet_url}|{sheet_name}>)는 만들었는데, 내가 이 채널에 없어서 스레드에 답글을 못 달았어.
-                나를 채널에 초대한 뒤 위 시트 링크를 스레드에 공유해줘. 그래야 이모지로 참여 신청을 받을 수 있어!"""
+                나를 채널에 초대하면 모집글에서 이모지로 참여 신청을 받을 수 있어!"""
     )
 
 

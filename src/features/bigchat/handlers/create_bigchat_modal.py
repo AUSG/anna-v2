@@ -8,7 +8,6 @@ from features.bigchat.presentation.messages import (
     bot_not_in_channel_message,
 )
 from features.bigchat.services.creation import register_early_reacted_users
-from integrations.bigchat_repository import SpreadsheetBigchatRepository
 
 # 슬랙 단축메뉴에 등록한 callback ID
 CREATE_BIGCHAT_SHORTCUT_ID = "create_bigchat"
@@ -107,7 +106,7 @@ def normalize_view_body(body):
 
 class SubmitCreateBigchatModal:
     def __init__(
-        self, event, ack, slack_client, gs_client, member_manager, target_emoji
+        self, event, ack, slack_client, bigchats, member_manager, target_emoji
     ):
         metadata = json.loads(event["view"]["private_metadata"])
         values = event["view"]["state"]["values"]
@@ -120,10 +119,9 @@ class SubmitCreateBigchatModal:
         self.end = values[END_BLOCK][ACTION_ID]["selected_time"]  # HH:mm
         self.ack = ack
         self.slack_client = slack_client
-        self.gs_client = gs_client
+        self.bigchats = bigchats
         self.member_manager = member_manager
         self.target_emoji = target_emoji
-        self._bigchats = SpreadsheetBigchatRepository(gs_client)
 
     def run(self):
         sheet_name = f"{self.name} {self.date[2:]} {self.start}~{self.end}"
@@ -153,7 +151,7 @@ class SubmitCreateBigchatModal:
         return errors
 
     def _create_and_notify(self, command: CreateBigchatCommand) -> bool:
-        created = self._bigchats.create(
+        created = self.bigchats.create(
             command.sheet_name, channel=self.channel, thread_ts=self.thread_ts
         )
         try:
@@ -171,7 +169,7 @@ class SubmitCreateBigchatModal:
 
         register_early_reacted_users(
             self.slack_client,
-            self.gs_client,
+            self.bigchats,
             self.member_manager,
             self.target_emoji,
             created.worksheet_id,
