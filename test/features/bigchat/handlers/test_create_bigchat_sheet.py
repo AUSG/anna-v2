@@ -4,6 +4,7 @@ from unittest.mock import MagicMock, call
 from slack_sdk.errors import SlackApiError
 
 from features.bigchat.handlers.create_bigchat_sheet import CreateBigchatSheet
+from integrations.bigchat_store import BigchatStore
 from test.fixtures.slack_events import create_sample_app_mention_event
 
 MENTION = "<@U01BN035Y6L> 새로운 빅챗 AI 밋업 26-08-20 19:00~21:00"
@@ -24,7 +25,7 @@ class TestCreateBigchatSheet(unittest.TestCase):
         return CreateBigchatSheet(
             event,
             self.mock_slack_client,
-            self.mock_gs_client,
+            BigchatStore(self.mock_gs_client),
             self.mock_member_manager,
             "gogo",
         )

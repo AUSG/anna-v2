@@ -17,6 +17,7 @@ from features.bigchat.handlers.create_bigchat_modal import (
 )
 from features.bigchat.models import InvalidBigchatName
 from features.bigchat.services.sheet_link import extract_worksheet_id
+from integrations.bigchat_store import BigchatStore
 from test.fixtures.slack_events import (
     create_sample_message_shortcut_body,
     create_sample_view_submission_body,
@@ -104,7 +105,7 @@ class TestSubmitCreateBigchatModal(unittest.TestCase):
             event,
             mock_ack,
             mock_slack_client,
-            mock_gs_client,
+            BigchatStore(mock_gs_client),
             self.mock_member_manager,
             "gogo",
         )

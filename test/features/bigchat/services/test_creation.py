@@ -11,6 +11,7 @@ from slack_sdk.errors import SlackApiError
 
 from features.bigchat.services.creation import register_early_reacted_users
 from features.members.services.directory import Member, MemberLackInfo, MemberNotFound
+from integrations.bigchat_store import BigchatStore
 from integrations.slack import Reaction, SlackClient
 from test.fixtures.slack_events import create_sample_member
 
@@ -50,7 +51,7 @@ class TestRegisterEarlyReactedUsers(unittest.TestCase):
     def run_backfill(self, slack=None):
         register_early_reacted_users(
             slack or self.slack,
-            self.sheets,
+            BigchatStore(self.sheets),
             self.members,
             "gogo",
             WORKSHEET_ID,
