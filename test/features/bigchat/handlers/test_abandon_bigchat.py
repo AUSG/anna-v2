@@ -3,6 +3,7 @@ from unittest.mock import MagicMock
 
 from features.bigchat.handlers.abandon_bigchat import AbandonBigchat
 from features.members.services.directory import Member
+from integrations.bigchat_store import BigchatStore
 from integrations.google_sheets import WorksheetNotFound
 from integrations.slack import Message
 from shared.loading_emoji import LoadingEmoji
@@ -48,7 +49,7 @@ class TestAbandonBigchat(unittest.TestCase):
             "gogo",
             mock_slack_client,
             mock_member_manager,
-            mock_gs_client,
+            BigchatStore(mock_gs_client),
         )
 
         result = sut.run()
@@ -98,7 +99,7 @@ class TestAbandonBigchat(unittest.TestCase):
             "gogo",
             mock_slack_client,
             mock_member_manager,
-            mock_gs_client,
+            BigchatStore(mock_gs_client),
         )
 
         result = sut.run()
@@ -132,7 +133,7 @@ class TestAbandonBigchatLoadingEmoji(unittest.TestCase):
             "gogo",
             mock_slack_client,
             mock_member_manager,
-            mock_gs_client,
+            BigchatStore(mock_gs_client),
             loading_emoji=LoadingEmoji(
                 mock_slack_client, event["item"]["channel"], event["item"]["ts"]
             ),

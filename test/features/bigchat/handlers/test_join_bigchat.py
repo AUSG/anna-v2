@@ -4,6 +4,7 @@ from unittest.mock import MagicMock, patch
 from config.env_config import envs
 from features.bigchat.handlers.join_bigchat import JoinBigchat
 from features.members.services.directory import Member
+from integrations.bigchat_store import BigchatStore
 from integrations.google_sheets import WorksheetNotFound
 from integrations.slack import Message
 from shared.loading_emoji import LoadingEmoji
@@ -44,7 +45,11 @@ class TestJoinBigchat(unittest.TestCase):
             school_name_or_company_name="school_name_or_company_name",
         )
         sut = JoinBigchat(
-            event, "gogo", mock_slack_client, mock_gs_client, mock_member_manager
+            event,
+            "gogo",
+            mock_slack_client,
+            BigchatStore(mock_gs_client),
+            mock_member_manager,
         )
 
         result = sut.run()
@@ -93,7 +98,11 @@ class TestJoinBigchat(unittest.TestCase):
             school_name_or_company_name="school_name_or_company_name",
         )
         sut = JoinBigchat(
-            event, "gogo", mock_slack_client, mock_gs_client, mock_member_manager
+            event,
+            "gogo",
+            mock_slack_client,
+            BigchatStore(mock_gs_client),
+            mock_member_manager,
         )
 
         result = sut.run()
@@ -136,7 +145,11 @@ class TestJoinBigchat(unittest.TestCase):
             school_name_or_company_name="school_name_or_company_name",
         )
         sut = JoinBigchat(
-            event, "gogo", mock_slack_client, mock_gs_client, mock_member_manager
+            event,
+            "gogo",
+            mock_slack_client,
+            BigchatStore(mock_gs_client),
+            mock_member_manager,
         )
 
         result = sut.run()
@@ -176,7 +189,11 @@ class TestJoinBigchat(unittest.TestCase):
             school_name_or_company_name="school_name_or_company_name",
         )
         sut = JoinBigchat(
-            event, "gogo", mock_slack_client, mock_gs_client, mock_member_manager
+            event,
+            "gogo",
+            mock_slack_client,
+            BigchatStore(mock_gs_client),
+            mock_member_manager,
         )
 
         result = sut.run()
@@ -197,7 +214,9 @@ class TestJoinBigchat(unittest.TestCase):
         )
         mock_gs_client = MagicMock()
         mock_gs_client.get_worksheet_title.return_value = "AI 밋업 26-08-20 19:00~21:00"
-        sut = JoinBigchat(event, "gogo", mock_slack_client, mock_gs_client, MagicMock())
+        sut = JoinBigchat(
+            event, "gogo", mock_slack_client, BigchatStore(mock_gs_client), MagicMock()
+        )
 
         with patch.object(envs, "ICS_TOKEN_SECRET", "testsecret"):
             blocks = sut._build_calendar_blocks(
@@ -225,7 +244,9 @@ class TestJoinBigchat(unittest.TestCase):
         )
         mock_gs_client = MagicMock()
         mock_gs_client.get_worksheet_title.return_value = "AI 밋업 26-08-20 19:00~21:00"
-        sut = JoinBigchat(event, "gogo", mock_slack_client, mock_gs_client, MagicMock())
+        sut = JoinBigchat(
+            event, "gogo", mock_slack_client, BigchatStore(mock_gs_client), MagicMock()
+        )
 
         blocks = sut._build_calendar_blocks("등록했어", 161837744, "긴 소개글 " * 2000)
 
@@ -241,7 +262,9 @@ class TestJoinBigchat(unittest.TestCase):
         mock_slack_client.get_permalink.return_value = None
         mock_gs_client = MagicMock()
         mock_gs_client.get_worksheet_title.return_value = "AI 밋업 26-08-20 19:00~21:00"
-        sut = JoinBigchat(event, "gogo", mock_slack_client, mock_gs_client, MagicMock())
+        sut = JoinBigchat(
+            event, "gogo", mock_slack_client, BigchatStore(mock_gs_client), MagicMock()
+        )
 
         blocks = sut._build_calendar_blocks(
             "등록했어", 161837744, "이번 빅챗 소개글입니다"
@@ -255,7 +278,9 @@ class TestJoinBigchat(unittest.TestCase):
         event = create_sample_reaction_added_event("gogo")
         mock_gs_client = MagicMock()
         mock_gs_client.get_worksheet_title.return_value = "AI 밋업 26-08-20 19:00~21:00"
-        sut = JoinBigchat(event, "gogo", MagicMock(), mock_gs_client, MagicMock())
+        sut = JoinBigchat(
+            event, "gogo", MagicMock(), BigchatStore(mock_gs_client), MagicMock()
+        )
 
         blocks = sut._build_calendar_blocks("등록했어", 161837744, "소개글")
 
@@ -267,7 +292,9 @@ class TestJoinBigchat(unittest.TestCase):
         event = create_sample_reaction_added_event("gogo")
         mock_gs_client = MagicMock()
         mock_gs_client.get_worksheet_title.return_value = "빅챗 23-07-31"
-        sut = JoinBigchat(event, "gogo", MagicMock(), mock_gs_client, MagicMock())
+        sut = JoinBigchat(
+            event, "gogo", MagicMock(), BigchatStore(mock_gs_client), MagicMock()
+        )
 
         with patch.object(envs, "ICS_TOKEN_SECRET", "testsecret"):
             blocks = sut._build_calendar_blocks("등록했어", 161837744, "소개글")
@@ -293,7 +320,7 @@ class TestJoinBigchatLoadingEmoji(unittest.TestCase):
             event,
             "gogo",
             mock_slack_client,
-            mock_gs_client,
+            BigchatStore(mock_gs_client),
             mock_member_manager,
             loading_emoji=LoadingEmoji(
                 mock_slack_client, event["item"]["channel"], event["item"]["ts"]

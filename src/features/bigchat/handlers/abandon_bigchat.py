@@ -1,6 +1,5 @@
 from contextlib import nullcontext
 
-from features.bigchat.services.sheet_link import extract_worksheet_id
 from features.members.services.directory import MemberLackInfo, MemberNotFound
 from integrations.google_sheets import WorksheetNotFound
 
@@ -13,7 +12,7 @@ class AbandonBigchat:
         target_emoji,
         slack_client,
         member_manager,
-        gs_client,
+        bigchats,
         loading_emoji=None,
     ):
         """loading_emoji: 실제 취소 작업만 감쌀 컨텍스트 매니저. 넘기지 않으면 이모지를 붙이지 않는다."""
@@ -26,7 +25,7 @@ class AbandonBigchat:
         self.target_emoji = target_emoji
         self.slack_client = slack_client
         self.member_manager = member_manager
-        self.gs_client = gs_client
+        self.bigchats = bigchats
         self.loading_emoji = loading_emoji or nullcontext()
 
     def run(self):
@@ -37,7 +36,7 @@ class AbandonBigchat:
         if messages[0].ts != self.ts:
             return False
 
-        worksheet_id = extract_worksheet_id(message.text for message in messages)
+        worksheet_id = self.bigchats.find(message.text for message in messages)
         if not worksheet_id:
             return False
 
@@ -61,7 +60,7 @@ class AbandonBigchat:
             return False
 
         try:
-            self.gs_client.delete_row(worksheet_id, member.email)
+            self.bigchats.cancel(worksheet_id, member.email)
         except WorksheetNotFound:
             self.slack_client.send_message(
                 msg=f"<@{self.user}>, 이 빅챗의 신청 시트를 찾을 수 없어서 등록을 취소하지 못했어. "

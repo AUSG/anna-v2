@@ -10,7 +10,6 @@ from features.bigchat.calendar import (
     to_gcal_link_truncated,
 )
 from features.bigchat.presentation.messages import build_registration_info_message
-from features.bigchat.services.sheet_link import extract_worksheet_id
 from features.members.services.directory import MemberLackInfo, MemberNotFound
 from integrations.google_sheets import WorksheetNotFound
 from integrations.slack import Message
@@ -24,7 +23,7 @@ class JoinBigchat:
         event,
         target_emoji,
         slack_client,
-        gs_client,
+        bigchats,
         member_manager,
         loading_emoji=None,
         *,
@@ -39,7 +38,7 @@ class JoinBigchat:
         self.target_emoji = target_emoji
         self.settings = settings
         self.slack_client = slack_client
-        self.gs_client = gs_client
+        self.bigchats = bigchats
         self.member_manager = member_manager
         self.loading_emoji = loading_emoji or nullcontext()
 
@@ -56,7 +55,7 @@ class JoinBigchat:
         ics에는 서버가 클릭 시점에 읽은 소개글 전문을 넣는다.
         """
         try:
-            sheet_name = self.gs_client.get_worksheet_title(worksheet_id)
+            sheet_name = self.bigchats.get_worksheet_title(worksheet_id)
             event = parse_sheet_name(sheet_name)
         except Exception as ex:  # noqa: BLE001
             logger.warning("Failed to build calendar buttons: %s", ex)
@@ -114,7 +113,7 @@ class JoinBigchat:
         if messages[0].ts != self.ts:
             return False
 
-        worksheet_id = extract_worksheet_id(message.text for message in messages)
+        worksheet_id = self.bigchats.find(message.text for message in messages)
         if not worksheet_id:
             return False
 
@@ -140,7 +139,7 @@ class JoinBigchat:
             return False
 
         try:
-            added = self.gs_client.append_row_if_absent(
+            added = self.bigchats.register(
                 worksheet_id, member.transform_for_spreadsheet()
             )
         except WorksheetNotFound:
