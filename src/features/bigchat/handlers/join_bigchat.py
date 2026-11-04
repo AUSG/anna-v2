@@ -9,9 +9,12 @@ from features.bigchat.calendar import (
     parse_sheet_name,
     to_gcal_link_truncated,
 )
-from features.bigchat.presentation.messages import build_registration_info_message
+from features.bigchat.errors import BigchatError
+from features.bigchat.presentation.messages import (
+    bigchat_storage_error_message,
+    build_registration_info_message,
+)
 from features.members.services.directory import MemberLackInfo, MemberNotFound
-from integrations.google_sheets import WorksheetNotFound
 from integrations.slack import Message
 
 logger = logging.getLogger(__name__)
@@ -55,7 +58,7 @@ class JoinBigchat:
         ics에는 서버가 클릭 시점에 읽은 소개글 전문을 넣는다.
         """
         try:
-            sheet_name = self.bigchats.get_worksheet_title(worksheet_id)
+            sheet_name = self.bigchats.get_sheet(worksheet_id).sheet_name
             event = parse_sheet_name(sheet_name)
         except Exception as ex:  # noqa: BLE001
             logger.warning("Failed to build calendar buttons: %s", ex)
@@ -109,12 +112,21 @@ class JoinBigchat:
         if self.type != "reaction_added" or self.reaction != self.target_emoji:
             return False
 
-        messages = self.slack_client.get_replies(channel=self.channel, ts=self.ts)
-        if messages[0].ts != self.ts:
+        try:
+            return self._run()
+        except BigchatError as error:
+            self.slack_client.send_message(
+                msg=f"<@{self.user}>, {bigchat_storage_error_message(error, '신청')}",
+                ts=self.ts,
+            )
             return False
 
-        worksheet_id = self.bigchats.find(message.text for message in messages)
-        if not worksheet_id:
+    def _run(self):
+        worksheet_id = self.bigchats.find(channel=self.channel, thread_ts=self.ts)
+        if worksheet_id is None:
+            return False
+        messages = self.slack_client.get_replies(channel=self.channel, ts=self.ts)
+        if not messages or messages[0].ts != self.ts:
             return False
 
         # 여기부터가 실제 동작이다. 위 검사들에서 걸러진 이벤트(관심 없는 이모지, 빅챗 글이
@@ -138,17 +150,13 @@ class JoinBigchat:
             )
             return False
 
-        try:
-            added = self.bigchats.register(
-                worksheet_id, member.transform_for_spreadsheet()
-            )
-        except WorksheetNotFound:
-            self.slack_client.send_message(
-                msg=f"<@{self.user}>, 이 빅챗의 신청 시트를 찾을 수 없어. 이미 마감되었거나 삭제된 것 같아. "
-                f"모집이 진행 중인 빅챗이라면 운영진에게 알려줘!",
-                ts=self.ts,
-            )
-            return False
+        added = self.bigchats.register(
+            worksheet_id,
+            self.user,
+            member.transform_for_spreadsheet(),
+            channel=self.channel,
+            thread_ts=self.ts,
+        )
 
         if not added:
             # 시트 생성 직후의 일괄 등록(#89)과 동시에 처리됐거나 이벤트가 중복 전달된 경우

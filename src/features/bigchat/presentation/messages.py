@@ -1,8 +1,15 @@
+from features.bigchat.errors import (
+    BigchatAlreadyCreated,
+    BigchatError,
+    BigchatIntegrityError,
+    BigchatNameConflict,
+    BigchatSheetMissing,
+)
 from shared.utils import strip_multiline
 
 
 def bigchat_created_message(sheet_url: str, sheet_name: str) -> str:
-    # 참여 신청은 이 답글의 시트 ID를 기준으로 처리한다.
+    # URL은 사용자 안내용이다. 참여 대상은 저장된 스레드 연결로 조회한다.
     return f"새로운 빅챗, 등록 완료! <{sheet_url}|{sheet_name}> :google_spreadsheets:"
 
 
@@ -20,7 +27,7 @@ def bot_not_in_channel_message(sheet_url: str, sheet_name: str) -> str:
     return strip_multiline(
         f"""
                 시트(<{sheet_url}|{sheet_name}>)는 만들었는데, 내가 이 채널에 없어서 스레드에 답글을 못 달았어.
-                나를 채널에 초대한 뒤 위 시트 링크를 스레드에 공유해줘. 그래야 이모지로 참여 신청을 받을 수 있어!"""
+                나를 채널에 초대하면 모집글에서 이모지로 참여 신청을 받을 수 있어!"""
     )
 
 
@@ -36,3 +43,15 @@ def build_registration_info_message(user: str, member) -> str:
         ```
         (참고로 이 메시지는 너만 볼 수 있어!)"""
     )
+
+
+def bigchat_storage_error_message(error: BigchatError, action: str) -> str:
+    if isinstance(error, BigchatNameConflict):
+        return "같은 이름의 빅챗 신청 시트가 이미 있어. 이름과 일정을 확인해서 다시 만들어줘!"
+    if isinstance(error, BigchatAlreadyCreated):
+        return "이 모집글에는 이미 다른 이름의 빅챗이 연결되어 있어. 기존 신청 시트를 확인해줘!"
+    if isinstance(error, BigchatSheetMissing):
+        return f"이 빅챗의 신청 시트를 찾을 수 없어서 {action}하지 못했어. 시트가 삭제된 것 같아. 운영진에게 알려줘!"
+    if isinstance(error, BigchatIntegrityError):
+        return "신청 대상 정보가 일치하지 않아 처리를 중단했어. 신청 시트를 확인하고 운영진에게 알려줘!"
+    return f"신청 시트에 접근하거나 {action} 결과를 확인하지 못했어. 잠시 후 다시 시도하고, 계속되면 운영진에게 알려줘!"

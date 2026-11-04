@@ -148,10 +148,8 @@ def build_slack_handlers(services: Services) -> SlackHandlers:
         ),
         abandon_bigchat=lambda ctx: AbandonBigchat(
             ctx.event,
-            settings.ANNA_ID,
             settings.JOIN_BIGCHAT_EMOJI,
             ctx.slack_client,
-            services.members(),
             services.bigchats(),
             loading_emoji=ctx.loading_emoji,
         ),
