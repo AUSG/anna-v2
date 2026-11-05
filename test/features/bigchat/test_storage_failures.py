@@ -173,7 +173,7 @@ def sheets_unavailable(api, monkeypatch, status=503):
     def fail(*args, **kwargs):
         raise api_error(status)
 
-    monkeypatch.setattr("integrations.bigchat_store.time.sleep", lambda _: None)
+    monkeypatch.setattr("integrations.sheets_retry.time.sleep", lambda _: None)
     monkeypatch.setattr(api, "sheets_request", fail)
 
 

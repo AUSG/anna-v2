@@ -6,12 +6,10 @@ metadata; replacing cell values without moving metadata is unsupported.
 
 import json
 import threading
-import time
 from functools import wraps
 from uuid import uuid4
 
 from gspread.exceptions import APIError
-from requests.exceptions import RequestException
 
 from features.bigchat.errors import (
     BigchatAlreadyCreated,
@@ -39,23 +37,10 @@ from integrations.bigchat_schema import (
     read_values_request,
     write_values_request,
 )
+from integrations.sheets_retry import TRANSPORT_ERRORS, guarded_write
+from integrations.sheets_retry import status as _status
 
 _WRITES = threading.RLock()
-
-
-def _status(error):
-    return getattr(getattr(error, "response", None), "status_code", None)
-
-
-def _transient(error):
-    return isinstance(error, RequestException) or _status(error) in (
-        408,
-        429,
-        500,
-        502,
-        503,
-        504,
-    )
 
 
 def _storage_errors(method):
@@ -63,7 +48,7 @@ def _storage_errors(method):
     def invoke(*args, **kwargs):
         try:
             return method(*args, **kwargs)
-        except (APIError, RequestException) as error:
+        except TRANSPORT_ERRORS as error:
             raise BigchatStorageError(
                 "Sheets operation could not be confirmed"
             ) from error
@@ -172,26 +157,13 @@ class BigchatStore:
             raise BigchatIntegrityError("Worksheet is not bound to this Slack thread")
         return result[0]
 
-    def _write_and_confirm(self, send, confirmed):
-        """Only a successful confirmation read permits another guarded write."""
-        for attempt in range(3):
-            try:
-                send()
-                return
-            except (APIError, RequestException) as error:
-                if confirmed():
-                    return
-                if not _transient(error) or attempt == 2:
-                    raise
-                time.sleep(2**attempt)
-
     def _create_once(self, requests, identity: MetadataIdentity, *, confirmed=None):
         """A unique metadata ID guards the entire atomic batch against replay."""
-        self._write_and_confirm(
+        guarded_write(
             lambda: self._client.sheets_request(
                 "post", ":batchUpdate", {"requests": requests}
             ),
-            confirmed or (lambda: self._metadata(identity) is not None),
+            confirmed=confirmed or (lambda: self._metadata(identity) is not None),
         )
 
     @_storage_errors
@@ -305,7 +277,7 @@ class BigchatStore:
             if not confirm():
                 raise BigchatIntegrityError("Participant revision was not updated")
 
-        self._write_and_confirm(send, confirm)
+        guarded_write(send, confirmed=confirm)
         return desired
 
     @_storage_errors
@@ -445,8 +417,8 @@ class BigchatStore:
                 self._worksheet_properties(worksheet_id)
                 raise BigchatIntegrityError("Participant row was not updated")
 
-        self._write_and_confirm(
-            send, lambda: self._values(identity, worksheet_id) == values
+        guarded_write(
+            send, confirmed=lambda: self._values(identity, worksheet_id) == values
         )
 
     def _append(self, worksheet_id, identity, values, *, rejoining, owner=None):

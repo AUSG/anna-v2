@@ -217,7 +217,7 @@ def test_cancellation_reconciles_a_lost_write_response(runtime):
 def test_api_failure_before_commit_is_bounded_and_does_not_create_rows(
     runtime, monkeypatch
 ):
-    monkeypatch.setattr("integrations.bigchat_store.time.sleep", lambda _: None)
+    monkeypatch.setattr("integrations.sheets_retry.time.sleep", lambda _: None)
     api, store, sheet = runtime
     original = api.sheets_request
     writes = []
@@ -373,7 +373,7 @@ def test_failed_confirmation_of_committed_rejoin_does_not_replay(runtime, monkey
         return original(method, suffix, body)
 
     monkeypatch.setattr(api, "sheets_request", fail_confirmation)
-    monkeypatch.setattr("integrations.bigchat_store.time.sleep", lambda _: None)
+    monkeypatch.setattr("integrations.sheets_retry.time.sleep", lambda _: None)
     with pytest.raises(BigchatStorageError):
         register(store, sheet)
     assert len(writes) == 1

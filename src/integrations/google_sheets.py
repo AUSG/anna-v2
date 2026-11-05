@@ -1,10 +1,9 @@
 from urllib.parse import quote
 
 from gspread import Spreadsheet, Worksheet, service_account_from_dict
-from gspread.exceptions import WorksheetNotFound
 
 from config.env_config import envs
-from shared.utils import with_retry
+from integrations.sheets_retry import retry_reads
 
 
 class GoogleSpreadsheetClient:
@@ -35,16 +34,16 @@ class GoogleSpreadsheetClient:
         url = f"https://sheets.googleapis.com/v4/spreadsheets/{quote(self.spreadsheet_id, safe='')}{suffix}"
         return self.gs_client.http_client.request(method, url, json=body).json()
 
-    @with_retry(non_retryable_exceptions=(WorksheetNotFound,))
+    @retry_reads
     def get_values(self, worksheet_id: int, cell_range=None) -> list[list[str]]:
         worksheet = self._get_worksheet(worksheet_id)
         return worksheet.get_values(cell_range)
 
-    @with_retry(non_retryable_exceptions=(WorksheetNotFound,))
+    @retry_reads
     def get_worksheet_title(self, worksheet_id: int) -> str:
         return self._get_worksheet(worksheet_id).title
 
-    @with_retry()
+    @retry_reads
     def list_worksheets(self) -> list[tuple[int, str]]:
         """스프레드시트의 모든 워크시트를 (worksheet_id, title) 목록으로 반환한다."""
         return [(ws.id, ws.title) for ws in self._get_spreadsheet().worksheets()]
@@ -52,11 +51,9 @@ class GoogleSpreadsheetClient:
     def get_url(self, worksheet_id: int) -> str:
         return f"https://docs.google.com/spreadsheets/d/{self.spreadsheet_id}/edit#gid={worksheet_id!s}"
 
-    @with_retry()
     def _get_spreadsheet(self) -> Spreadsheet:
         return self.gs_client.open_by_key(self.spreadsheet_id)
 
-    @with_retry(non_retryable_exceptions=(WorksheetNotFound,))
     def _get_worksheet(self, worksheet_id: int) -> Worksheet:
         spreadsheet = self._get_spreadsheet()
         return spreadsheet.get_worksheet_by_id(worksheet_id)
