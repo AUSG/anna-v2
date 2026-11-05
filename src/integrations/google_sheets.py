@@ -3,13 +3,14 @@ from urllib.parse import quote
 from gspread import Spreadsheet, Worksheet, service_account_from_dict
 
 from config.env_config import envs
+from integrations.sheets_http import REQUEST_TIMEOUT, SheetsHTTPClient
 from integrations.sheets_retry import retry_reads
 
 
 class GoogleSpreadsheetClient:
     def __init__(self, settings=envs):
         self.gs_client = self._build_gs_client(settings)
-        self.gs_client.set_timeout((5, 20))
+        self.gs_client.set_timeout(REQUEST_TIMEOUT)
         self.spreadsheet_id = settings.FORM_SPREADSHEET_ID
         self.members_worksheet_id = settings.MEMBERS_INFO_WORKSHEET_ID
 
@@ -27,7 +28,8 @@ class GoogleSpreadsheetClient:
                 "token_uri": settings.GCP_token_uri,
                 "auth_provider_x509_cert_url": settings.GCP_auth_provider_x509_cert_url,
                 "client_x509_cert_url": settings.GCP_client_x509_cert_url,
-            }
+            },
+            http_client=SheetsHTTPClient,
         )
 
     def sheets_request(self, method, suffix, body=None):

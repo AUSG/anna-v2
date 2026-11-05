@@ -128,8 +128,8 @@ def test_read_retries_share_one_time_budget_per_operation(runtime, monkeypatch):
                 raise api_error(429)
         return original(method, suffix, body)
 
-    monkeypatch.setattr("integrations.bigchat_store.time.monotonic", lambda: clock[0])
-    monkeypatch.setattr("integrations.bigchat_store.time.sleep", sleep)
+    monkeypatch.setattr("integrations.sheets_retry.time.monotonic", lambda: clock[0])
+    monkeypatch.setattr("integrations.sheets_retry.time.sleep", sleep)
     monkeypatch.setattr(api, "sheets_request", rate_limited)
     with pytest.raises(BigchatStorageError):
         store.cancel(sid, "U_A", **CONTEXT)

@@ -276,7 +276,9 @@ def test_unique_metadata_guards_concurrent_creators_without_a_shared_lock(
     runtime, monkeypatch
 ):
     api, _, sheet = runtime
-    monkeypatch.setattr("integrations.bigchat_store._WRITES", nullcontext())
+    monkeypatch.setattr(
+        "integrations.bigchat_store.write_lock", lambda _: nullcontext()
+    )
     barrier = Barrier(2)
     original = api.sheets_request
     reads = []

@@ -57,3 +57,4 @@ def test_client_uses_injected_settings(monkeypatch):
     assert client.spreadsheet_id == "configured-sheet"
     assert client.gs_client is factory.return_value
     assert factory.call_args.args[0]["private_key"] == "line1\nline2"
+    assert factory.call_args.kwargs["http_client"] is google_sheets.SheetsHTTPClient

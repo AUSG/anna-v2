@@ -37,7 +37,13 @@ from integrations.bigchat_schema import (
     read_values_request,
     write_values_request,
 )
-from integrations.sheets_retry import TRANSPORT_ERRORS, guarded_write, retry_reads
+from integrations.sheets_retry import (
+    TRANSPORT_ERRORS,
+    guarded_write,
+    operation_budget,
+    retry_reads,
+    write_lock,
+)
 from integrations.sheets_retry import status as _status
 
 _WRITES = threading.RLock()
@@ -47,7 +53,8 @@ def _storage_errors(method):
     @wraps(method)
     def invoke(*args, **kwargs):
         try:
-            return method(*args, **kwargs)
+            with operation_budget():
+                return method(*args, **kwargs)
         except TRANSPORT_ERRORS as error:
             raise BigchatStorageError(
                 "Sheets operation could not be confirmed"
@@ -183,7 +190,7 @@ class BigchatStore:
 
     @_storage_errors
     def create(self, title: str, *, channel: str, thread_ts: str) -> BigchatSheet:
-        with _WRITES:
+        with write_lock(_WRITES):
             result = self._resolve(channel, thread_ts)
             if result is None:
                 event = self.event_identity(channel, thread_ts)
@@ -480,7 +487,7 @@ class BigchatStore:
     ) -> bool:
         if len(values) != 4 or any(not isinstance(value, str) for value in values):
             raise ValueError("Registration must contain four text values")
-        with _WRITES:
+        with write_lock(_WRITES):
             event = self._bound_event(worksheet_id, channel, thread_ts)
             owner = self._participant(event, user_id)
             existing = self._participant_metadata(owner, worksheet_id)
@@ -506,7 +513,7 @@ class BigchatStore:
     def cancel(
         self, worksheet_id, user_id, *, channel, thread_ts, event_ts=None
     ) -> bool:
-        with _WRITES:
+        with write_lock(_WRITES):
             event = self._bound_event(worksheet_id, channel, thread_ts)
             owner = self._participant(event, user_id)
             existing = self._participant_metadata(owner, worksheet_id)
