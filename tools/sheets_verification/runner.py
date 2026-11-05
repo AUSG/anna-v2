@@ -46,6 +46,21 @@ def fingerprint(value):
     ).hexdigest()
 
 
+def unsortable_rows_reason(rows):
+    """Why sorting these rows by column A might leave them in place, or None.
+
+    The sort cases and the values-only control must move participants. Ties in
+    column A, or rows already in order, would fail a correct store only after
+    every test tab was written, so they are rejected before any write.
+    """
+    keys = [row[0] for row in rows]
+    if len({key.casefold() for key in keys}) != len(keys):
+        return "Column A values must differ, ignoring case, so every sort moves rows"
+    if keys == sorted(keys) or keys == sorted(keys, key=str.casefold):
+        return "Source rows are already sorted by column A; shuffle them first"
+    return None
+
+
 def source_manifest(expected_head):
     head = subprocess.check_output(
         ["git", "rev-parse", "HEAD"], cwd=ROOT, text=True
@@ -414,6 +429,9 @@ class LiveProbe:
         rows = [[str(v) for v in row] for row in original]
         if len({tuple(row) for row in rows}) != len(rows):
             raise RuntimeError("Source rows must be unique for independent comparison")
+        reason = unsortable_rows_reason(rows)
+        if reason:
+            raise RuntimeError(reason)
         labels = ["control", "sheet", "range", "filter", "values"]
         if self.options.browser:
             labels += ["ui_sheet", "ui_range", "ui_filter"]
