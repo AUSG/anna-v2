@@ -61,21 +61,36 @@ def build_report(result: ReminderResult, targets: list[str] | None) -> str:
         if unresolved
         else ""
     )
+    failed = ", ".join(result.failed_bigchat_names)
+    failed_note = (
+        f"\n:warning: 신청자를 확인하지 못해서 못 보낸 빅챗: `{failed}` (원인은 로그에 남겼어!)"
+        if failed
+        else ""
+    )
+    # 덧붙이는 안내는 들여쓰기를 걷어낸 뒤에 붙인다. 들여쓰기 없는 줄이 섞이면
+    # strip_multiline이 공통 들여쓰기를 찾지 못해 본문이 들여쓴 채로 나간다.
     if targets is None:
-        return strip_multiline(
-            f"""
-                {result.target_date} 빅챗 `{found}` 신청자들에게 리마인더를 보냈어!
-                - 신청 시트에서 찾은 신청자: {result.applicant_cnt}명
-                - 실제로 DM 을 보낸 사람: {result.sent_cnt}명{unresolved_note}"""
+        return (
+            strip_multiline(
+                f"""
+                    {result.target_date} 빅챗 `{found}` 신청자들에게 리마인더를 보냈어!
+                    - 신청 시트에서 찾은 신청자: {result.applicant_cnt}명
+                    - 실제로 DM 을 보낸 사람: {result.sent_cnt}명"""
+            )
+            + unresolved_note
+            + failed_note
         )
 
     target_txt = ", ".join(f"<@{user_id}>" for user_id in targets)
-    return strip_multiline(
-        f"""
-            {result.target_date} 빅챗 `{found}` 찾았어!
-            테스트 DM 을 {target_txt} 에게 보냈어 ({result.sent_cnt}건).
-            실제 발송이었다면 이렇게 나갔을 거야:
-            - 신청 시트에서 찾은 신청자: {result.applicant_cnt}명
-            - 그 중 멤버 시트에서 슬랙 계정을 찾은 사람: {result.resolved_cnt}명
-            (둘이 다르면 신청 시트 이메일과 멤버 시트 이메일이 안 맞는 거야. 로그에 누군지 남겼어!)"""
+    return (
+        strip_multiline(
+            f"""
+                {result.target_date} 빅챗 `{found}` 찾았어!
+                테스트 DM 을 {target_txt} 에게 보냈어 ({result.sent_cnt}건).
+                실제 발송이었다면 이렇게 나갔을 거야:
+                - 신청 시트에서 찾은 신청자: {result.applicant_cnt}명
+                - 그 중 멤버 시트에서 슬랙 계정을 찾은 사람: {result.resolved_cnt}명
+                (둘이 다르면 신청 시트 이메일과 멤버 시트 이메일이 안 맞는 거야. 로그에 누군지 남겼어!)"""
+        )
+        + failed_note
     )

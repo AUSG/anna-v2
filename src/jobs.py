@@ -28,6 +28,15 @@ def remind_bigchat(*, web_client_factory, send_reminders, admin_channel: str):
     try:
         result = send_reminders(SlackClient(None, web_client))
         logger.info("Bigchat reminder job done: %d DM(s) sent", result.sent_cnt)
+        if result.failed_bigchat_names:
+            # 나머지 빅챗에는 보냈다. 실패 원인은 빅챗별로 로그에 남아 있다.
+            _notify_admin(
+                web_client,
+                admin_channel,
+                ":blob-fearful: 빅챗 리마인더 중 일부를 보내지 못했어: "
+                f"{', '.join(result.failed_bigchat_names)}. 원인은 로그에 남겼어!",
+                with_traceback=False,
+            )
     except Exception:
         logger.exception("Failed to send bigchat reminders")
         _notify_admin(
@@ -57,12 +66,11 @@ def post_daily_digest(
         )
 
 
-def _notify_admin(web_client, channel: str, message: str):
+def _notify_admin(web_client, channel: str, message: str, *, with_traceback=True):
+    text = (
+        f"{message}\n```\n{traceback.format_exc()}\n```" if with_traceback else message
+    )
     try:
-        web_client.chat_postMessage(
-            channel=channel,
-            text=f"{message}\n```\n{traceback.format_exc()}\n```",
-            **NO_UNFURL,
-        )
+        web_client.chat_postMessage(channel=channel, text=text, **NO_UNFURL)
     except Exception:
         logger.exception("Failed to notify admin channel")

@@ -1,6 +1,6 @@
 """예약 작업의 의존성 연결, 발송과 오류 알림을 검증한다."""
 
-from types import SimpleNamespace
+from datetime import date
 from unittest.mock import MagicMock
 
 import pytest
@@ -8,6 +8,7 @@ from slack_sdk.http_retry.builtin_handlers import RateLimitErrorRetryHandler
 
 import anna
 from config.env_config import Settings
+from features.bigchat.models import ReminderResult
 from integrations.slack import NO_UNFURL
 from jobs import post_daily_digest, remind_bigchat
 
@@ -21,7 +22,9 @@ def web():
 
 def test_reminder_uses_fresh_web_client_and_rate_limit_retry(web):
     factory = MagicMock(return_value=web)
-    send = MagicMock(return_value=SimpleNamespace(sent_cnt=3))
+    send = MagicMock(
+        return_value=ReminderResult(target_date=date(2026, 8, 20), sent_cnt=3)
+    )
     remind_bigchat(
         web_client_factory=factory, send_reminders=send, admin_channel="C_ADMIN"
     )
@@ -48,6 +51,25 @@ def test_reminder_failure_notifies_admin_and_does_not_escape(web, admin_fails):
     assert call["channel"] == "C_ADMIN"
     assert "reminder failed" in call["text"]
     assert "빅챗 리마인더 DM 발송 중 에러" in call["text"]
+    assert call.items() >= NO_UNFURL.items()
+
+
+def test_partial_reminder_failure_names_the_skipped_bigchats(web):
+    result = ReminderResult(
+        target_date=date(2026, 8, 20),
+        sent_cnt=2,
+        failed_bigchat_names=["오전 빅챗"],
+    )
+    remind_bigchat(
+        web_client_factory=lambda: web,
+        send_reminders=MagicMock(return_value=result),
+        admin_channel="C_ADMIN",
+    )
+    web.chat_postMessage.assert_called_once()
+    call = web.chat_postMessage.call_args.kwargs
+    assert call["channel"] == "C_ADMIN"
+    assert "빅챗 리마인더 중 일부를 보내지 못했어: 오전 빅챗" in call["text"]
+    assert "NoneType" not in call["text"]  # 예외 밖에서는 빈 traceback을 붙이지 않는다
     assert call.items() >= NO_UNFURL.items()
 
 
@@ -110,7 +132,9 @@ def test_job_factories_remain_lazy_and_use_app_services(monkeypatch, web):
     services.web_client.return_value = web
     services.qa.return_value.daily_digest.return_value = "핫스레드"
     reminder = MagicMock()
-    reminder.return_value.run.return_value = SimpleNamespace(sent_cnt=1)
+    reminder.return_value.run.return_value = ReminderResult(
+        target_date=date(2026, 8, 20), sent_cnt=1
+    )
     monkeypatch.setattr(anna, "RemindBigchat", reminder)
     jobs = {job.name: job for job in anna.build_jobs(services)}
     for name in ("sheets", "members", "qa", "web_client"):

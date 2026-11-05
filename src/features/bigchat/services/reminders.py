@@ -70,14 +70,25 @@ class RemindBigchat:
             result.bigchat_names,
         )
         for worksheet_id, event in matched:
-            self._remind_applicants(worksheet_id, event, only_user_ids, result)
+            try:
+                self._remind_applicants(worksheet_id, event, only_user_ids, result)
+            except Exception:
+                # 한 빅챗의 신청자를 읽지 못해도 다른 빅챗의 리마인더는 보낸다.
+                # 실패한 빅챗은 결과에 남겨 예약 작업이 관리자에게 알리게 한다.
+                logger.exception(
+                    "Failed to remind applicants of %r (worksheet %s)",
+                    event.name,
+                    worksheet_id,
+                )
+                result.failed_bigchat_names.append(event.name)
         logger.info(
             "Reminder run finished: sent %d DM(s) across %d bigchat(s) "
-            "(%d applicant(s), %d resolved to slack accounts)",
+            "(%d applicant(s), %d resolved to slack accounts, %d failed)",
             result.sent_cnt,
             len(matched),
             result.applicant_cnt,
             result.resolved_cnt,
+            len(result.failed_bigchat_names),
         )
         return result
 
