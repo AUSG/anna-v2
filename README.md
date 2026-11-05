@@ -148,6 +148,10 @@ Sheets 재시도는 `integrations/sheets_retry.py`의 Tenacity 정책으로 관�
 
 90초 예산은 `BigchatStore`의 공개 메서드와 기존 Sheets 클라이언트의 공개 읽기 호출마다 시작하며 중첩 호출은 마감 시각을 공유한다. 잠금 획득도 남은 시간만 기다리고, 각 HTTP 전송과 인증 토큰 갱신에는 남은 예산을 반영한 timeout을 적용한다(연결 최대 5초, 응답 대기 최대 20초). 예산이 끝난 뒤 새 요청·결과 확인·재시도를 시작하지 않는다. Slack 호출이나 전체 일괄 등록의 총 소요 시간 제한은 아니다. 회원 조회의 Sheets 읽기는 같은 정책을 사용한다. [HTTP timeout은 DNS 조회와 계속 수신되는 응답의 총 시간을 엄격하게 제한하지 않으며](https://urllib3.readthedocs.io/en/stable/reference/urllib3.util.html#urllib3.util.Timeout), 이미 보낸 요청의 Google 서버 처리를 취소하지도 않는다. 따라서 모든 상황에서 정확히 90초 이내 반환을 보장하지는 않는다.
 
+### 실제 Sheets 저장소 검증
+
+선택형 검증은 [`tools/sheets_verification`](tools/sheets_verification/README.md) 패키지에서 관리한다. 앱 코드와 일반 테스트는 도구를 참조하지 않으며, 도구의 정책·테스트는 해당 패키지 안에 둔다. `make ci`는 외부 연결을 차단한 도구 테스트도 별도로 실행한다. 실제 문서 검증은 문서 ID·보존용 복사본·커밋을 명시한 `uv run python -m tools.sheets_verification ... --run`으로만 시작한다.
+
 ## 실제 AUSG 슬랙과 로컬 안나를 연동해서 테스트하기
 
 슬랙은 개발용 테스트 콜백을 따로 제공하지 않는다. 따라서 **실제** 이벤트를 로컬로 받아서 검증해야 한다. ~~super dog fooding~~ 이 작업 도중엔 슬랙의 안나가 졸게 되므로(작동하지 않으므로) 미리 공지해두는 게 좋다.
