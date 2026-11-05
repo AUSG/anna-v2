@@ -37,6 +37,8 @@ class ReminderResult:
     applicant_cnt: int = 0  # 신청 시트에서 찾은 이메일 수
     resolved_cnt: int = 0  # 그 중 멤버 시트에서 슬랙 계정을 찾은 수
     sent_cnt: int = 0
+    # 신청자를 확인하지 못해 리마인더를 보내지 못한 빅챗. 다른 빅챗은 계속 보낸다.
+    failed_bigchat_names: list[str] = field(default_factory=list)
 
 
 def select_bigchats(

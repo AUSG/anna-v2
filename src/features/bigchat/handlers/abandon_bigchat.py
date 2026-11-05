@@ -1,6 +1,6 @@
 from contextlib import nullcontext
 
-from features.bigchat.errors import BigchatError
+from features.bigchat.errors import BigchatError, ReactionSuperseded
 from features.bigchat.presentation.messages import bigchat_storage_error_message
 from features.bigchat.services.lookup import find_bigchat
 
@@ -20,6 +20,7 @@ class AbandonBigchat:
         self.channel = event["item"]["channel"]
         self.ts = event["item"]["ts"]
         self.user = event["user"]
+        self.event_ts = event.get("event_ts")
         self.target_emoji = target_emoji
         self.slack_client = slack_client
         self.bigchats = bigchats
@@ -31,6 +32,8 @@ class AbandonBigchat:
 
         try:
             return self._run()
+        except ReactionSuperseded:
+            return False
         except BigchatError as error:
             self.slack_client.send_message(
                 msg=f"<@{self.user}>, {bigchat_storage_error_message(error, '취소')}",
@@ -52,7 +55,11 @@ class AbandonBigchat:
 
     def _abandon(self, worksheet_id: int) -> bool:
         cancelled = self.bigchats.cancel(
-            worksheet_id, self.user, channel=self.channel, thread_ts=self.ts
+            worksheet_id,
+            self.user,
+            channel=self.channel,
+            thread_ts=self.ts,
+            event_ts=self.event_ts,
         )
 
         # 신청 기록이 없으면(등록에 실패했거나 이미 취소된 경우) 취소했다고 알리지 않는다.

@@ -5,6 +5,7 @@ from features.bigchat.calendar import KST, BigchatEvent
 from features.bigchat.models import ReminderResult, select_bigchats
 from features.bigchat.presentation.reminders import build_reminder
 from features.bigchat.services.reminder_policy import applicant_email
+from integrations.bigchat_store import BigchatStore
 
 logger = logging.getLogger(__name__)
 
@@ -16,6 +17,7 @@ class RemindBigchat:
         self.slack_client = slack_client
         self.gs_client = gs_client
         self.member_manager = member_manager
+        self.bigchats = BigchatStore(gs_client)
 
     def run(
         self,
@@ -68,14 +70,25 @@ class RemindBigchat:
             result.bigchat_names,
         )
         for worksheet_id, event in matched:
-            self._remind_applicants(worksheet_id, event, only_user_ids, result)
+            try:
+                self._remind_applicants(worksheet_id, event, only_user_ids, result)
+            except Exception:
+                # 한 빅챗의 신청자를 읽지 못해도 다른 빅챗의 리마인더는 보낸다.
+                # 실패한 빅챗은 결과에 남겨 예약 작업이 관리자에게 알리게 한다.
+                logger.exception(
+                    "Failed to remind applicants of %r (worksheet %s)",
+                    event.name,
+                    worksheet_id,
+                )
+                result.failed_bigchat_names.append(event.name)
         logger.info(
             "Reminder run finished: sent %d DM(s) across %d bigchat(s) "
-            "(%d applicant(s), %d resolved to slack accounts)",
+            "(%d applicant(s), %d resolved to slack accounts, %d failed)",
             result.sent_cnt,
             len(matched),
             result.applicant_cnt,
             result.resolved_cnt,
+            len(result.failed_bigchat_names),
         )
         return result
 
@@ -87,6 +100,16 @@ class RemindBigchat:
         result: ReminderResult,
     ):
         msg = build_reminder(event)
+        user_ids = self.bigchats.active_user_ids(worksheet_id)
+        if user_ids is not None:
+            recipients = [(user_id, None) for user_id in user_ids]
+            result.applicant_cnt += len(user_ids)
+            result.resolved_cnt += len(user_ids)
+        else:
+            recipients = self._legacy_recipients(worksheet_id, event, result)
+        self._send_reminders(event, only_user_ids, result, msg, recipients)
+
+    def _legacy_recipients(self, worksheet_id, event, result):
         email_to_slack_id = self.member_manager.email_to_slack_ids()
         emails = self._applicant_emails(worksheet_id)
         logger.info(
@@ -96,7 +119,6 @@ class RemindBigchat:
             len(emails),
             len(email_to_slack_id),
         )
-        logger.debug("Reminder message for %r:\n%s", event.name, msg)
 
         # 테스트 모드에서도 신청자와 계정의 매칭 상태를 확인한다.
         recipients = []
@@ -112,7 +134,10 @@ class RemindBigchat:
             recipients.append((slack_id, email))
         result.applicant_cnt += len(emails)
         result.resolved_cnt += len(recipients)
+        return recipients
 
+    def _send_reminders(self, event, only_user_ids, result, msg, recipients):
+        logger.debug("Reminder message for %r:\n%s", event.name, msg)
         if only_user_ids is not None:
             logger.info(
                 "TEST MODE: sending to %s instead of the %d resolved applicant(s)",

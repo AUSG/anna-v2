@@ -106,6 +106,40 @@ def test_build_report_broadcast_reports_unresolved_applicants():
     )
 
 
+def test_build_report_notes_keep_the_report_unindented():
+    result = _result(
+        bigchat_names=["오전 빅챗", "저녁 빅챗"],
+        parsed_sheet_cnt=2,
+        applicant_cnt=5,
+        resolved_cnt=3,
+        sent_cnt=3,
+        failed_bigchat_names=["오전 빅챗"],
+    )
+    assert build_report(result, None) == (
+        "2026-08-20 빅챗 `오전 빅챗, 저녁 빅챗` 신청자들에게 리마인더를 보냈어!\n"
+        "- 신청 시트에서 찾은 신청자: 5명\n"
+        "- 실제로 DM 을 보낸 사람: 3명\n"
+        "신청자 2명은 멤버 시트에서 슬랙 계정을 못 찾아서 못 보냈어. (누군지는 로그에 남겼어!)\n"
+        ":warning: 신청자를 확인하지 못해서 못 보낸 빅챗: `오전 빅챗` (원인은 로그에 남겼어!)"
+    )
+
+
+def test_build_report_test_targets_name_bigchats_that_could_not_be_reminded():
+    result = _result(
+        bigchat_names=["오전 빅챗", "저녁 빅챗"],
+        parsed_sheet_cnt=2,
+        applicant_cnt=1,
+        resolved_cnt=1,
+        sent_cnt=1,
+        failed_bigchat_names=["오전 빅챗"],
+    )
+    report = build_report(result, ["U1"])
+    assert report.startswith("2026-08-20 빅챗 `오전 빅챗, 저녁 빅챗` 찾았어!\n")
+    assert report.endswith(
+        "\n:warning: 신청자를 확인하지 못해서 못 보낸 빅챗: `오전 빅챗` (원인은 로그에 남겼어!)"
+    )
+
+
 def test_build_report_test_targets():
     result = _result(
         bigchat_names=["AI 밋업"],

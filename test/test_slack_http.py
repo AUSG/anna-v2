@@ -311,7 +311,11 @@ def test_real_bolt_registration_calendar_roundtrip(monkeypatch, ics_enabled):
                 "type": "event_callback",
                 "team_id": "T_TEST",
                 "event_id": "Ev_CANCEL",
-                "event": {**event, "type": "reaction_removed"},
+                "event": {
+                    **event,
+                    "type": "reaction_removed",
+                    "event_ts": "1688833114.003600",
+                },
             },
             secret,
         )

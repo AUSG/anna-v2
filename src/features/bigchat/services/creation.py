@@ -2,6 +2,7 @@ import logging
 
 from slack_sdk.errors import SlackApiError
 
+from features.bigchat.errors import ReactionSuperseded
 from features.bigchat.presentation.messages import build_registration_info_message
 from features.members.services.directory import MemberLackInfo, MemberNotFound
 
@@ -45,13 +46,18 @@ def register_early_reacted_users(
                     ts=thread_ts,
                 )
             else:
-                if bigchats.register(
-                    worksheet_id,
-                    user,
-                    member.transform_for_spreadsheet(),
-                    channel=channel,
-                    thread_ts=thread_ts,
-                ):
+                try:
+                    added = bigchats.register(
+                        worksheet_id,
+                        user,
+                        member.transform_for_spreadsheet(),
+                        channel=channel,
+                        thread_ts=thread_ts,
+                    )
+                except ReactionSuperseded:
+                    # A live add/remove event is newer than this initial snapshot.
+                    continue
+                if added:
                     registered.append((user, member))
 
         if not registered:

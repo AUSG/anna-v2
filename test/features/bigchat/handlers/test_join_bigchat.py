@@ -58,6 +58,7 @@ class TestJoinBigchat(unittest.TestCase):
             ["문성혁", "school_name_or_company_name", "email", "phone"],
             channel=event["item"]["channel"],
             thread_ts=event["item"]["ts"],
+            event_ts=event["event_ts"],
         )
         mock_slack_client.send_message.assert_called_once()
         mock_slack_client.send_message_only_visible_to_user.assert_called_once()

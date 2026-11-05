@@ -17,15 +17,27 @@ class MetadataFields(TypedDict):
     metadataValue: str
 
 
-class RowMetadataLookup(MetadataFields):
+class ParticipantMetadataLookup(MetadataFields):
     visibility: Literal["DOCUMENT"]
-    locationType: Literal["ROW"]
     metadataLocation: dict[str, int]
     locationMatchingStrategy: Literal["INTERSECTING_LOCATION"]
 
 
+class RowMetadataLookup(ParticipantMetadataLookup):
+    locationType: Literal["ROW"]
+
+
+class ParticipantFilter(TypedDict):
+    developerMetadataLookup: ParticipantMetadataLookup
+
+
 class MetadataFilter(TypedDict):
     developerMetadataLookup: RowMetadataLookup
+
+
+class ReadValuesRequest(TypedDict):
+    dataFilters: list[MetadataFilter]
+    valueRenderOption: Literal["UNFORMATTED_VALUE"]
 
 
 @dataclass(frozen=True)
@@ -161,7 +173,7 @@ def create_participant_requests(
                 _create_metadata(registration, {"dimensionRange": row_range}),
                 {
                     "deleteDeveloperMetadata": {
-                        "dataFilter": _row_filter(identity, worksheet_id)
+                        "dataFilter": participant_filter(identity, worksheet_id)
                     }
                 },
             ]
@@ -170,21 +182,35 @@ def create_participant_requests(
     return requests
 
 
-def _row_filter(identity: MetadataIdentity, worksheet_id: int) -> MetadataFilter:
+def participant_filter(
+    identity: MetadataIdentity, worksheet_id: int
+) -> ParticipantFilter:
     return {
         "developerMetadataLookup": {
             **identity.to_api(),
             "visibility": "DOCUMENT",
-            "locationType": "ROW",
             "metadataLocation": {"sheetId": worksheet_id},
             "locationMatchingStrategy": "INTERSECTING_LOCATION",
         }
     }
 
 
+def _row_filter(identity: MetadataIdentity, worksheet_id: int) -> MetadataFilter:
+    return {
+        "developerMetadataLookup": {
+            **participant_filter(identity, worksheet_id)["developerMetadataLookup"],
+            "locationType": "ROW",
+        }
+    }
+
+
+def create_participant_state_request(identity: MetadataIdentity, worksheet_id: int):
+    return _create_metadata(identity, {"sheetId": worksheet_id})
+
+
 def read_values_request(
     identity: MetadataIdentity, worksheet_id: int
-) -> dict[str, object]:
+) -> ReadValuesRequest:
     return {
         "dataFilters": [_row_filter(identity, worksheet_id)],
         "valueRenderOption": "UNFORMATTED_VALUE",

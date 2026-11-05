@@ -4,6 +4,7 @@ from unittest.mock import MagicMock, patch
 
 from features.bigchat.calendar import KST
 from features.bigchat.services.reminders import RemindBigchat
+from test.fixtures.sheets import api_error
 
 # 행사(26-08-20 목요일) 전날 저녁 6시
 NOW = datetime(2026, 8, 19, 18, 0, tzinfo=KST)
@@ -13,6 +14,7 @@ class TestRemindBigchat(unittest.TestCase):
     def setUp(self):
         self.mock_slack_client = MagicMock()
         self.mock_gs_client = MagicMock()
+        self.mock_gs_client.sheets_request.side_effect = api_error(404)
         self.mock_member_manager = MagicMock()
         self.sut = RemindBigchat(
             self.mock_slack_client, self.mock_gs_client, self.mock_member_manager
@@ -76,6 +78,30 @@ class TestRemindBigchat(unittest.TestCase):
         result = self.sut.run(now=NOW)
 
         assert result.sent_cnt == 2  # 두 빅챗 모두에 신청했으니 DM 도 두 번
+
+    def test_one_failing_bigchat_does_not_block_the_others(self):
+        self.mock_gs_client.list_worksheets.return_value = [
+            (1, "오전 빅챗 26-08-20 10:00~12:00"),
+            (2, "저녁 빅챗 26-08-20 19:00~21:00"),
+        ]
+
+        def values(worksheet_id):
+            if worksheet_id == 1:
+                raise RuntimeError("신청 시트를 읽지 못함")
+            return [["김철수", "AUSG대", "chulsoo@example.com", "010-1234-5678"]]
+
+        self.mock_gs_client.get_values.side_effect = values
+        self.mock_member_manager.email_to_slack_ids.return_value = {
+            "chulsoo@example.com": "U0001",
+        }
+
+        result = self.sut.run(now=NOW)
+
+        assert result.failed_bigchat_names == ["오전 빅챗"]
+        assert result.sent_cnt == 1
+        dm = self.mock_slack_client.send_direct_message.call_args.kwargs
+        assert dm["user_id"] == "U0001"
+        assert "*저녁 빅챗*" in dm["msg"]
 
     def test_run_skips_applicant_not_in_members_sheet(self):
         self.mock_gs_client.list_worksheets.return_value = [
@@ -158,6 +184,8 @@ class TestRemindBigchat(unittest.TestCase):
         assert self.mock_slack_client.send_direct_message.call_count == 2
 
     def test_lookup_errors_are_not_swallowed_as_dm_failures(self):
+        """시트 목록을 못 읽으면 실행 전체가 실패한다. 빅챗별 조회 실패는 DM 실패처럼
+        조용히 넘기지 않고 결과에 남겨, 예약 작업이 관리자에게 알리게 한다."""
         for client_name, method in (
             ("mock_gs_client", "list_worksheets"),
             ("mock_member_manager", "email_to_slack_ids"),
@@ -175,10 +203,19 @@ class TestRemindBigchat(unittest.TestCase):
                 failure = RuntimeError("조회 실패")
                 getattr(getattr(self, client_name), method).side_effect = failure
 
-                with self.assertRaises(RuntimeError) as error:
-                    self.sut.run(now=NOW)
-
-                assert error.exception is failure
+                if method == "list_worksheets":
+                    with self.assertRaises(RuntimeError) as error:
+                        self.sut.run(now=NOW)
+                    assert error.exception is failure
+                else:
+                    with self.assertLogs(
+                        "features.bigchat.services.reminders", level="ERROR"
+                    ) as logs:
+                        result = self.sut.run(now=NOW)
+                    assert result.failed_bigchat_names == ["AI 밋업"]
+                    assert result.sent_cnt == 0
+                    exc_info = logs.records[0].exc_info
+                    assert exc_info and exc_info[1] is failure
                 self.mock_slack_client.send_direct_message.assert_not_called()
 
     def test_run_with_no_bigchat_tomorrow(self):
@@ -229,6 +266,7 @@ class TestRemindBigchatTestMode(unittest.TestCase):
     def setUp(self):
         self.mock_slack_client = MagicMock()
         self.mock_gs_client = MagicMock()
+        self.mock_gs_client.sheets_request.side_effect = api_error(404)
         self.mock_member_manager = MagicMock()
         self.sut = RemindBigchat(
             self.mock_slack_client, self.mock_gs_client, self.mock_member_manager

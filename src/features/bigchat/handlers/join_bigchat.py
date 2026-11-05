@@ -9,7 +9,7 @@ from features.bigchat.calendar import (
     parse_sheet_name,
     to_gcal_link_truncated,
 )
-from features.bigchat.errors import BigchatError
+from features.bigchat.errors import BigchatError, ReactionSuperseded
 from features.bigchat.presentation.messages import (
     bigchat_storage_error_message,
     build_registration_info_message,
@@ -39,6 +39,7 @@ class JoinBigchat:
         self.channel = event["item"]["channel"]
         self.ts = event["item"]["ts"]
         self.user = event["user"]
+        self.event_ts = event.get("event_ts")
         self.target_emoji = target_emoji
         self.settings = settings
         self.slack_client = slack_client
@@ -115,6 +116,8 @@ class JoinBigchat:
 
         try:
             return self._run()
+        except ReactionSuperseded:
+            return False
         except BigchatError as error:
             self.slack_client.send_message(
                 msg=f"<@{self.user}>, {bigchat_storage_error_message(error, '신청')}",
@@ -159,6 +162,7 @@ class JoinBigchat:
             member.transform_for_spreadsheet(),
             channel=self.channel,
             thread_ts=self.ts,
+            event_ts=self.event_ts,
         )
 
         if not added:
