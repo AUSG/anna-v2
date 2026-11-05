@@ -100,10 +100,22 @@ class SheetsAPI:
                 if k in query
             ):
                 continue
-            location = metadata["location"].get("dimensionRange", {})
-            if not location or location.get("dimension") != "ROWS":
+            place = metadata["location"]
+            dimension = place.get("dimensionRange", {})
+            kind = (
+                "ROW"
+                if dimension.get("dimension") == "ROWS"
+                else "SHEET"
+                if "sheetId" in place
+                else "SPREADSHEET"
+            )
+            if query.get("locationType", kind) != kind:
                 continue
-            if location["sheetId"] != query["metadataLocation"]["sheetId"]:
+            sheet_id = place.get("sheetId", dimension.get("sheetId"))
+            if (
+                "metadataLocation" in query
+                and sheet_id != query["metadataLocation"]["sheetId"]
+            ):
                 continue
             matches.append(mid)
         return matches
@@ -115,6 +127,7 @@ class SheetsAPI:
                 self.metadata[mid]["location"]["dimensionRange"]["startIndex"],
             )
             for mid in self._matched_metadata(data_filter)
+            if "dimensionRange" in self.metadata[mid]["location"]
         ]
 
     def _read_ranges(self, filters):
@@ -127,12 +140,20 @@ class SheetsAPI:
                 rows = copy.deepcopy(self.sheets[sid]["rows"])
                 while rows and not any(rows[-1]):
                     rows.pop()
-                ranges.append({"valueRange": {"values": rows}})
+                ranges.append(
+                    {
+                        "valueRange": {"values": rows},
+                        "dataFilters": [copy.deepcopy(data_filter)],
+                    }
+                )
             else:
                 for sid, row in self._select(data_filter):
                     values = copy.deepcopy(self.sheets[sid]["rows"][row])
                     ranges.append(
-                        {"valueRange": {"values": [values] if any(values) else []}}
+                        {
+                            "valueRange": {"values": [values] if any(values) else []},
+                            "dataFilters": [copy.deepcopy(data_filter)],
+                        }
                     )
         return {"valueRanges": ranges}
 
@@ -161,6 +182,18 @@ class SheetsAPI:
                     raise api_error(404)
                 return copy.deepcopy(item)
             assert body is not None
+            if suffix == "/developerMetadata:search":
+                ids = {
+                    mid
+                    for data_filter in body["dataFilters"]
+                    for mid in self._matched_metadata(data_filter)
+                }
+                return {
+                    "matchedDeveloperMetadata": [
+                        {"developerMetadata": copy.deepcopy(self.metadata[mid])}
+                        for mid in sorted(ids)
+                    ]
+                }
             if suffix == "/values:batchGetByDataFilter":
                 return self._read_ranges(body["dataFilters"])
             if self.before_write is not None:
@@ -169,12 +202,13 @@ class SheetsAPI:
             if suffix == ":batchUpdate":
                 previous = copy.deepcopy((self.sheets, self.metadata, self.sheet_order))
                 try:
-                    for request in body["requests"]:
-                        self._apply(request)
+                    replies = [
+                        self._apply(request) or {} for request in body["requests"]
+                    ]
                 except Exception:
                     self.sheets, self.metadata, self.sheet_order = previous
                     raise
-                response = {"replies": [{} for _ in body["requests"]]}
+                response = {"replies": replies}
             elif suffix == "/values:batchUpdateByDataFilter":
                 updated = 0
                 for entry in body["data"]:
@@ -223,6 +257,25 @@ class SheetsAPI:
                 request["deleteDeveloperMetadata"]["dataFilter"]
             ):
                 del self.metadata[mid]
+        elif "updateDeveloperMetadata" in request:
+            update = request["updateDeveloperMetadata"]
+            assert update["fields"] == "metadataValue"
+            ids = {
+                mid
+                for data_filter in update["dataFilters"]
+                for mid in self._matched_metadata(data_filter)
+            }
+            for mid in ids:
+                self.metadata[mid]["metadataValue"] = update["developerMetadata"][
+                    "metadataValue"
+                ]
+            return {
+                "updateDeveloperMetadata": {
+                    "developerMetadata": [
+                        copy.deepcopy(self.metadata[mid]) for mid in sorted(ids)
+                    ]
+                }
+            }
         elif "appendDimension" in request:
             operation = request["appendDimension"]
             assert operation["dimension"] == "ROWS"
@@ -248,3 +301,4 @@ class SheetsAPI:
             ]
         elif "updateDimensionProperties" not in request:
             raise AssertionError(f"Unexpected batch operation: {request}")
+        return None

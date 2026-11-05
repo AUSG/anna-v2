@@ -4,6 +4,7 @@ from unittest.mock import MagicMock, patch
 
 from features.bigchat.calendar import KST
 from features.bigchat.services.reminders import RemindBigchat
+from test.fixtures.sheets import api_error
 
 # 행사(26-08-20 목요일) 전날 저녁 6시
 NOW = datetime(2026, 8, 19, 18, 0, tzinfo=KST)
@@ -13,6 +14,7 @@ class TestRemindBigchat(unittest.TestCase):
     def setUp(self):
         self.mock_slack_client = MagicMock()
         self.mock_gs_client = MagicMock()
+        self.mock_gs_client.sheets_request.side_effect = api_error(404)
         self.mock_member_manager = MagicMock()
         self.sut = RemindBigchat(
             self.mock_slack_client, self.mock_gs_client, self.mock_member_manager
@@ -229,6 +231,7 @@ class TestRemindBigchatTestMode(unittest.TestCase):
     def setUp(self):
         self.mock_slack_client = MagicMock()
         self.mock_gs_client = MagicMock()
+        self.mock_gs_client.sheets_request.side_effect = api_error(404)
         self.mock_member_manager = MagicMock()
         self.sut = RemindBigchat(
             self.mock_slack_client, self.mock_gs_client, self.mock_member_manager

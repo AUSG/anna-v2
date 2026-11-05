@@ -5,6 +5,7 @@ from features.bigchat.calendar import KST, BigchatEvent
 from features.bigchat.models import ReminderResult, select_bigchats
 from features.bigchat.presentation.reminders import build_reminder
 from features.bigchat.services.reminder_policy import applicant_email
+from integrations.bigchat_store import BigchatStore
 
 logger = logging.getLogger(__name__)
 
@@ -16,6 +17,7 @@ class RemindBigchat:
         self.slack_client = slack_client
         self.gs_client = gs_client
         self.member_manager = member_manager
+        self.bigchats = BigchatStore(gs_client)
 
     def run(
         self,
@@ -87,6 +89,16 @@ class RemindBigchat:
         result: ReminderResult,
     ):
         msg = build_reminder(event)
+        user_ids = self.bigchats.active_user_ids(worksheet_id)
+        if user_ids is not None:
+            recipients = [(user_id, None) for user_id in user_ids]
+            result.applicant_cnt += len(user_ids)
+            result.resolved_cnt += len(user_ids)
+        else:
+            recipients = self._legacy_recipients(worksheet_id, event, result)
+        self._send_reminders(event, only_user_ids, result, msg, recipients)
+
+    def _legacy_recipients(self, worksheet_id, event, result):
         email_to_slack_id = self.member_manager.email_to_slack_ids()
         emails = self._applicant_emails(worksheet_id)
         logger.info(
@@ -96,7 +108,6 @@ class RemindBigchat:
             len(emails),
             len(email_to_slack_id),
         )
-        logger.debug("Reminder message for %r:\n%s", event.name, msg)
 
         # 테스트 모드에서도 신청자와 계정의 매칭 상태를 확인한다.
         recipients = []
@@ -112,7 +123,10 @@ class RemindBigchat:
             recipients.append((slack_id, email))
         result.applicant_cnt += len(emails)
         result.resolved_cnt += len(recipients)
+        return recipients
 
+    def _send_reminders(self, event, only_user_ids, result, msg, recipients):
+        logger.debug("Reminder message for %r:\n%s", event.name, msg)
         if only_user_ids is not None:
             logger.info(
                 "TEST MODE: sending to %s instead of the %d resolved applicant(s)",

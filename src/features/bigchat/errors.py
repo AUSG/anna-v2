@@ -23,3 +23,7 @@ class BigchatIntegrityError(BigchatError):
 
 class BigchatStorageError(BigchatError):
     pass
+
+
+class ReactionSuperseded(BigchatError):
+    """A newer reaction already owns this participant's state; ignore this event."""

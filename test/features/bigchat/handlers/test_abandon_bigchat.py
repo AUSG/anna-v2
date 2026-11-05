@@ -33,6 +33,7 @@ def test_cancellation_uses_slack_identity_without_message_lookup():
         event["user"],
         channel=event["item"]["channel"],
         thread_ts=event["item"]["ts"],
+        event_ts=event["event_ts"],
     )
     slack.get_replies.assert_not_called()
     slack.send_message_only_visible_to_user.assert_called_once()
