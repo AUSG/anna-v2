@@ -1,5 +1,6 @@
 """Deadline regressions through the store, real locks and installed SDKs."""
 
+import json
 from concurrent.futures import ThreadPoolExecutor
 
 import gspread
@@ -174,6 +175,45 @@ def test_installed_sdk_receives_only_the_remaining_network_timeout(clock, monkey
         clock.sleep(2)
         client.sheets_request("get", "?fields=sheets.properties")
     assert len(sent) == 1
+
+
+def test_legacy_read_metadata_and_values_retries_share_one_deadline(clock, monkeypatch):
+    sent = []
+    metadata = {
+        "spreadsheetId": "test-document",
+        "properties": {"title": "Test"},
+        "sheets": [
+            {
+                "properties": {
+                    "sheetId": 123,
+                    "title": "Test",
+                    "gridProperties": {"rowCount": 100, "columnCount": 4},
+                }
+            }
+        ],
+    }
+
+    def send(self, request, **kwargs):
+        left = kwargs["timeout"].total
+        sent.append((request.url, left))
+        clock.sleep(min(20, left))
+        if left <= 20:
+            raise Timeout("request exhausted the remaining deadline")
+        response = ok_response()
+        if "/values/" in request.url:
+            response.status_code = 503
+            response._content = b'{"error":{"code":503,"message":"unavailable"}}'
+        else:
+            response._content = json.dumps(metadata).encode()
+        return response
+
+    monkeypatch.setattr(HTTPAdapter, "send", send)
+    with pytest.raises(sheets_retry.OperationTimeout):
+        sdk_client().get_values(123)
+    assert [left for _, left in sent] == [90, 70, 50, 29, 9]
+    assert sum("/values/" in url for url, _ in sent) == 1
+    assert clock.now == 90
+    assert sheets_retry.remaining_seconds() is None
 
 
 @pytest.mark.parametrize("auth_seconds", [89, 91])
