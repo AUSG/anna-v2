@@ -37,8 +37,12 @@ _lintfmt:
 _test:
 	uv run --frozen pytest --cov --cov-report=html
 
+.PHONY: test_sheets_verification
+test_sheets_verification:
+	uv run --frozen pytest tools/sheets_verification/tests
+
 .PHONY: ci
-ci: _lintfmt _test
+ci: _lintfmt _test test_sheets_verification
 
 
 
