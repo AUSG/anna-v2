@@ -2,7 +2,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from features.bigchat.errors import BigchatSheetMissing
+from features.bigchat.errors import BigchatSheetMissing, BigchatStorageError
 from features.bigchat.handlers.abandon_bigchat import AbandonBigchat
 from shared.loading_emoji import LoadingEmoji
 from test.fixtures.slack_events import create_sample_reaction_removed_event
@@ -12,6 +12,7 @@ def runtime():
     event = create_sample_reaction_removed_event("gogo")
     slack, bigchats = MagicMock(), MagicMock()
     bigchats.find.return_value = 161837744
+    bigchats.cancel.return_value = True
     handler = AbandonBigchat(
         event,
         "gogo",
@@ -35,6 +36,10 @@ def test_cancellation_uses_slack_identity_without_message_lookup():
     )
     slack.get_replies.assert_not_called()
     slack.send_message_only_visible_to_user.assert_called_once()
+    assert (
+        "등록을 취소했어"
+        in slack.send_message_only_visible_to_user.call_args.kwargs["msg"]
+    )
     slack.add_emoji.assert_called_once()
     slack.remove_emoji.assert_called_once()
     calls = [call[0] for call in slack.mock_calls]
@@ -68,9 +73,28 @@ def test_deleted_sheet_notice_and_loading_cleanup():
     _, handler, slack, bigchats = runtime()
     bigchats.cancel.side_effect = BigchatSheetMissing("gone")
     assert handler.run() is False
-    assert "등록을 취소하지 못했어" in slack.send_message.call_args.kwargs["msg"]
+    assert "취소하지 못했어" in slack.send_message.call_args.kwargs["msg"]
     slack.send_message_only_visible_to_user.assert_not_called()
     slack.remove_emoji.assert_called_once()
+
+
+def test_unconfirmed_cancellation_notice_reads_naturally():
+    _, handler, slack, bigchats = runtime()
+    bigchats.cancel.side_effect = BigchatStorageError("unconfirmed")
+    assert handler.run() is False
+    msg = slack.send_message.call_args.kwargs["msg"]
+    assert "취소 결과를 확인하지 못했어" in msg
+    assert "등록을 취소 결과" not in msg
+    slack.send_message_only_visible_to_user.assert_not_called()
+
+
+def test_missing_registration_is_not_reported_as_cancelled():
+    _, handler, slack, bigchats = runtime()
+    bigchats.cancel.return_value = False
+    assert handler.run()
+    msg = slack.send_message_only_visible_to_user.call_args.kwargs["msg"]
+    assert "취소할 신청 기록이 없어" in msg
+    assert "등록을 취소했어" not in msg
 
 
 def test_storage_failure_does_not_report_success_and_clears_loading():

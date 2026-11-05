@@ -72,6 +72,10 @@ def _location(metadata):
 class BigchatStore:
     def __init__(self, client):
         self._client = client
+        # Bindings this instance verified, keyed by (channel, thread_ts). Each
+        # Slack event gets a new store, so register/cancel after find (and the
+        # backfill after create) skip re-reading the same two metadata records.
+        self._bindings = {}
 
     def _read(self, method, suffix, body=None):
         return self._client.sheets_request(method, suffix, body)
@@ -113,7 +117,13 @@ class BigchatStore:
     def sheet_identity(channel: str, thread_ts: str) -> MetadataIdentity:
         return MetadataIdentity.from_parts(SHEET_KEY, channel, thread_ts)
 
+    def sheet_url(self, channel: str, thread_ts: str) -> str:
+        """The link posted for this thread's bigchat, known without reading Sheets."""
+        return self._client.get_url(self.sheet_identity(channel, thread_ts).metadata_id)
+
     def _resolve(self, channel, thread_ts):
+        # A fresh lookup replaces whatever this instance verified before.
+        self._bindings.pop((channel, thread_ts), None)
         event = self.event_identity(channel, thread_ts)
         record = self._metadata(event)
         if record is None:
@@ -131,6 +141,7 @@ class BigchatStore:
             raise BigchatIntegrityError("The worksheet binding is missing")
         if _location(binding) != {"sheetId": worksheet_id}:
             raise BigchatIntegrityError("The worksheet binding has moved")
+        self._bindings[(channel, thread_ts)] = (event, worksheet_id)
         return event, worksheet_id
 
     @_storage_errors
@@ -139,7 +150,11 @@ class BigchatStore:
         return None if result is None else result[1]
 
     def _bound_event(self, worksheet_id, channel, thread_ts) -> MetadataIdentity:
-        result = self._resolve(channel, thread_ts)
+        # A tab deleted after the lookup is still reported: its row metadata goes
+        # with it, so the participant and sheet reads that follow notice.
+        result = self._bindings.get((channel, thread_ts)) or self._resolve(
+            channel, thread_ts
+        )
         if result is None or result[1] != worksheet_id:
             raise BigchatIntegrityError("Worksheet is not bound to this Slack thread")
         return result[0]
@@ -308,14 +323,14 @@ class BigchatStore:
         requests = create_participant_requests(
             worksheet_id, identity, values, row_index, grid_rows, registration
         )
+        # Returning means the whole batch, including the participant metadata,
+        # was applied: either the write succeeded or its unique guard exists.
         try:
             self._create_once(requests, registration or identity)
         except APIError as error:
             if _status(error) in (400, 404):
                 self._worksheet_properties(worksheet_id)
             raise
-        if self._participant_metadata(identity, worksheet_id) is None:
-            raise BigchatIntegrityError("Registration metadata disappeared")
 
     @_storage_errors
     def register(self, worksheet_id, user_id, values, *, channel, thread_ts) -> bool:
@@ -340,6 +355,9 @@ class BigchatStore:
             event = self._bound_event(worksheet_id, channel, thread_ts)
             identity = self._participant(event, user_id)
             if self._participant_metadata(identity, worksheet_id) is None:
+                # Row metadata disappears with its tab; never report a deleted
+                # tab as "not registered".
+                self._worksheet_properties(worksheet_id)
                 return False
             previous = self._values(identity, worksheet_id)
             if any(previous):

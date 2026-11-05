@@ -14,6 +14,7 @@ from features.bigchat.presentation.messages import (
     bigchat_storage_error_message,
     build_registration_info_message,
 )
+from features.bigchat.services.lookup import find_bigchat
 from features.members.services.directory import MemberLackInfo, MemberNotFound
 from integrations.slack import Message
 
@@ -122,7 +123,9 @@ class JoinBigchat:
             return False
 
     def _run(self):
-        worksheet_id = self.bigchats.find(channel=self.channel, thread_ts=self.ts)
+        worksheet_id = find_bigchat(
+            self.slack_client, self.bigchats, channel=self.channel, ts=self.ts
+        )
         if worksheet_id is None:
             return False
         messages = self.slack_client.get_replies(channel=self.channel, ts=self.ts)

@@ -2,6 +2,7 @@ from contextlib import nullcontext
 
 from features.bigchat.errors import BigchatError
 from features.bigchat.presentation.messages import bigchat_storage_error_message
+from features.bigchat.services.lookup import find_bigchat
 
 
 class AbandonBigchat:
@@ -32,13 +33,15 @@ class AbandonBigchat:
             return self._run()
         except BigchatError as error:
             self.slack_client.send_message(
-                msg=f"<@{self.user}>, {bigchat_storage_error_message(error, '등록을 취소')}",
+                msg=f"<@{self.user}>, {bigchat_storage_error_message(error, '취소')}",
                 ts=self.ts,
             )
             return False
 
     def _run(self):
-        worksheet_id = self.bigchats.find(channel=self.channel, thread_ts=self.ts)
+        worksheet_id = find_bigchat(
+            self.slack_client, self.bigchats, channel=self.channel, ts=self.ts
+        )
         if worksheet_id is None:
             return False
 
@@ -48,12 +51,14 @@ class AbandonBigchat:
             return self._abandon(worksheet_id)
 
     def _abandon(self, worksheet_id: int) -> bool:
-        self.bigchats.cancel(
+        cancelled = self.bigchats.cancel(
             worksheet_id, self.user, channel=self.channel, thread_ts=self.ts
         )
 
+        # 신청 기록이 없으면(등록에 실패했거나 이미 취소된 경우) 취소했다고 알리지 않는다.
+        msg = "등록을 취소했어." if cancelled else "취소할 신청 기록이 없어."
         self.slack_client.send_message_only_visible_to_user(
-            msg=f"<@{self.user}>, 등록을 취소했어.",
+            msg=f"<@{self.user}>, {msg}",
             channel=self.channel,
             ts=self.ts,
             user_id=self.user,

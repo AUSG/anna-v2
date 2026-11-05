@@ -45,6 +45,49 @@ def active_rows(api, sheet):
     return [row[:4] for row in api.get_values(sheet) if any(row[:4])]
 
 
+def reads_since(api, start):
+    return [
+        suffix
+        for method, suffix, _ in api.calls[start:]
+        if method == "get" or suffix == "/values:batchGetByDataFilter"
+    ]
+
+
+def test_posted_link_is_known_without_reading_sheets(runtime):
+    api, store, sheet = runtime
+    start = len(api.calls)
+    assert store.sheet_url(CHANNEL, THREAD) == api.get_url(sheet)
+    assert api.calls[start:] == []
+
+
+def test_reaction_flow_reuses_the_verified_binding(runtime):
+    api, _, sheet = runtime
+    # A new store per Slack event: find, then the write for the same thread.
+    store = BigchatStore(api)
+    lookups = {
+        f"/developerMetadata/{identity.metadata_id}"
+        for identity in (
+            BigchatStore.event_identity(CHANNEL, THREAD),
+            BigchatStore.sheet_identity(CHANNEL, THREAD),
+        )
+    }
+    start = len(api.calls)
+    assert store.find(CHANNEL, THREAD) == sheet
+    assert set(reads_since(api, start)) == lookups
+
+    # Sheets read quotas are per minute, so each write keeps to what it needs:
+    # participant metadata, sheet properties and the insertion position.
+    start = len(api.calls)
+    assert register(store, sheet)
+    assert len(reads_since(api, start)) == 3
+    assert not lookups & set(reads_since(api, start))
+
+    start = len(api.calls)
+    assert cancel(store, sheet)
+    assert len(reads_since(api, start)) == 2
+    assert not lookups & set(reads_since(api, start))
+
+
 def test_creation_and_binding_are_atomic_and_survive_lost_response():
     api = SheetsAPI()
     api.fail_after = ":batchUpdate"
