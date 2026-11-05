@@ -19,9 +19,9 @@ class _DeadlineTransport(Session):
             kwargs["timeout"] = Timeout(
                 total=remaining, connect=REQUEST_TIMEOUT[0], read=REQUEST_TIMEOUT[1]
             )
-        response = super().send(request, **kwargs)
-        remaining_seconds()
-        return response
+        # A response that already arrived is returned even if the deadline passed
+        # meanwhile; the next send is refused before it reaches the network.
+        return super().send(request, **kwargs)
 
 
 class _SheetsSession(_DeadlineTransport, AuthorizedSession):

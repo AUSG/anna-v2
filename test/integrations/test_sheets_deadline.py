@@ -6,7 +6,6 @@ from concurrent.futures import ThreadPoolExecutor
 import gspread
 import pytest
 from google.auth.credentials import AnonymousCredentials
-from google.auth.exceptions import TransportError
 from requests import Response
 from requests.adapters import HTTPAdapter
 from requests.exceptions import Timeout
@@ -76,6 +75,33 @@ def test_slow_writes_and_confirmation_cannot_restart_the_budget(
     assert all(left == 90 - at for _, at, left in calls)
     assert api.get_values(sid) == [VALUES]
     assert len(api.sheets) == 1
+    assert sheets_retry.remaining_seconds() is None
+
+
+@pytest.mark.parametrize("operation", ["register", "cancel"])
+def test_a_write_finished_past_the_deadline_is_not_reported_as_a_failure(
+    clock, monkeypatch, operation
+):
+    api = SheetsAPI()
+    store = BigchatStore(api)
+    sid = store.create("event", **CONTEXT).worksheet_id
+    if operation == "cancel":
+        store.register(sid, "U_A", VALUES, **CONTEXT)
+    original = api.sheets_request
+
+    def committed_late(method, suffix, body=None):
+        response = original(method, suffix, body)
+        if suffix in {":batchUpdate", "/values:batchUpdateByDataFilter"}:
+            clock.sleep(95)  # applied, but the reply arrives past the budget
+        return response
+
+    monkeypatch.setattr(api, "sheets_request", committed_late)
+    if operation == "register":
+        assert store.register(sid, "U_A", VALUES, **CONTEXT) is True
+        assert api.get_values(sid) == [VALUES]
+    else:
+        assert store.cancel(sid, "U_A", **CONTEXT) is True
+        assert api.get_values(sid) == [["", "", "", ""]]
     assert sheets_retry.remaining_seconds() is None
 
 
@@ -177,6 +203,23 @@ def test_installed_sdk_receives_only_the_remaining_network_timeout(clock, monkey
     assert len(sent) == 1
 
 
+def test_a_response_that_arrives_at_the_deadline_is_still_returned(clock, monkeypatch):
+    sent = []
+
+    def send(self, request, **kwargs):
+        sent.append(kwargs["timeout"].total)
+        clock.sleep(kwargs["timeout"].total)  # the reply lands at the deadline
+        return ok_response()
+
+    monkeypatch.setattr(HTTPAdapter, "send", send)
+    client = sdk_client()
+    with sheets_retry.operation_budget():
+        assert client.sheets_request("get", "?fields=sheets.properties") == {}
+        with pytest.raises(sheets_retry.OperationTimeout):
+            client.sheets_request("get", "?fields=sheets.properties")
+    assert sent == [90]
+
+
 def test_legacy_read_metadata_and_values_retries_share_one_deadline(clock, monkeypatch):
     sent = []
     metadata = {
@@ -235,7 +278,11 @@ def test_credential_refresh_and_sheets_send_share_the_deadline(
     monkeypatch.setattr(HTTPAdapter, "send", send)
     client = sdk_client(Credentials())
     if auth_seconds > 90:
-        with pytest.raises(TransportError), sheets_retry.operation_budget():
+        # The late token reply is kept, but the Sheets request is never sent.
+        with (
+            pytest.raises(sheets_retry.OperationTimeout),
+            sheets_retry.operation_budget(),
+        ):
             client.sheets_request("get", "?fields=sheets.properties")
         assert len(sent) == 1
     else:

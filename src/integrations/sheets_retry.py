@@ -33,13 +33,16 @@ def remaining_seconds():
 
 @contextmanager
 def operation_budget():
+    """Bound when new Sheets work may start; finished work is never discarded.
+
+    Checking again after success would report a committed write as unconfirmed.
+    """
     token = None
     if _deadline.get() is None:
         token = _deadline.set(time.monotonic() + OPERATION_SECONDS)
     try:
         remaining_seconds()
         yield
-        remaining_seconds()
     finally:
         if token is not None:
             _deadline.reset(token)
@@ -137,7 +140,6 @@ def guarded_write(send, *, confirmed):
         for attempt in _policy():
             with attempt:
                 send()
-                remaining_seconds()
             outcome = attempt.retry_state.outcome
             assert outcome is not None
             if not outcome.failed:
