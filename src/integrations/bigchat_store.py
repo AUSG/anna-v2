@@ -388,9 +388,17 @@ class BigchatStore:
         active, seen = [], set()
         for matched in response.get("valueRanges", []):
             matched_filters = matched.get("dataFilters", [])
-            if len(matched_filters) != 1 or matched_filters[0] not in filters:
+            # Map results back by metadata ID only. The API need not echo a filter
+            # exactly as sent, while the server already matched each filter on
+            # its full revision value before returning this range.
+            lookup = (
+                matched_filters[0].get("developerMetadataLookup", {})
+                if len(matched_filters) == 1
+                else {}
+            )
+            mid = lookup.get("metadataId")
+            if mid not in participants:
                 raise BigchatIntegrityError("Ambiguous participant read")
-            mid = matched_filters[0]["developerMetadataLookup"]["metadataId"]
             rows = matched.get("valueRange", {}).get("values", [])
             if mid in seen or len(rows) > 1:
                 raise BigchatIntegrityError("Ambiguous participant row")

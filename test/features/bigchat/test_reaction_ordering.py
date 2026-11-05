@@ -196,3 +196,49 @@ def test_reminders_use_active_slack_id_after_email_changes_and_sorting():
     assert result.sent_cnt == 1
     assert slack.send_direct_message.call_args.kwargs["user_id"] == USER
     members.email_to_slack_ids.assert_not_called()
+
+
+def echo_participant_filters(api, monkeypatch, change):
+    original = api.sheets_request
+
+    def answer(method, suffix, body=None):
+        response = original(method, suffix, body)
+        if suffix == "/values:batchGetByDataFilter":
+            for matched in response.get("valueRanges", []):
+                for data_filter in matched.get("dataFilters", []):
+                    change(data_filter)
+        return response
+
+    monkeypatch.setattr(api, "sheets_request", answer)
+
+
+def add_output_only_fields(data_filter):
+    lookup = data_filter["developerMetadataLookup"]
+    lookup["metadataLocation"]["locationType"] = "SHEET"
+
+
+def keep_only_metadata_id(data_filter):
+    lookup = data_filter["developerMetadataLookup"]
+    data_filter["developerMetadataLookup"] = {"metadataId": lookup["metadataId"]}
+
+
+@pytest.mark.parametrize("change", [add_output_only_fields, keep_only_metadata_id])
+def test_reminder_recipients_do_not_depend_on_the_echoed_filter_format(
+    change, monkeypatch
+):
+    api, sid, slack, members = runtime()
+    join(api, slack, members, "200.000001")
+    echo_participant_filters(api, monkeypatch, change)
+    assert BigchatStore(api).active_user_ids(sid) == [USER]
+
+
+def test_reminder_recipients_reject_a_range_for_an_unknown_participant(monkeypatch):
+    api, sid, slack, members = runtime()
+    join(api, slack, members, "200.000001")
+
+    def foreign(data_filter):
+        data_filter["developerMetadataLookup"]["metadataId"] = 1
+
+    echo_participant_filters(api, monkeypatch, foreign)
+    with pytest.raises(BigchatIntegrityError, match="Ambiguous participant read"):
+        BigchatStore(api).active_user_ids(sid)
