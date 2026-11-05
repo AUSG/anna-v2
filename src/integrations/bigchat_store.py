@@ -188,46 +188,62 @@ class BigchatStore:
             sheet_url=self._client.get_url(worksheet_id),
         )
 
+    def _existing_creation(self, title, channel, thread_ts) -> BigchatSheet | None:
+        """Validate the binding and title when reusing or reconciling a creation."""
+        result = self._resolve(channel, thread_ts)
+        if result is None:
+            return None
+        created = self.get_sheet(result[1])
+        if created.sheet_name != title:
+            raise BigchatAlreadyCreated(
+                "This Slack thread already has a different bigchat"
+            )
+        return created
+
     @_storage_errors
     def create(self, title: str, *, channel: str, thread_ts: str) -> BigchatSheet:
         with write_lock(_WRITES):
-            result = self._resolve(channel, thread_ts)
-            if result is None:
-                event = self.event_identity(channel, thread_ts)
-                sheet = self.sheet_identity(channel, thread_ts)
-                worksheet_id = sheet.metadata_id
-                if worksheet_id == self._client.members_worksheet_id:
-                    raise BigchatIntegrityError(
-                        "Worksheet identity conflicts with member directory"
-                    )
-                sheets = self._sheets()
-                if any(s["title"] == title for s in sheets):
+            existing = self._existing_creation(title, channel, thread_ts)
+            if existing is not None:
+                return existing
+            event = self.event_identity(channel, thread_ts)
+            sheet = self.sheet_identity(channel, thread_ts)
+            worksheet_id = sheet.metadata_id
+            if worksheet_id == self._client.members_worksheet_id:
+                raise BigchatIntegrityError(
+                    "Worksheet identity conflicts with member directory"
+                )
+            sheets = self._sheets()
+            if any(s["title"] == title for s in sheets):
+                raise BigchatNameConflict(
+                    "A different worksheet already has this title"
+                )
+            requests = create_sheet_requests(title, event, sheet, min(3, len(sheets)))
+            try:
+                self._create_once(
+                    requests,
+                    event,
+                    confirmed=lambda: (
+                        self._existing_creation(title, channel, thread_ts) is not None
+                    ),
+                )
+            except APIError as error:
+                # Another creator may have used the name after the preflight.
+                if _status(error) == 400 and any(
+                    s["title"] == title for s in self._sheets()
+                ):
                     raise BigchatNameConflict(
-                        "A different worksheet already has this title"
-                    )
-                requests = create_sheet_requests(
-                    title, event, sheet, min(3, len(sheets))
-                )
-                try:
-                    self._create_once(requests, event)
-                except APIError as error:
-                    # Another creator may have used the name after the preflight.
-                    if _status(error) == 400 and any(
-                        s["title"] == title for s in self._sheets()
-                    ):
-                        raise BigchatNameConflict(
-                            "The title was taken during creation"
-                        ) from error
-                    raise
-                self._bound_event(worksheet_id, channel, thread_ts)
-            else:
-                worksheet_id = result[1]
-            created = self.get_sheet(worksheet_id)
-            if created.sheet_name != title:
-                raise BigchatAlreadyCreated(
-                    "This Slack thread already has a different bigchat"
-                )
-            return created
+                        "The title was taken during creation"
+                    ) from error
+                raise
+            # The atomic batch confirmed the tab and both identities. Do not
+            # turn that success into a timeout with another network read.
+            self._bindings[(channel, thread_ts)] = (event, worksheet_id)
+            return BigchatSheet(
+                worksheet_id=worksheet_id,
+                sheet_name=title,
+                sheet_url=self._client.get_url(worksheet_id),
+            )
 
     @staticmethod
     def _participant(event: MetadataIdentity, user_id: str) -> MetadataIdentity:

@@ -8,7 +8,7 @@ import pytest
 from google.auth.credentials import AnonymousCredentials
 from requests import Response
 from requests.adapters import HTTPAdapter
-from requests.exceptions import Timeout
+from requests.exceptions import ConnectionError, Timeout
 
 from features.bigchat.errors import BigchatStorageError
 from integrations import bigchat_store, sheets_retry
@@ -78,9 +78,10 @@ def test_slow_writes_and_confirmation_cannot_restart_the_budget(
     assert sheets_retry.remaining_seconds() is None
 
 
-@pytest.mark.parametrize("operation", ["register", "cancel"])
+@pytest.mark.parametrize("operation", ["create", "register", "cancel"])
+@pytest.mark.parametrize("response_seconds", [90, 95])
 def test_a_write_finished_past_the_deadline_is_not_reported_as_a_failure(
-    clock, monkeypatch, operation
+    clock, monkeypatch, operation, response_seconds
 ):
     api = SheetsAPI()
     store = BigchatStore(api)
@@ -88,20 +89,89 @@ def test_a_write_finished_past_the_deadline_is_not_reported_as_a_failure(
     if operation == "cancel":
         store.register(sid, "U_A", VALUES, **CONTEXT)
     original = api.sheets_request
+    before = len(api.calls)
 
     def committed_late(method, suffix, body=None):
         response = original(method, suffix, body)
         if suffix in {":batchUpdate", "/values:batchUpdateByDataFilter"}:
-            clock.sleep(95)  # applied, but the reply arrives past the budget
+            clock.sleep(response_seconds)  # applied, but the reply arrives late
         return response
 
     monkeypatch.setattr(api, "sheets_request", committed_late)
-    if operation == "register":
+    if operation == "create":
+        created = store.create("new", channel="C_NEW", thread_ts="123.456")
+        assert created.sheet_name == "new"
+        assert created.sheet_url == api.get_url(created.worksheet_id)
+        assert api.sheets[created.worksheet_id]["title"] == "new"
+        assert len(api.sheets) == 2
+    elif operation == "register":
         assert store.register(sid, "U_A", VALUES, **CONTEXT) is True
         assert api.get_values(sid) == [VALUES]
     else:
         assert store.cancel(sid, "U_A", **CONTEXT) is True
         assert api.get_values(sid) == [["", "", "", ""]]
+    writes = [
+        suffix
+        for _, suffix, _ in api.calls[before:]
+        if suffix in {":batchUpdate", "/values:batchUpdateByDataFilter"}
+    ]
+    assert len(writes) == 1
+    assert api.calls[-1][1] == writes[0]
+    assert sheets_retry.remaining_seconds() is None
+
+
+def test_creation_confirmation_can_finish_past_the_deadline(clock, monkeypatch):
+    api = SheetsAPI()
+    store = BigchatStore(api)
+    api.fail_after = ":batchUpdate"
+    original = api.sheets_request
+    confirming = False
+
+    def late_confirmation(method, suffix, body=None):
+        nonlocal confirming
+        try:
+            response = original(method, suffix, body)
+        except ConnectionError:
+            confirming = True
+            raise
+        if confirming and suffix == "?fields=sheets.properties":
+            clock.sleep(95)
+        return response
+
+    monkeypatch.setattr(api, "sheets_request", late_confirmation)
+    created = store.create("event", **CONTEXT)
+    assert created.sheet_name == api.sheets[created.worksheet_id]["title"] == "event"
+    assert created.sheet_url == api.get_url(created.worksheet_id)
+    assert clock.now == 95
+    assert len(api.sheets) == 1 and len(api.metadata) == 2
+    assert sum(suffix == ":batchUpdate" for _, suffix, _ in api.calls) == 1
+    assert sheets_retry.remaining_seconds() is None
+
+
+@pytest.mark.parametrize("committed", [False, True])
+def test_unconfirmed_creation_at_the_deadline_still_fails(
+    clock, monkeypatch, committed
+):
+    api = SheetsAPI()
+    original = api.sheets_request
+    requests = []
+
+    def lost_response(method, suffix, body=None):
+        requests.append(suffix)
+        if suffix == ":batchUpdate":
+            if committed:
+                original(method, suffix, body)
+            clock.sleep(95)
+            raise ConnectionError("No response before the operation deadline")
+        return original(method, suffix, body)
+
+    monkeypatch.setattr(api, "sheets_request", lost_response)
+    with pytest.raises(BigchatStorageError) as caught:
+        BigchatStore(api).create("event", **CONTEXT)
+    assert isinstance(caught.value.__cause__, sheets_retry.OperationTimeout)
+    assert requests.count(":batchUpdate") == 1
+    assert requests[-1] == ":batchUpdate"
+    assert len(api.sheets) == int(committed)
     assert sheets_retry.remaining_seconds() is None
 
 

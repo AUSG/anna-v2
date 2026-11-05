@@ -5,6 +5,7 @@ from threading import Barrier
 
 import pytest
 from gspread.exceptions import APIError
+from requests.exceptions import ConnectionError
 
 from features.bigchat.errors import (
     BigchatAlreadyCreated,
@@ -126,6 +127,51 @@ def test_creation_and_binding_are_atomic_and_survive_lost_response():
     assert len(api.sheets) == 1
     with pytest.raises(BigchatAlreadyCreated):
         store.create("Another event", channel=CHANNEL, thread_ts=THREAD)
+
+
+@pytest.mark.parametrize(
+    ("change", "expected_error"),
+    [
+        ("deleted", BigchatSheetMissing),
+        ("renamed", BigchatAlreadyCreated),
+        ("binding_moved", BigchatIntegrityError),
+        ("event_moved", BigchatIntegrityError),
+        ("identity_changed", BigchatIntegrityError),
+    ],
+)
+def test_lost_creation_response_still_validates_the_complete_binding(
+    monkeypatch, change, expected_error
+):
+    api = SheetsAPI()
+    store = BigchatStore(api)
+    original = api.sheets_request
+    sheet = store.sheet_identity(CHANNEL, THREAD)
+    event = store.event_identity(CHANNEL, THREAD)
+
+    def changed_after_commit(method, suffix, body=None):
+        response = original(method, suffix, body)
+        if suffix == ":batchUpdate":
+            if change == "deleted":
+                api.delete_sheet(sheet.metadata_id)
+            elif change == "renamed":
+                api.sheets[sheet.metadata_id]["title"] = "Another event"
+            elif change == "binding_moved":
+                api.metadata[sheet.metadata_id]["location"] = {
+                    "sheetId": api.members_worksheet_id
+                }
+            elif change == "event_moved":
+                api.metadata[event.metadata_id]["location"] = {
+                    "sheetId": sheet.metadata_id
+                }
+            else:
+                api.metadata[sheet.metadata_id]["metadataValue"] = '["other","event"]'
+            raise ConnectionError("Creation response was lost")
+        return response
+
+    monkeypatch.setattr(api, "sheets_request", changed_after_commit)
+    with pytest.raises(expected_error):
+        store.create(TITLE, channel=CHANNEL, thread_ts=THREAD)
+    assert sum(suffix == ":batchUpdate" for _, suffix, _ in api.calls) == 1
 
 
 def test_sheet_result_failure_does_not_recreate_the_committed_sheet(monkeypatch):
