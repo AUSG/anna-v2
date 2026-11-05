@@ -60,6 +60,30 @@ def test_posted_link_is_known_without_reading_sheets(runtime):
     assert api.calls[start:] == []
 
 
+@pytest.mark.parametrize("parent_exists", [True, False])
+def test_absent_event_metadata_is_not_confused_with_an_unavailable_document(
+    runtime, monkeypatch, parent_exists
+):
+    api, store, _ = runtime
+    original = api.sheets_request
+    calls = []
+
+    def missing(method, suffix, body=None):
+        calls.append((method, suffix))
+        if suffix.startswith("/developerMetadata/") or not parent_exists:
+            raise api_error(404)
+        return original(method, suffix, body)
+
+    monkeypatch.setattr(api, "sheets_request", missing)
+    if parent_exists:
+        assert store.find("C_UNBOUND", THREAD) is None
+    else:
+        with pytest.raises(BigchatStorageError):
+            store.find("C_UNBOUND", THREAD)
+    assert calls[-1] == ("get", "?fields=spreadsheetId")
+    assert len(calls) == 2
+
+
 def test_reaction_flow_reuses_the_verified_binding(runtime):
     api, _, sheet = runtime
     # A new store per Slack event: find, then the write for the same thread.

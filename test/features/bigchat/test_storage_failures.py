@@ -27,6 +27,56 @@ from test.fixtures.slack_events import (
 TITLE = "AI 밋업 26-08-20 19:00~21:00"
 
 
+@pytest.mark.parametrize("operation", ["join", "cancel"])
+@pytest.mark.parametrize("posted", [True, False])
+def test_unavailable_document_notifies_only_a_known_bigchat(
+    operation, posted, monkeypatch
+):
+    api = SheetsAPI()
+    store = BigchatStore(api)
+    channel, thread, user = "C_TEST", "123.456", "U_TEST"
+    slack, members = MagicMock(), MagicMock()
+    slack.get_replies.return_value = [
+        Message(
+            ts=thread,
+            thread_ts=thread,
+            channel=channel,
+            user="U_BOT",
+            text=store.sheet_url(channel, thread)
+            if posted
+            else "ordinary conversation",
+        )
+    ]
+    requests = []
+
+    def unavailable(method, suffix, body=None):
+        requests.append((method, suffix))
+        raise api_error(404)
+
+    monkeypatch.setattr(api, "sheets_request", unavailable)
+    event = {
+        "type": "reaction_added" if operation == "join" else "reaction_removed",
+        "reaction": "gogo",
+        "user": user,
+        "event_ts": "200.000001",
+        "item": {"channel": channel, "ts": thread},
+    }
+    handler = (
+        JoinBigchat(event, "gogo", slack, store, members)
+        if operation == "join"
+        else AbandonBigchat(event, "gogo", slack, store)
+    )
+    assert handler.run() is False
+    assert len(requests) == 2 and all(method == "get" for method, _ in requests)
+    members.find.assert_not_called()
+    slack.send_message_only_visible_to_user.assert_not_called()
+    if posted:
+        slack.send_message.assert_called_once()
+        assert "접근하거나" in slack.send_message.call_args.kwargs["msg"]
+    else:
+        slack.send_message.assert_not_called()
+
+
 @pytest.mark.parametrize("entry", ["mention", "modal_response", "modal_ephemeral"])
 @pytest.mark.parametrize("failure", ["duplicate", "deleted", "permission"])
 def test_creation_errors_are_announced_without_success_or_backfill(

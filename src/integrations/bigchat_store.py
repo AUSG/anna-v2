@@ -37,7 +37,7 @@ from integrations.bigchat_schema import (
     read_values_request,
     write_values_request,
 )
-from integrations.sheets_retry import TRANSPORT_ERRORS, guarded_write
+from integrations.sheets_retry import TRANSPORT_ERRORS, guarded_write, retry_reads
 from integrations.sheets_retry import status as _status
 
 _WRITES = threading.RLock()
@@ -70,6 +70,7 @@ class BigchatStore:
         # backfill after create) skip re-reading the same two metadata records.
         self._bindings = {}
 
+    @retry_reads
     def _read(self, method, suffix, body=None):
         return self._client.sheets_request(method, suffix, body)
 
@@ -145,7 +146,13 @@ class BigchatStore:
     @_storage_errors
     def find(self, channel, thread_ts) -> int | None:
         result = self._resolve(channel, thread_ts)
-        return None if result is None else result[1]
+        if result is None:
+            # Both a missing metadata ID and an inaccessible/deleted parent can
+            # return 404. Verify the parent before treating this as an ordinary
+            # message. Bound events do not need this additional read.
+            self._read("get", "?fields=spreadsheetId")
+            return None
+        return result[1]
 
     def _bound_event(self, worksheet_id, channel, thread_ts) -> MetadataIdentity:
         # A tab deleted after the lookup is still reported: its row metadata goes

@@ -160,6 +160,8 @@ class SheetsAPI:
     def sheets_request(self, method, suffix, body=None):
         with self.lock:
             self.calls.append((method, suffix, copy.deepcopy(body)))
+            if method == "get" and suffix == "?fields=spreadsheetId":
+                return {"spreadsheetId": self.spreadsheet_id}
             if method == "get" and suffix == "?fields=sheets.properties":
                 return {
                     "sheets": [
