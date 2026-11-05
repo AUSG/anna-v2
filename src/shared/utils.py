@@ -1,7 +1,3 @@
-import functools
-import time
-
-
 def search_value(d, key):
     """
     주어진 key 에 해당하는 value 를 찾아주는 메서드.
@@ -54,29 +50,3 @@ def strip_multiline(text, *args, ignore_first_line=True):
             result = result.replace("{}", arg, 1)
 
     return result
-
-
-def with_retry(max_try_cnt=10, fixed_wait_time_in_sec=3, non_retryable_exceptions=()):
-    """
-    usage: @with_retry(3, 1)
-
-    :param non_retryable_exceptions: 재시도해도 성공할 수 없는 예외 타입 튜플. 잡지 않고 즉시 전파한다.
-    """
-
-    def decorator(func):
-        @functools.wraps(func)
-        def wrapper(*args, **kwargs):
-            last_exception: Exception = RuntimeError("max_try_cnt must be >= 1")
-            for _ in range(max_try_cnt):
-                try:
-                    return func(*args, **kwargs)
-                except non_retryable_exceptions:
-                    raise
-                except Exception as ex:  # noqa: BLE001
-                    last_exception = ex
-                    time.sleep(fixed_wait_time_in_sec)
-            raise last_exception
-
-        return wrapper
-
-    return decorator

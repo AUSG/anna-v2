@@ -6,12 +6,10 @@ metadata; replacing cell values without moving metadata is unsupported.
 
 import json
 import threading
-import time
 from functools import wraps
 from uuid import uuid4
 
 from gspread.exceptions import APIError
-from requests.exceptions import RequestException
 
 from features.bigchat.errors import (
     BigchatAlreadyCreated,
@@ -39,31 +37,25 @@ from integrations.bigchat_schema import (
     read_values_request,
     write_values_request,
 )
+from integrations.sheets_retry import (
+    TRANSPORT_ERRORS,
+    guarded_write,
+    operation_budget,
+    retry_reads,
+    write_lock,
+)
+from integrations.sheets_retry import status as _status
 
 _WRITES = threading.RLock()
-
-
-def _status(error):
-    return getattr(getattr(error, "response", None), "status_code", None)
-
-
-def _transient(error):
-    return isinstance(error, RequestException) or _status(error) in (
-        408,
-        429,
-        500,
-        502,
-        503,
-        504,
-    )
 
 
 def _storage_errors(method):
     @wraps(method)
     def invoke(*args, **kwargs):
         try:
-            return method(*args, **kwargs)
-        except (APIError, RequestException) as error:
+            with operation_budget():
+                return method(*args, **kwargs)
+        except TRANSPORT_ERRORS as error:
             raise BigchatStorageError(
                 "Sheets operation could not be confirmed"
             ) from error
@@ -85,6 +77,7 @@ class BigchatStore:
         # backfill after create) skip re-reading the same two metadata records.
         self._bindings = {}
 
+    @retry_reads
     def _read(self, method, suffix, body=None):
         return self._client.sheets_request(method, suffix, body)
 
@@ -160,7 +153,13 @@ class BigchatStore:
     @_storage_errors
     def find(self, channel, thread_ts) -> int | None:
         result = self._resolve(channel, thread_ts)
-        return None if result is None else result[1]
+        if result is None:
+            # Both a missing metadata ID and an inaccessible/deleted parent can
+            # return 404. Verify the parent before treating this as an ordinary
+            # message. Bound events do not need this additional read.
+            self._read("get", "?fields=spreadsheetId")
+            return None
+        return result[1]
 
     def _bound_event(self, worksheet_id, channel, thread_ts) -> MetadataIdentity:
         # A tab deleted after the lookup is still reported: its row metadata goes
@@ -172,26 +171,13 @@ class BigchatStore:
             raise BigchatIntegrityError("Worksheet is not bound to this Slack thread")
         return result[0]
 
-    def _write_and_confirm(self, send, confirmed):
-        """Only a successful confirmation read permits another guarded write."""
-        for attempt in range(3):
-            try:
-                send()
-                return
-            except (APIError, RequestException) as error:
-                if confirmed():
-                    return
-                if not _transient(error) or attempt == 2:
-                    raise
-                time.sleep(2**attempt)
-
     def _create_once(self, requests, identity: MetadataIdentity, *, confirmed=None):
         """A unique metadata ID guards the entire atomic batch against replay."""
-        self._write_and_confirm(
+        guarded_write(
             lambda: self._client.sheets_request(
                 "post", ":batchUpdate", {"requests": requests}
             ),
-            confirmed or (lambda: self._metadata(identity) is not None),
+            confirmed=confirmed or (lambda: self._metadata(identity) is not None),
         )
 
     @_storage_errors
@@ -202,46 +188,62 @@ class BigchatStore:
             sheet_url=self._client.get_url(worksheet_id),
         )
 
+    def _existing_creation(self, title, channel, thread_ts) -> BigchatSheet | None:
+        """Validate the binding and title when reusing or reconciling a creation."""
+        result = self._resolve(channel, thread_ts)
+        if result is None:
+            return None
+        created = self.get_sheet(result[1])
+        if created.sheet_name != title:
+            raise BigchatAlreadyCreated(
+                "This Slack thread already has a different bigchat"
+            )
+        return created
+
     @_storage_errors
     def create(self, title: str, *, channel: str, thread_ts: str) -> BigchatSheet:
-        with _WRITES:
-            result = self._resolve(channel, thread_ts)
-            if result is None:
-                event = self.event_identity(channel, thread_ts)
-                sheet = self.sheet_identity(channel, thread_ts)
-                worksheet_id = sheet.metadata_id
-                if worksheet_id == self._client.members_worksheet_id:
-                    raise BigchatIntegrityError(
-                        "Worksheet identity conflicts with member directory"
-                    )
-                sheets = self._sheets()
-                if any(s["title"] == title for s in sheets):
+        with write_lock(_WRITES):
+            existing = self._existing_creation(title, channel, thread_ts)
+            if existing is not None:
+                return existing
+            event = self.event_identity(channel, thread_ts)
+            sheet = self.sheet_identity(channel, thread_ts)
+            worksheet_id = sheet.metadata_id
+            if worksheet_id == self._client.members_worksheet_id:
+                raise BigchatIntegrityError(
+                    "Worksheet identity conflicts with member directory"
+                )
+            sheets = self._sheets()
+            if any(s["title"] == title for s in sheets):
+                raise BigchatNameConflict(
+                    "A different worksheet already has this title"
+                )
+            requests = create_sheet_requests(title, event, sheet, min(3, len(sheets)))
+            try:
+                self._create_once(
+                    requests,
+                    event,
+                    confirmed=lambda: (
+                        self._existing_creation(title, channel, thread_ts) is not None
+                    ),
+                )
+            except APIError as error:
+                # Another creator may have used the name after the preflight.
+                if _status(error) == 400 and any(
+                    s["title"] == title for s in self._sheets()
+                ):
                     raise BigchatNameConflict(
-                        "A different worksheet already has this title"
-                    )
-                requests = create_sheet_requests(
-                    title, event, sheet, min(3, len(sheets))
-                )
-                try:
-                    self._create_once(requests, event)
-                except APIError as error:
-                    # Another creator may have used the name after the preflight.
-                    if _status(error) == 400 and any(
-                        s["title"] == title for s in self._sheets()
-                    ):
-                        raise BigchatNameConflict(
-                            "The title was taken during creation"
-                        ) from error
-                    raise
-                self._bound_event(worksheet_id, channel, thread_ts)
-            else:
-                worksheet_id = result[1]
-            created = self.get_sheet(worksheet_id)
-            if created.sheet_name != title:
-                raise BigchatAlreadyCreated(
-                    "This Slack thread already has a different bigchat"
-                )
-            return created
+                        "The title was taken during creation"
+                    ) from error
+                raise
+            # The atomic batch confirmed the tab and both identities. Do not
+            # turn that success into a timeout with another network read.
+            self._bindings[(channel, thread_ts)] = (event, worksheet_id)
+            return BigchatSheet(
+                worksheet_id=worksheet_id,
+                sheet_name=title,
+                sheet_url=self._client.get_url(worksheet_id),
+            )
 
     @staticmethod
     def _participant(event: MetadataIdentity, user_id: str) -> MetadataIdentity:
@@ -305,7 +307,7 @@ class BigchatStore:
             if not confirm():
                 raise BigchatIntegrityError("Participant revision was not updated")
 
-        self._write_and_confirm(send, confirm)
+        guarded_write(send, confirmed=confirm)
         return desired
 
     @_storage_errors
@@ -445,8 +447,8 @@ class BigchatStore:
                 self._worksheet_properties(worksheet_id)
                 raise BigchatIntegrityError("Participant row was not updated")
 
-        self._write_and_confirm(
-            send, lambda: self._values(identity, worksheet_id) == values
+        guarded_write(
+            send, confirmed=lambda: self._values(identity, worksheet_id) == values
         )
 
     def _append(self, worksheet_id, identity, values, *, rejoining, owner=None):
@@ -501,7 +503,7 @@ class BigchatStore:
     ) -> bool:
         if len(values) != 4 or any(not isinstance(value, str) for value in values):
             raise ValueError("Registration must contain four text values")
-        with _WRITES:
+        with write_lock(_WRITES):
             event = self._bound_event(worksheet_id, channel, thread_ts)
             owner = self._participant(event, user_id)
             existing = self._participant_metadata(owner, worksheet_id)
@@ -527,7 +529,7 @@ class BigchatStore:
     def cancel(
         self, worksheet_id, user_id, *, channel, thread_ts, event_ts=None
     ) -> bool:
-        with _WRITES:
+        with write_lock(_WRITES):
             event = self._bound_event(worksheet_id, channel, thread_ts)
             owner = self._participant(event, user_id)
             existing = self._participant_metadata(owner, worksheet_id)

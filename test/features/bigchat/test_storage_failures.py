@@ -14,8 +14,9 @@ from features.bigchat.handlers.create_bigchat_modal import (
 from features.bigchat.handlers.create_bigchat_sheet import CreateBigchatSheet
 from features.bigchat.handlers.join_bigchat import JoinBigchat
 from features.bigchat.presentation.messages import bigchat_created_message
+from integrations import sheets_retry
 from integrations.bigchat_store import BigchatStore
-from integrations.slack import Message
+from integrations.slack import Message, Reaction
 from shared.loading_emoji import LoadingEmoji
 from test.fixtures.sheets import SheetsAPI, api_error
 from test.fixtures.slack_events import (
@@ -25,6 +26,121 @@ from test.fixtures.slack_events import (
 )
 
 TITLE = "AI 밋업 26-08-20 19:00~21:00"
+
+
+@pytest.mark.parametrize("entry", ["mention", "modal_response", "modal_ephemeral"])
+def test_late_successful_creation_still_posts_the_link_and_registers_early_users(
+    entry, monkeypatch
+):
+    api = SheetsAPI()
+    store = BigchatStore(api)
+    slack, members, ack = MagicMock(), MagicMock(), MagicMock()
+    slack.get_emoji.return_value = Reaction(name="gogo", users=["U_EARLY"], count=1)
+    member = create_sample_member()
+    members.find.return_value = member
+    now = [0.0]
+    monkeypatch.setattr(sheets_retry.time, "monotonic", lambda: now[0])
+    original = api.sheets_request
+    write_budgets = []
+
+    def late_creation(method, suffix, body=None):
+        if suffix == ":batchUpdate":
+            write_budgets.append(sheets_retry.remaining_seconds())
+        response = original(method, suffix, body)
+        if suffix == ":batchUpdate":
+            assert body is not None
+            if any("addSheet" in request for request in body["requests"]):
+                now[0] += 95
+        return response
+
+    monkeypatch.setattr(api, "sheets_request", late_creation)
+    if entry == "mention":
+        event = create_sample_app_mention_event("<@ANNA> 새로운 빅챗 " + TITLE)
+        channel, thread = event["channel"], event.get("thread_ts") or event["ts"]
+        run = CreateBigchatSheet(event, slack, store, members, "gogo").handle_mention
+    else:
+        body = create_sample_view_submission_body(
+            "AI 밋업", "2026-08-20", "19:00", "21:00"
+        )
+        if entry == "modal_ephemeral":
+            metadata = json.loads(body["view"]["private_metadata"])
+            metadata.pop("response_url")
+            body["view"]["private_metadata"] = json.dumps(metadata)
+        event = normalize_view_body(body)
+        channel, thread = event["channel"], event["ts"]
+        run = SubmitCreateBigchatModal(event, ack, slack, store, members, "gogo").run
+
+    assert run() is True
+    assert len(api.sheets) == 1
+    sid = next(iter(api.sheets))
+    assert api.get_values(sid) == [member.transform_for_spreadsheet()]
+    assert BigchatStore(api).active_user_ids(sid) == ["U_EARLY"]
+    # Backfill is a new store operation after creation has returned successfully.
+    assert write_budgets == [90, 90]
+    slack.get_emoji.assert_called_once_with(
+        channel=channel, ts=thread, emoji_name="gogo"
+    )
+    members.find.assert_called_once_with("U_EARLY")
+    message = bigchat_created_message(api.get_url(sid), TITLE)
+    if entry == "mention":
+        slack.send_message.assert_called_once_with(msg=message, ts=event["ts"])
+    else:
+        slack.send_thread_message.assert_any_call(
+            msg=message, channel=channel, ts=thread
+        )
+        ack.assert_called_once_with()
+    slack.send_response_url_message.assert_not_called()
+    assert sheets_retry.remaining_seconds() is None
+
+
+@pytest.mark.parametrize("operation", ["join", "cancel"])
+@pytest.mark.parametrize("posted", [True, False])
+def test_unavailable_document_notifies_only_a_known_bigchat(
+    operation, posted, monkeypatch
+):
+    api = SheetsAPI()
+    store = BigchatStore(api)
+    channel, thread, user = "C_TEST", "123.456", "U_TEST"
+    slack, members = MagicMock(), MagicMock()
+    slack.get_replies.return_value = [
+        Message(
+            ts=thread,
+            thread_ts=thread,
+            channel=channel,
+            user="U_BOT",
+            text=store.sheet_url(channel, thread)
+            if posted
+            else "ordinary conversation",
+        )
+    ]
+    requests = []
+
+    def unavailable(method, suffix, body=None):
+        requests.append((method, suffix))
+        raise api_error(404)
+
+    monkeypatch.setattr(api, "sheets_request", unavailable)
+    event = {
+        "type": "reaction_added" if operation == "join" else "reaction_removed",
+        "reaction": "gogo",
+        "user": user,
+        "event_ts": "200.000001",
+        "item": {"channel": channel, "ts": thread},
+    }
+    handler = (
+        JoinBigchat(event, "gogo", slack, store, members)
+        if operation == "join"
+        else AbandonBigchat(event, "gogo", slack, store)
+    )
+    assert handler.run() is False
+    assert len(requests) == 2 and all(method == "get" for method, _ in requests)
+    members.find.assert_not_called()
+    slack.send_message_only_visible_to_user.assert_not_called()
+    if posted:
+        slack.send_message.assert_called_once()
+        assert "접근하거나" in slack.send_message.call_args.kwargs["msg"]
+    else:
+        slack.send_message.assert_not_called()
 
 
 @pytest.mark.parametrize("entry", ["mention", "modal_response", "modal_ephemeral"])
@@ -173,7 +289,7 @@ def sheets_unavailable(api, monkeypatch, status=503):
     def fail(*args, **kwargs):
         raise api_error(status)
 
-    monkeypatch.setattr("integrations.bigchat_store.time.sleep", lambda _: None)
+    monkeypatch.setattr("integrations.sheets_retry.time.sleep", lambda _: None)
     monkeypatch.setattr(api, "sheets_request", fail)
 
 

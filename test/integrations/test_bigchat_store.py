@@ -5,6 +5,7 @@ from threading import Barrier
 
 import pytest
 from gspread.exceptions import APIError
+from requests.exceptions import ConnectionError
 
 from features.bigchat.errors import (
     BigchatAlreadyCreated,
@@ -60,6 +61,30 @@ def test_posted_link_is_known_without_reading_sheets(runtime):
     assert api.calls[start:] == []
 
 
+@pytest.mark.parametrize("parent_exists", [True, False])
+def test_absent_event_metadata_is_not_confused_with_an_unavailable_document(
+    runtime, monkeypatch, parent_exists
+):
+    api, store, _ = runtime
+    original = api.sheets_request
+    calls = []
+
+    def missing(method, suffix, body=None):
+        calls.append((method, suffix))
+        if suffix.startswith("/developerMetadata/") or not parent_exists:
+            raise api_error(404)
+        return original(method, suffix, body)
+
+    monkeypatch.setattr(api, "sheets_request", missing)
+    if parent_exists:
+        assert store.find("C_UNBOUND", THREAD) is None
+    else:
+        with pytest.raises(BigchatStorageError):
+            store.find("C_UNBOUND", THREAD)
+    assert calls[-1] == ("get", "?fields=spreadsheetId")
+    assert len(calls) == 2
+
+
 def test_reaction_flow_reuses_the_verified_binding(runtime):
     api, _, sheet = runtime
     # A new store per Slack event: find, then the write for the same thread.
@@ -102,6 +127,51 @@ def test_creation_and_binding_are_atomic_and_survive_lost_response():
     assert len(api.sheets) == 1
     with pytest.raises(BigchatAlreadyCreated):
         store.create("Another event", channel=CHANNEL, thread_ts=THREAD)
+
+
+@pytest.mark.parametrize(
+    ("change", "expected_error"),
+    [
+        ("deleted", BigchatSheetMissing),
+        ("renamed", BigchatAlreadyCreated),
+        ("binding_moved", BigchatIntegrityError),
+        ("event_moved", BigchatIntegrityError),
+        ("identity_changed", BigchatIntegrityError),
+    ],
+)
+def test_lost_creation_response_still_validates_the_complete_binding(
+    monkeypatch, change, expected_error
+):
+    api = SheetsAPI()
+    store = BigchatStore(api)
+    original = api.sheets_request
+    sheet = store.sheet_identity(CHANNEL, THREAD)
+    event = store.event_identity(CHANNEL, THREAD)
+
+    def changed_after_commit(method, suffix, body=None):
+        response = original(method, suffix, body)
+        if suffix == ":batchUpdate":
+            if change == "deleted":
+                api.delete_sheet(sheet.metadata_id)
+            elif change == "renamed":
+                api.sheets[sheet.metadata_id]["title"] = "Another event"
+            elif change == "binding_moved":
+                api.metadata[sheet.metadata_id]["location"] = {
+                    "sheetId": api.members_worksheet_id
+                }
+            elif change == "event_moved":
+                api.metadata[event.metadata_id]["location"] = {
+                    "sheetId": sheet.metadata_id
+                }
+            else:
+                api.metadata[sheet.metadata_id]["metadataValue"] = '["other","event"]'
+            raise ConnectionError("Creation response was lost")
+        return response
+
+    monkeypatch.setattr(api, "sheets_request", changed_after_commit)
+    with pytest.raises(expected_error):
+        store.create(TITLE, channel=CHANNEL, thread_ts=THREAD)
+    assert sum(suffix == ":batchUpdate" for _, suffix, _ in api.calls) == 1
 
 
 def test_sheet_result_failure_does_not_recreate_the_committed_sheet(monkeypatch):
@@ -217,7 +287,7 @@ def test_cancellation_reconciles_a_lost_write_response(runtime):
 def test_api_failure_before_commit_is_bounded_and_does_not_create_rows(
     runtime, monkeypatch
 ):
-    monkeypatch.setattr("integrations.bigchat_store.time.sleep", lambda _: None)
+    monkeypatch.setattr("integrations.sheets_retry.time.sleep", lambda _: None)
     api, store, sheet = runtime
     original = api.sheets_request
     writes = []
@@ -252,7 +322,9 @@ def test_unique_metadata_guards_concurrent_creators_without_a_shared_lock(
     runtime, monkeypatch
 ):
     api, _, sheet = runtime
-    monkeypatch.setattr("integrations.bigchat_store._WRITES", nullcontext())
+    monkeypatch.setattr(
+        "integrations.bigchat_store.write_lock", lambda _: nullcontext()
+    )
     barrier = Barrier(2)
     original = api.sheets_request
     reads = []
@@ -373,7 +445,7 @@ def test_failed_confirmation_of_committed_rejoin_does_not_replay(runtime, monkey
         return original(method, suffix, body)
 
     monkeypatch.setattr(api, "sheets_request", fail_confirmation)
-    monkeypatch.setattr("integrations.bigchat_store.time.sleep", lambda _: None)
+    monkeypatch.setattr("integrations.sheets_retry.time.sleep", lambda _: None)
     with pytest.raises(BigchatStorageError):
         register(store, sheet)
     assert len(writes) == 1
