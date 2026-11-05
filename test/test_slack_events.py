@@ -110,7 +110,7 @@ def test_explicit_question_with_command_keywords_reaches_qa(
         answer="질문에 대한 답변이야!", sources=[], ts=event["ts"]
     )
     slack_client.send_message.assert_not_called()
-    for name in ("sheets", "members", "github"):
+    for name in ("sheets", "bigchats", "members", "github"):
         external_factories[name].assert_not_called()
     say.assert_not_called()
 

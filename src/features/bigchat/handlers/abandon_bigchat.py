@@ -1,22 +1,20 @@
 from contextlib import nullcontext
 
-from features.members.services.directory import MemberLackInfo, MemberNotFound
-from integrations.google_sheets import WorksheetNotFound
+from features.bigchat.errors import BigchatError
+from features.bigchat.presentation.messages import bigchat_storage_error_message
+from features.bigchat.services.lookup import find_bigchat
 
 
 class AbandonBigchat:
     def __init__(
         self,
         event,
-        anna,
         target_emoji,
         slack_client,
-        member_manager,
         bigchats,
         loading_emoji=None,
     ):
         """loading_emoji: 실제 취소 작업만 감쌀 컨텍스트 매니저. 넘기지 않으면 이모지를 붙이지 않는다."""
-        self.anna = anna
         self.type = event["type"]
         self.reaction = event["reaction"]
         self.channel = event["item"]["channel"]
@@ -24,7 +22,6 @@ class AbandonBigchat:
         self.user = event["user"]
         self.target_emoji = target_emoji
         self.slack_client = slack_client
-        self.member_manager = member_manager
         self.bigchats = bigchats
         self.loading_emoji = loading_emoji or nullcontext()
 
@@ -32,12 +29,20 @@ class AbandonBigchat:
         if self.type != "reaction_removed" or self.reaction != self.target_emoji:
             return False
 
-        messages = self.slack_client.get_replies(channel=self.channel, ts=self.ts)
-        if messages[0].ts != self.ts:
+        try:
+            return self._run()
+        except BigchatError as error:
+            self.slack_client.send_message(
+                msg=f"<@{self.user}>, {bigchat_storage_error_message(error, '취소')}",
+                ts=self.ts,
+            )
             return False
 
-        worksheet_id = self.bigchats.find(message.text for message in messages)
-        if not worksheet_id:
+    def _run(self):
+        worksheet_id = find_bigchat(
+            self.slack_client, self.bigchats, channel=self.channel, ts=self.ts
+        )
+        if worksheet_id is None:
             return False
 
         # 여기부터가 실제 동작이다. 위 검사들에서 걸러진 이벤트(관심 없는 이모지, 빅챗 글이
@@ -46,31 +51,14 @@ class AbandonBigchat:
             return self._abandon(worksheet_id)
 
     def _abandon(self, worksheet_id: int) -> bool:
-        try:
-            member = self.member_manager.find(self.user)
-        except MemberNotFound:
-            self.slack_client.send_message(
-                msg=f"<@{self.user}>, 네 정보를 찾지 못했어.", ts=self.ts
-            )
-            return False
-        except MemberLackInfo:
-            self.slack_client.send_message(
-                msg=f"<@{self.user}>, 네 정보에 누락된 값이 있어.", ts=self.ts
-            )
-            return False
+        cancelled = self.bigchats.cancel(
+            worksheet_id, self.user, channel=self.channel, thread_ts=self.ts
+        )
 
-        try:
-            self.bigchats.cancel(worksheet_id, member.email)
-        except WorksheetNotFound:
-            self.slack_client.send_message(
-                msg=f"<@{self.user}>, 이 빅챗의 신청 시트를 찾을 수 없어서 등록을 취소하지 못했어. "
-                f"이미 마감되었거나 삭제된 것 같아. 필요하면 운영진에게 알려줘!",
-                ts=self.ts,
-            )
-            return False
-
+        # 신청 기록이 없으면(등록에 실패했거나 이미 취소된 경우) 취소했다고 알리지 않는다.
+        msg = "등록을 취소했어." if cancelled else "취소할 신청 기록이 없어."
         self.slack_client.send_message_only_visible_to_user(
-            msg=f"<@{self.user}>, 등록을 취소했어.",
+            msg=f"<@{self.user}>, {msg}",
             channel=self.channel,
             ts=self.ts,
             user_id=self.user,

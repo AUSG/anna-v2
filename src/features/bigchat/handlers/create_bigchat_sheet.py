@@ -1,6 +1,8 @@
+from features.bigchat.errors import BigchatError
 from features.bigchat.models import CreateBigchatCommand, InvalidBigchatName
 from features.bigchat.presentation.messages import (
     bigchat_created_message,
+    bigchat_storage_error_message,
     invalid_bigchat_name_message,
 )
 from features.bigchat.services.creation import register_early_reacted_users
@@ -42,7 +44,20 @@ class CreateBigchatSheet(MentionHandler):
             )
             return False
 
-        created = self.bigchats.create(command.sheet_name)
+        try:
+            created = self.bigchats.create(
+                command.sheet_name,
+                channel=self.channel,
+                thread_ts=self.thread_ts or self.ts,
+            )
+        except BigchatError as error:
+            self.slack_client.send_message_only_visible_to_user(
+                msg=bigchat_storage_error_message(error, "생성"),
+                channel=self.channel,
+                ts=self.ts,
+                user_id=self.user,
+            )
+            return False
         self.slack_client.send_message(
             msg=bigchat_created_message(created.sheet_url, created.sheet_name),
             ts=self.ts,

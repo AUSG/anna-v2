@@ -45,7 +45,13 @@ def register_early_reacted_users(
                     ts=thread_ts,
                 )
             else:
-                if bigchats.register(worksheet_id, member.transform_for_spreadsheet()):
+                if bigchats.register(
+                    worksheet_id,
+                    user,
+                    member.transform_for_spreadsheet(),
+                    channel=channel,
+                    thread_ts=thread_ts,
+                ):
                     registered.append((user, member))
 
         if not registered:

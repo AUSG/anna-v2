@@ -2,9 +2,11 @@ import json
 
 from slack_sdk.errors import SlackApiError
 
+from features.bigchat.errors import BigchatError
 from features.bigchat.models import CreateBigchatCommand, InvalidBigchatName
 from features.bigchat.presentation.messages import (
     bigchat_created_message,
+    bigchat_storage_error_message,
     bot_not_in_channel_message,
 )
 from features.bigchat.services.creation import register_early_reacted_users
@@ -113,6 +115,9 @@ class SubmitCreateBigchatModal:
         self.channel = metadata["channel"]
         self.thread_ts = metadata["thread_ts"]
         self.response_url = metadata.get("response_url", "")
+        self.user = (
+            event["user"]["id"] if isinstance(event["user"], dict) else event["user"]
+        )
         self.name = (values[NAME_BLOCK][ACTION_ID]["value"] or "").strip()
         self.date = values[DATE_BLOCK][ACTION_ID]["selected_date"]  # YYYY-MM-DD
         self.start = values[START_BLOCK][ACTION_ID]["selected_time"]  # HH:mm
@@ -151,7 +156,21 @@ class SubmitCreateBigchatModal:
         return errors
 
     def _create_and_notify(self, command: CreateBigchatCommand) -> bool:
-        created = self.bigchats.create(command.sheet_name)
+        try:
+            created = self.bigchats.create(
+                command.sheet_name, channel=self.channel, thread_ts=self.thread_ts
+            )
+        except BigchatError as error:
+            msg = bigchat_storage_error_message(error, "생성")
+            if self.response_url:
+                self.slack_client.send_response_url_message(
+                    response_url=self.response_url, msg=msg
+                )
+            else:
+                self.slack_client.send_message_only_visible_to_user(
+                    msg=msg, channel=self.channel, ts=self.thread_ts, user_id=self.user
+                )
+            return False
         try:
             self.slack_client.send_thread_message(
                 msg=bigchat_created_message(created.sheet_url, created.sheet_name),
