@@ -111,6 +111,40 @@ def test_failed_reads_stop_at_the_limit_without_writing(
     assert (api.sheets, api.metadata) == before
 
 
+def test_read_retries_share_one_time_budget_per_operation(runtime, monkeypatch):
+    api, store, sid = runtime
+    original = api.sheets_request
+    clock, delays = [0.0], []
+    failures = {"/developerMetadata/": 3, "/values:batchGetByDataFilter": 99}
+
+    def sleep(seconds):
+        delays.append(seconds)
+        clock[0] += seconds
+
+    def rate_limited(method, suffix, body=None):
+        for prefix, remaining in failures.items():
+            if suffix.startswith(prefix) and remaining:
+                failures[prefix] -= 1
+                raise api_error(429)
+        return original(method, suffix, body)
+
+    monkeypatch.setattr("integrations.bigchat_store.time.monotonic", lambda: clock[0])
+    monkeypatch.setattr("integrations.bigchat_store.time.sleep", sleep)
+    monkeypatch.setattr(api, "sheets_request", rate_limited)
+    with pytest.raises(BigchatStorageError):
+        store.cancel(sid, "U_A", **CONTEXT)
+    # The participant read spent 35s, so the value read stops before a 30s wait
+    # would pass the 90s budget, and nothing is written.
+    assert delays == [5, 10, 20, 5, 10, 20]
+    assert rows(api, sid) == [ALICE, BOB]
+
+    # The next operation starts with a fresh budget.
+    clock[0], delays[:] = 1000.0, []
+    failures.update({"/developerMetadata/": 1, "/values:batchGetByDataFilter": 0})
+    assert store.find(**CONTEXT) == sid
+    assert delays == [5]
+
+
 def test_missing_metadata_is_not_retried(runtime, monkeypatch):
     api, store, _ = runtime
     delays = []
