@@ -7,7 +7,12 @@ from functools import wraps
 
 from google.auth.exceptions import TransportError
 from gspread.exceptions import APIError
-from requests.exceptions import ConnectionError, RequestException, Timeout
+from requests.exceptions import (
+    ChunkedEncodingError,
+    ConnectionError,
+    RequestException,
+    Timeout,
+)
 from tenacity import RetryCallState, Retrying, retry_if_exception
 
 TRANSPORT_ERRORS = (APIError, RequestException, TransportError)
@@ -70,9 +75,10 @@ def status(error):
 def _transient(error):
     if isinstance(error, OperationTimeout):
         return False
-    return isinstance(error, (ConnectionError, Timeout, TransportError)) or status(
-        error
-    ) in (
+    # ChunkedEncodingError is a response body cut off mid-transfer. Requests
+    # derives it only from RequestException, so it is listed explicitly.
+    network = (ConnectionError, Timeout, ChunkedEncodingError, TransportError)
+    return isinstance(error, network) or status(error) in (
         408,
         429,
         500,

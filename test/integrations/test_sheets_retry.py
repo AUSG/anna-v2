@@ -2,7 +2,7 @@ from unittest.mock import MagicMock
 
 import pytest
 from gspread.exceptions import WorksheetNotFound
-from requests.exceptions import ConnectionError, InvalidURL
+from requests.exceptions import ChunkedEncodingError, ConnectionError, InvalidURL
 
 from integrations.google_sheets import GoogleSpreadsheetClient
 from integrations.sheets_retry import guarded_write, retry_reads
@@ -87,6 +87,19 @@ def test_legacy_read_recovers_and_a_new_call_gets_its_own_attempts(delays):
     assert worksheet.get_values.call_args.args == ("A:D",)
 
 
+def test_a_read_whose_response_body_was_cut_off_is_retried(delays):
+    sheets = client()
+    worksheet = (
+        sheets.gs_client.open_by_key.return_value.get_worksheet_by_id.return_value
+    )
+    worksheet.get_values.side_effect = [
+        ChunkedEncodingError("Connection broken: IncompleteRead"),
+        [["ok"]],
+    ]
+    assert sheets.get_values(123) == [["ok"]]
+    assert delays == [1]
+
+
 def test_failed_confirmation_is_not_reclassified_as_a_retryable_write(delays):
     send = MagicMock(side_effect=ConnectionError("response lost"))
     error = api_error(503)
@@ -125,9 +138,14 @@ def test_application_errors_and_interrupts_never_trigger_confirmation(error, del
     assert delays == []
 
 
-def test_confirmed_absence_precedes_each_safe_write_replay(delays):
+@pytest.mark.parametrize(
+    "failure",
+    [api_error(503), ChunkedEncodingError("response body cut off")],
+    ids=["status-503", "cut-off-body"],
+)
+def test_confirmed_absence_precedes_each_safe_write_replay(delays, failure):
     order = []
-    responses = iter([api_error(503), None])
+    responses = iter([failure, None])
 
     def send():
         order.append("write")
